@@ -5,7 +5,7 @@ use fxhash::{FxHashMap, FxHashSet};
 
 /// Non-deterministic finite automate, parameterized on values of accepting states.
 #[derive(Debug)]
-pub(crate) struct NFA<A> {
+pub(crate) struct NFA<A: Clone> {
     states: Vec<State>,
     accepting: FxHashMap<StateIdx, A>,
 }
@@ -30,7 +30,7 @@ impl State {
     }
 }
 
-impl<A> NFA<A> {
+impl<A: Clone> NFA<A> {
     pub(crate) fn new() -> (NFA<A>, StateIdx) {
         (
             NFA {
@@ -49,8 +49,8 @@ impl<A> NFA<A> {
         self.accepting.keys()
     }
 
-    pub(crate) fn is_accepting_state(&self, state: StateIdx) -> bool {
-        self.accepting.contains_key(&state)
+    pub(crate) fn get_accepting_state(&self, state: StateIdx) -> Option<A> {
+        self.accepting.get(&state).cloned()
     }
 
     pub(crate) fn char_transitions(
@@ -147,11 +147,102 @@ impl<A> NFA<A> {
     }
 }
 
+use std::fmt::{self, Display, Formatter};
+
+impl Display for StateIdx {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl<A: Clone + Display> Display for NFA<A> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        for (state_idx, state) in self.states.iter().enumerate() {
+            if self.accepting.contains_key(&StateIdx(state_idx)) {
+                write!(f, "{:>4}", format!("*{}", state_idx))?;
+            } else {
+                write!(f, "{:>4}:", state_idx)?;
+            }
+
+            let State {
+                char_transitions,
+                range_transitions,
+                empty_transitions,
+            } = state;
+
+            let mut first = true;
+
+            if !empty_transitions.is_empty() {
+                if !first {
+                    write!(f, "     ")?;
+                } else {
+                    first = false;
+                }
+
+                writeln!(f, "e -> {}", StateSetDisplay(empty_transitions))?;
+            }
+
+            for (char, next) in char_transitions.iter() {
+                if !first {
+                    write!(f, "     ")?;
+                } else {
+                    first = false;
+                }
+
+                writeln!(f, "{:?} -> {}", char, StateSetDisplay(next))?;
+            }
+
+            for ((range_begin, range_end), next) in range_transitions.iter() {
+                if !first {
+                    write!(f, "     ")?;
+                } else {
+                    first = false;
+                }
+
+                writeln!(
+                    f,
+                    "{:?} - {:?} -> {}",
+                    range_begin,
+                    range_end,
+                    StateSetDisplay(next)
+                )?;
+            }
+
+            if empty_transitions.is_empty()
+                && char_transitions.is_empty()
+                && range_transitions.is_empty()
+            {
+                writeln!(f)?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+struct StateSetDisplay<'a>(&'a FxHashSet<StateIdx>);
+
+impl Display for StateSetDisplay<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{{")?;
+
+        let n_states = self.0.len();
+        for (state_idx, state) in self.0.iter().enumerate() {
+            write!(f, "{}", state.0)?;
+            if state_idx != n_states - 1 {
+                write!(f, ", ")?;
+            }
+        }
+
+        write!(f, "}}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    pub(crate) fn simulate<'a, A>(
+    pub(crate) fn simulate<'a, A: Clone>(
         nfa: &'a NFA<A>,
         chars: &mut dyn Iterator<Item = char>,
     ) -> Option<&'a A> {
@@ -190,7 +281,7 @@ mod tests {
         accepting_state_values.pop()
     }
 
-    fn compute_state_closure<A>(nfa: &NFA<A>, states: &mut FxHashSet<StateIdx>) {
+    fn compute_state_closure<A: Clone>(nfa: &NFA<A>, states: &mut FxHashSet<StateIdx>) {
         let mut changed = true;
         while changed {
             changed = false;
@@ -207,7 +298,7 @@ mod tests {
         }
     }
 
-    fn next_char_states<A>(
+    fn next_char_states<A: Clone>(
         nfa: &NFA<A>,
         state: StateIdx,
         char: char,

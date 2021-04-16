@@ -1,9 +1,10 @@
-use fxhash::{FxHashMap, FxHashSet};
+use fxhash::FxHashMap;
 
+/// Deterministic finite automate, parameterized on values of accepting states.
 #[derive(Debug)]
-pub(crate) struct DFA {
+pub(crate) struct DFA<A> {
     states: Vec<State>,
-    accepting: FxHashSet<StateIdx>,
+    accepting: FxHashMap<StateIdx, A>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -24,8 +25,8 @@ impl State {
     }
 }
 
-impl DFA {
-    pub(crate) fn new() -> (DFA, StateIdx) {
+impl<A> DFA<A> {
+    pub(crate) fn new() -> (DFA<A>, StateIdx) {
         (
             DFA {
                 states: vec![State::new()],
@@ -39,8 +40,8 @@ impl DFA {
         StateIdx(0)
     }
 
-    pub(crate) fn add_accepting_state(&mut self, state: StateIdx) {
-        self.accepting.insert(state);
+    pub(crate) fn add_accepting_state(&mut self, state: StateIdx, value: A) {
+        self.accepting.insert(state, value);
     }
 
     pub(crate) fn new_state(&mut self) -> StateIdx {
@@ -51,7 +52,14 @@ impl DFA {
 
     pub(crate) fn add_char_transition(&mut self, state: StateIdx, char: char, next: StateIdx) {
         let old = self.states[state.0].char_transitions.insert(char, next);
-        assert!(old.is_none());
+        assert!(
+            old.is_none(),
+            "state={:?}, char={:?}, old={:?}, new={:?}",
+            state,
+            char,
+            old,
+            next
+        );
     }
 
     pub(crate) fn add_range_transition(
@@ -67,7 +75,7 @@ impl DFA {
         assert!(old.is_none());
     }
 
-    pub(crate) fn simulate(&self, chars: &mut dyn Iterator<Item = char>) -> bool {
+    pub(crate) fn simulate(&self, chars: &mut dyn Iterator<Item = char>) -> Option<&A> {
         let mut state = StateIdx(0);
 
         'char_loop: for char in chars {
@@ -83,9 +91,62 @@ impl DFA {
                 }
             }
 
-            return false;
+            return None;
         }
 
-        self.accepting.contains(&state)
+        self.accepting.get(&state)
+    }
+}
+
+use std::fmt::{self, Display, Formatter};
+
+impl Display for StateIdx {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl<A> Display for DFA<A> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        for (state_idx, state) in self.states.iter().enumerate() {
+            if self.accepting.contains_key(&StateIdx(state_idx)) {
+                write!(f, "{:>4}", format!("*{}", state_idx))?;
+            } else {
+                write!(f, "{:>4}:", state_idx)?;
+            }
+
+            let State {
+                char_transitions,
+                range_transitions,
+            } = state;
+
+            let mut first = true;
+
+            for (char, next) in char_transitions.iter() {
+                if !first {
+                    write!(f, "     ")?;
+                } else {
+                    first = false;
+                }
+
+                writeln!(f, "{:?} -> {}", char, next)?;
+            }
+
+            for ((range_begin, range_end), next) in range_transitions.iter() {
+                if !first {
+                    write!(f, "     ")?;
+                } else {
+                    first = false;
+                }
+
+                writeln!(f, "{:?} - {:?} -> {}", range_begin, range_end, next)?;
+            }
+
+            if char_transitions.is_empty() && range_transitions.is_empty() {
+                writeln!(f)?;
+            }
+        }
+
+        Ok(())
     }
 }

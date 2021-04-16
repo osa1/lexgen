@@ -2,6 +2,7 @@
 
 mod ast;
 mod dfa;
+mod display;
 mod nfa;
 mod nfa_to_dfa;
 mod regex_to_nfa;
