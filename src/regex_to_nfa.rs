@@ -1,15 +1,15 @@
 use crate::ast::{CharOrRange, Regex};
 use crate::nfa::{StateIdx, NFA};
 
-pub(crate) fn regex_to_nfa(re: &Regex) -> NFA {
+pub(crate) fn regex_to_nfa<A>(re: &Regex, value: A) -> NFA<A> {
     let (mut nfa, initial) = NFA::new();
     let accepting = nfa.new_state();
-    nfa.make_accepting(accepting);
+    nfa.make_accepting(accepting, value);
     add_re(&mut nfa, re, initial, accepting);
     nfa
 }
 
-fn add_re(nfa: &mut NFA, re: &Regex, current: StateIdx, cont: StateIdx) {
+pub(crate) fn add_re<A>(nfa: &mut NFA<A>, re: &Regex, current: StateIdx, cont: StateIdx) {
     match re {
         Regex::Var(_) => todo!(),
 

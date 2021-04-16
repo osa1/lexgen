@@ -1,9 +1,13 @@
+use crate::ast::Regex;
+use crate::regex_to_nfa;
+
 use fxhash::{FxHashMap, FxHashSet};
 
+/// Non-deterministic finite automate, parameterized on values of accepting states.
 #[derive(Debug)]
-pub(crate) struct NFA {
+pub(crate) struct NFA<A> {
     states: Vec<State>,
-    accepting: FxHashSet<StateIdx>,
+    accepting: FxHashMap<StateIdx, A>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -26,8 +30,8 @@ impl State {
     }
 }
 
-impl NFA {
-    pub(crate) fn new() -> (NFA, StateIdx) {
+impl<A> NFA<A> {
+    pub(crate) fn new() -> (NFA<A>, StateIdx) {
         (
             NFA {
                 states: vec![State::new()],
@@ -41,12 +45,12 @@ impl NFA {
         StateIdx(0)
     }
 
-    pub(crate) fn accepting_states(&self) -> &FxHashSet<StateIdx> {
-        &self.accepting
+    pub(crate) fn accepting_states(&self) -> impl Iterator<Item = &StateIdx> {
+        self.accepting.keys()
     }
 
     pub(crate) fn is_accepting_state(&self, state: StateIdx) -> bool {
-        self.accepting.contains(&state)
+        self.accepting.contains_key(&state)
     }
 
     pub(crate) fn char_transitions(
@@ -67,6 +71,13 @@ impl NFA {
         let new_state_idx = StateIdx(self.states.len());
         self.states.push(State::new());
         new_state_idx
+    }
+
+    pub(crate) fn add_regex(&mut self, re: &Regex, value: A) {
+        let accepting_state = self.new_state();
+        let initial_state = self.initial_state();
+        regex_to_nfa::add_re(self, re, initial_state, accepting_state);
+        self.make_accepting(accepting_state, value);
     }
 
     pub(crate) fn add_char_transition(&mut self, state: StateIdx, char: char, next: StateIdx) {
@@ -101,8 +112,8 @@ impl NFA {
         assert!(not_exists, "add_empty_transition");
     }
 
-    pub(crate) fn make_accepting(&mut self, state: StateIdx) {
-        self.accepting.insert(state);
+    pub(crate) fn make_accepting(&mut self, state: StateIdx, value: A) {
+        self.accepting.insert(state, value);
     }
 
     pub(crate) fn compute_state_closure(
@@ -140,7 +151,10 @@ impl NFA {
 mod tests {
     use super::*;
 
-    pub(crate) fn simulate(nfa: &NFA, chars: &mut dyn Iterator<Item = char>) -> bool {
+    pub(crate) fn simulate<'a, A>(
+        nfa: &'a NFA<A>,
+        chars: &mut dyn Iterator<Item = char>,
+    ) -> Option<&'a A> {
         let mut states: FxHashSet<StateIdx> = Default::default();
         states.insert(StateIdx(0));
         states = nfa.compute_state_closure(&states);
@@ -166,10 +180,17 @@ mod tests {
             states = next_states;
         }
 
-        states.iter().any(|state| nfa.accepting.contains(state))
+        let mut accepting_state_values: Vec<&A> = states
+            .iter()
+            .filter_map(|state| nfa.accepting.get(state))
+            .collect();
+
+        assert!(accepting_state_values.len() <= 1);
+
+        accepting_state_values.pop()
     }
 
-    fn compute_state_closure(nfa: &NFA, states: &mut FxHashSet<StateIdx>) {
+    fn compute_state_closure<A>(nfa: &NFA<A>, states: &mut FxHashSet<StateIdx>) {
         let mut changed = true;
         while changed {
             changed = false;
@@ -186,7 +207,11 @@ mod tests {
         }
     }
 
-    fn next_char_states(nfa: &NFA, state: StateIdx, char: char) -> Option<&FxHashSet<StateIdx>> {
+    fn next_char_states<A>(
+        nfa: &NFA<A>,
+        state: StateIdx,
+        char: char,
+    ) -> Option<&FxHashSet<StateIdx>> {
         let state = &nfa.states[state.0];
         state.char_transitions.get(&char)
     }
@@ -197,21 +222,21 @@ mod tests {
     #[test]
     fn nfa_simulate_char() {
         let re = Regex::Char('a');
-        let nfa = regex_to_nfa(&re);
-        assert!(!simulate(&nfa, &mut "".chars()));
-        assert!(!simulate(&nfa, &mut "aa".chars()));
-        assert!(simulate(&nfa, &mut "a".chars()));
-        assert!(!simulate(&nfa, &mut "b".chars()));
+        let nfa = regex_to_nfa(&re, ());
+        assert!(simulate(&nfa, &mut "".chars()).is_none());
+        assert!(simulate(&nfa, &mut "aa".chars()).is_none());
+        assert!(simulate(&nfa, &mut "a".chars()).is_some());
+        assert!(simulate(&nfa, &mut "b".chars()).is_none());
     }
 
     #[test]
     fn nfa_simulate_string() {
         let re = Regex::String("ab".to_owned());
-        let nfa = regex_to_nfa(&re);
-        assert!(!simulate(&nfa, &mut "".chars()));
-        assert!(!simulate(&nfa, &mut "a".chars()));
-        assert!(simulate(&nfa, &mut "ab".chars()));
-        assert!(!simulate(&nfa, &mut "abc".chars()));
+        let nfa = regex_to_nfa(&re, ());
+        assert!(simulate(&nfa, &mut "".chars()).is_none());
+        assert!(simulate(&nfa, &mut "a".chars()).is_none());
+        assert!(simulate(&nfa, &mut "ab".chars()).is_some());
+        assert!(simulate(&nfa, &mut "abc".chars()).is_none());
     }
 
     #[test]
@@ -220,12 +245,12 @@ mod tests {
             CharOrRange::Char('a'),
             CharOrRange::Char('b'),
         ]));
-        let nfa = regex_to_nfa(&re);
-        assert!(!simulate(&nfa, &mut "".chars()));
-        assert!(simulate(&nfa, &mut "a".chars()));
-        assert!(simulate(&nfa, &mut "b".chars()));
-        assert!(!simulate(&nfa, &mut "ab".chars()));
-        assert!(!simulate(&nfa, &mut "ba".chars()));
+        let nfa = regex_to_nfa(&re, ());
+        assert!(simulate(&nfa, &mut "".chars()).is_none());
+        assert!(simulate(&nfa, &mut "a".chars()).is_some());
+        assert!(simulate(&nfa, &mut "b".chars()).is_some());
+        assert!(simulate(&nfa, &mut "ab".chars()).is_none());
+        assert!(simulate(&nfa, &mut "ba".chars()).is_none());
     }
 
     #[test]
@@ -235,64 +260,76 @@ mod tests {
             CharOrRange::Char('b'),
             CharOrRange::Range('0', '9'),
         ]));
-        let nfa = regex_to_nfa(&re);
-        assert!(!simulate(&nfa, &mut "".chars()));
-        assert!(simulate(&nfa, &mut "a".chars()));
-        assert!(simulate(&nfa, &mut "b".chars()));
-        assert!(simulate(&nfa, &mut "0".chars()));
-        assert!(simulate(&nfa, &mut "1".chars()));
-        assert!(simulate(&nfa, &mut "9".chars()));
-        assert!(!simulate(&nfa, &mut "ba".chars()));
+        let nfa = regex_to_nfa(&re, ());
+        assert!(simulate(&nfa, &mut "".chars()).is_none());
+        assert!(simulate(&nfa, &mut "a".chars()).is_some());
+        assert!(simulate(&nfa, &mut "b".chars()).is_some());
+        assert!(simulate(&nfa, &mut "0".chars()).is_some());
+        assert!(simulate(&nfa, &mut "1".chars()).is_some());
+        assert!(simulate(&nfa, &mut "9".chars()).is_some());
+        assert!(simulate(&nfa, &mut "ba".chars()).is_none());
     }
 
     #[test]
     fn nfa_simulate_zero_or_more() {
         let re = Regex::ZeroOrMore(Box::new(Regex::Char('a')));
-        let nfa = regex_to_nfa(&re);
-        assert!(simulate(&nfa, &mut "".chars()));
-        assert!(simulate(&nfa, &mut "a".chars()));
-        assert!(simulate(&nfa, &mut "aa".chars()));
-        assert!(!simulate(&nfa, &mut "aab".chars()));
+        let nfa = regex_to_nfa(&re, ());
+        assert!(simulate(&nfa, &mut "".chars()).is_some());
+        assert!(simulate(&nfa, &mut "a".chars()).is_some());
+        assert!(simulate(&nfa, &mut "aa".chars()).is_some());
+        assert!(simulate(&nfa, &mut "aab".chars()).is_none());
     }
 
     #[test]
     fn nfa_simulate_one_or_more() {
         let re = Regex::OneOrMore(Box::new(Regex::Char('a')));
-        let nfa = regex_to_nfa(&re);
-        assert!(!simulate(&nfa, &mut "".chars()));
-        assert!(simulate(&nfa, &mut "a".chars()));
-        assert!(simulate(&nfa, &mut "aa".chars()));
-        assert!(!simulate(&nfa, &mut "aab".chars()));
+        let nfa = regex_to_nfa(&re, ());
+        assert!(simulate(&nfa, &mut "".chars()).is_none());
+        assert!(simulate(&nfa, &mut "a".chars()).is_some());
+        assert!(simulate(&nfa, &mut "aa".chars()).is_some());
+        assert!(simulate(&nfa, &mut "aab".chars()).is_none());
     }
 
     #[test]
     fn nfa_simulate_zero_or_one() {
         let re = Regex::ZeroOrOne(Box::new(Regex::Char('a')));
-        let nfa = regex_to_nfa(&re);
-        assert!(simulate(&nfa, &mut "".chars()));
-        assert!(simulate(&nfa, &mut "a".chars()));
-        assert!(!simulate(&nfa, &mut "aa".chars()));
+        let nfa = regex_to_nfa(&re, ());
+        assert!(simulate(&nfa, &mut "".chars()).is_some());
+        assert!(simulate(&nfa, &mut "a".chars()).is_some());
+        assert!(simulate(&nfa, &mut "aa".chars()).is_none());
     }
 
     #[test]
     fn nfa_simulate_concat() {
         let re = Regex::Concat(Box::new(Regex::Char('a')), Box::new(Regex::Char('b')));
-        let nfa = regex_to_nfa(&re);
-        assert!(!simulate(&nfa, &mut "".chars()));
-        assert!(!simulate(&nfa, &mut "a".chars()));
-        assert!(simulate(&nfa, &mut "ab".chars()));
-        assert!(!simulate(&nfa, &mut "aba".chars()));
-        assert!(!simulate(&nfa, &mut "abb".chars()));
+        let nfa = regex_to_nfa(&re, ());
+        assert!(simulate(&nfa, &mut "".chars()).is_none());
+        assert!(simulate(&nfa, &mut "a".chars()).is_none());
+        assert!(simulate(&nfa, &mut "ab".chars()).is_some());
+        assert!(simulate(&nfa, &mut "aba".chars()).is_none());
+        assert!(simulate(&nfa, &mut "abb".chars()).is_none());
     }
 
     #[test]
     fn nfa_simulate_or() {
         let re = Regex::Or(Box::new(Regex::Char('a')), Box::new(Regex::Char('b')));
-        let nfa = regex_to_nfa(&re);
-        assert!(!simulate(&nfa, &mut "".chars()));
-        assert!(simulate(&nfa, &mut "a".chars()));
-        assert!(simulate(&nfa, &mut "b".chars()));
-        assert!(!simulate(&nfa, &mut "aa".chars()));
-        assert!(!simulate(&nfa, &mut "ab".chars()));
+        let nfa = regex_to_nfa(&re, ());
+        assert!(simulate(&nfa, &mut "".chars()).is_none());
+        assert!(simulate(&nfa, &mut "a".chars()).is_some());
+        assert!(simulate(&nfa, &mut "b".chars()).is_some());
+        assert!(simulate(&nfa, &mut "aa".chars()).is_none());
+        assert!(simulate(&nfa, &mut "ab".chars()).is_none());
+    }
+
+    #[test]
+    fn nfa_multiple_accepting_states() {
+        let re1 = Regex::String("aaaa".to_owned());
+        let re2 = Regex::String("aaab".to_owned());
+        let mut nfa = regex_to_nfa(&re1, 1usize);
+        nfa.add_regex(&re2, 2usize);
+        assert_eq!(simulate(&nfa, &mut "aaaa".chars()), Some(&1));
+        assert_eq!(simulate(&nfa, &mut "aaab".chars()), Some(&2));
+        assert_eq!(simulate(&nfa, &mut "aaaba".chars()), None);
+        assert_eq!(simulate(&nfa, &mut "aaac".chars()), None);
     }
 }

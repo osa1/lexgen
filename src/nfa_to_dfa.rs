@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 
 use fxhash::{FxHashMap, FxHashSet};
 
-pub(crate) fn nfa_to_dfa(nfa: &NFA) -> DFA {
+pub(crate) fn nfa_to_dfa<A>(nfa: &NFA<A>) -> DFA {
     let initial_state = nfa.initial_state();
 
     let initial_states: BTreeSet<NfaStateIdx> = {
@@ -108,7 +108,7 @@ mod test {
     use crate::regex_to_nfa::regex_to_nfa;
 
     fn regex_to_dfa(re: &Regex) -> DFA {
-        nfa_to_dfa(&regex_to_nfa(re))
+        nfa_to_dfa(&regex_to_nfa(re, ()))
     }
 
     #[test]

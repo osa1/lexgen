@@ -14,7 +14,7 @@ use ast::Regex;
 pub fn lexer_gen(input: TokenStream) -> TokenStream {
     let re: Regex = syn::parse_macro_input!(input as Regex);
     println!("{:#?}", re);
-    let nfa = regex_to_nfa::regex_to_nfa(&re);
+    let nfa = regex_to_nfa::regex_to_nfa(&re, ());
     println!("{:#?}", nfa);
 
     TokenStream::new()
