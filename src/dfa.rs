@@ -1,9 +1,9 @@
-use fxhash::{FxHashMap, FxHashSet};
+use fxhash::FxHashMap;
 
 #[derive(Debug)]
 pub(crate) struct DFA {
     states: Vec<State>,
-    accepting: FxHashSet<StateIdx>,
+    accepting: Option<StateIdx>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -29,7 +29,7 @@ impl DFA {
         (
             DFA {
                 states: vec![State::new()],
-                accepting: Default::default(),
+                accepting: None,
             },
             StateIdx(0),
         )
@@ -37,6 +37,10 @@ impl DFA {
 
     pub(crate) fn initial_state(&self) -> StateIdx {
         StateIdx(0)
+    }
+
+    pub(crate) fn set_accepting_state(&mut self, state: StateIdx) {
+        self.accepting = Some(state);
     }
 
     pub(crate) fn new_state(&mut self) -> StateIdx {
@@ -61,5 +65,27 @@ impl DFA {
             .range_transitions
             .insert((range_begin, range_end), next);
         assert!(old.is_none());
+    }
+
+    pub(crate) fn simulate(&self, chars: &mut dyn Iterator<Item = char>) -> bool {
+        let mut state = StateIdx(0);
+
+        'char_loop: for char in chars {
+            if let Some(next) = self.states[state.0].char_transitions.get(&char) {
+                state = *next;
+                continue;
+            }
+
+            for ((range_begin, range_end), next) in &self.states[state.0].range_transitions {
+                if char >= *range_begin && char <= *range_end {
+                    state = *next;
+                    continue 'char_loop;
+                }
+            }
+
+            return false;
+        }
+
+        self.accepting == Some(state)
     }
 }

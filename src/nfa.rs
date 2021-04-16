@@ -41,6 +41,10 @@ impl NFA {
         StateIdx(0)
     }
 
+    pub(crate) fn accepting_states(&self) -> &FxHashSet<StateIdx> {
+        &self.accepting
+    }
+
     pub(crate) fn char_transitions(
         &self,
         state: StateIdx,
@@ -191,7 +195,9 @@ mod tests {
         let re = Regex::Char('a');
         let nfa = regex_to_nfa(&re);
         assert!(!simulate(&nfa, &mut "".chars()));
+        assert!(!simulate(&nfa, &mut "aa".chars()));
         assert!(simulate(&nfa, &mut "a".chars()));
+        assert!(!simulate(&nfa, &mut "b".chars()));
     }
 
     #[test]
@@ -201,6 +207,7 @@ mod tests {
         assert!(!simulate(&nfa, &mut "".chars()));
         assert!(!simulate(&nfa, &mut "a".chars()));
         assert!(simulate(&nfa, &mut "ab".chars()));
+        assert!(!simulate(&nfa, &mut "abc".chars()));
     }
 
     #[test]
