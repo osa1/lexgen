@@ -1,0 +1,15 @@
+[package]
+name = "lexer_gen"
+version = "0.1.0"
+authors = ["Ömer Sinan Ağacan <omeragacan@gmail.com>"]
+edition = "2018"
+
+[lib]
+name = "lexer_gen"
+proc_macro = true
+
+[dependencies]
+fxhash = "0.2"
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = "1.0"
