@@ -155,7 +155,7 @@ impl Display for StateIdx {
     }
 }
 
-impl<A: Clone + Display> Display for NFA<A> {
+impl<A: Clone> Display for NFA<A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         for (state_idx, state) in self.states.iter().enumerate() {
             if self.accepting.contains_key(&StateIdx(state_idx)) {
