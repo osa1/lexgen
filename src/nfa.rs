@@ -6,7 +6,7 @@ pub(crate) struct NFA {
     accepting: FxHashSet<StateIdx>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct StateIdx(usize);
 
 #[derive(Debug)]
@@ -35,6 +35,24 @@ impl NFA {
             },
             StateIdx(0),
         )
+    }
+
+    pub(crate) fn initial_state(&self) -> StateIdx {
+        StateIdx(0)
+    }
+
+    pub(crate) fn char_transitions(
+        &self,
+        state: StateIdx,
+    ) -> impl Iterator<Item = (&char, &FxHashSet<StateIdx>)> {
+        self.states[state.0].char_transitions.iter()
+    }
+
+    pub(crate) fn range_transitions(
+        &self,
+        state: StateIdx,
+    ) -> impl Iterator<Item = (&(char, char), &FxHashSet<StateIdx>)> {
+        self.states[state.0].range_transitions.iter()
     }
 
     pub(crate) fn new_state(&mut self) -> StateIdx {
@@ -78,6 +96,36 @@ impl NFA {
     pub(crate) fn make_accepting(&mut self, state: StateIdx) {
         self.accepting.insert(state);
     }
+
+    pub(crate) fn compute_state_closure(
+        &self,
+        states: &FxHashSet<StateIdx>,
+    ) -> FxHashSet<StateIdx> {
+        let mut changed = true;
+
+        let mut ret = states.clone();
+
+        while changed {
+            changed = false;
+
+            let mut next = ret.clone();
+
+            for state in states.iter() {
+                for next_state in self.next_empty_states(*state) {
+                    changed |= next.insert(*next_state);
+                }
+            }
+
+            ret = next;
+        }
+
+        ret
+    }
+
+    fn next_empty_states(&self, state: StateIdx) -> &FxHashSet<StateIdx> {
+        let state = &self.states[state.0];
+        &state.empty_transitions
+    }
 }
 
 #[cfg(test)]
@@ -87,7 +135,7 @@ mod tests {
     pub(crate) fn simulate(nfa: &NFA, chars: &mut dyn Iterator<Item = char>) -> bool {
         let mut states: FxHashSet<StateIdx> = Default::default();
         states.insert(StateIdx(0));
-        compute_state_closure(nfa, &mut states);
+        states = nfa.compute_state_closure(&states);
 
         for char in chars {
             // println!("char = {}", char);
@@ -121,7 +169,7 @@ mod tests {
             let mut next = states.clone();
 
             for state in states.iter() {
-                for next_state in next_empty_states(nfa, *state) {
+                for next_state in nfa.next_empty_states(*state) {
                     changed |= next.insert(*next_state);
                 }
             }
@@ -133,11 +181,6 @@ mod tests {
     fn next_char_states(nfa: &NFA, state: StateIdx, char: char) -> Option<&FxHashSet<StateIdx>> {
         let state = &nfa.states[state.0];
         state.char_transitions.get(&char)
-    }
-
-    fn next_empty_states(nfa: &NFA, state: StateIdx) -> &FxHashSet<StateIdx> {
-        let state = &nfa.states[state.0];
-        &state.empty_transitions
     }
 
     use crate::ast::{CharOrRange, CharSet, Regex};

@@ -1,5 +1,9 @@
+#![allow(dead_code)]
+
 mod ast;
+mod dfa;
 mod nfa;
+mod nfa_to_dfa;
 mod regex_to_nfa;
 
 use proc_macro::TokenStream;
