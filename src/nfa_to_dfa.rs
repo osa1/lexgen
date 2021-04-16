@@ -47,6 +47,10 @@ pub(crate) fn nfa_to_dfa(nfa: &NFA) -> DFA {
         finished_dfa_states.insert(current_dfa_state);
 
         for nfa_state in current_nfa_states.iter().copied() {
+            if nfa.is_accepting_state(nfa_state) {
+                dfa.add_accepting_state(current_dfa_state);
+            }
+
             // Add char transitions
             for (char, next_states) in nfa.char_transitions(nfa_state) {
                 let next_states_closure: BTreeSet<NfaStateIdx> =
@@ -78,15 +82,6 @@ pub(crate) fn nfa_to_dfa(nfa: &NFA) -> DFA {
             }
         }
     }
-
-    println!("{:#?}", nfa);
-    println!("{:#?}", dfa);
-
-    let dfa_accepting_state = *state_map
-        .get(&nfa.accepting_states().iter().copied().collect())
-        .unwrap();
-
-    dfa.set_accepting_state(dfa_accepting_state);
 
     dfa
 }
@@ -175,5 +170,46 @@ mod test {
         assert!(dfa.simulate(&mut "a".chars()));
         assert!(dfa.simulate(&mut "aa".chars()));
         assert!(!dfa.simulate(&mut "aab".chars()));
+    }
+
+    #[test]
+    fn nfa_to_dfa_simulate_one_or_more() {
+        let re = Regex::OneOrMore(Box::new(Regex::Char('a')));
+        let dfa = regex_to_dfa(&re);
+        assert!(!dfa.simulate(&mut "".chars()));
+        assert!(dfa.simulate(&mut "a".chars()));
+        assert!(dfa.simulate(&mut "aa".chars()));
+        assert!(!dfa.simulate(&mut "aab".chars()));
+    }
+
+    #[test]
+    fn nfa_to_dfa_simulate_zero_or_one() {
+        let re = Regex::ZeroOrOne(Box::new(Regex::Char('a')));
+        let dfa = regex_to_dfa(&re);
+        assert!(dfa.simulate(&mut "".chars()));
+        assert!(dfa.simulate(&mut "a".chars()));
+        assert!(!dfa.simulate(&mut "aa".chars()));
+    }
+
+    #[test]
+    fn nfa_to_dfa_simulate_concat() {
+        let re = Regex::Concat(Box::new(Regex::Char('a')), Box::new(Regex::Char('b')));
+        let dfa = regex_to_dfa(&re);
+        assert!(!dfa.simulate(&mut "".chars()));
+        assert!(!dfa.simulate(&mut "a".chars()));
+        assert!(dfa.simulate(&mut "ab".chars()));
+        assert!(!dfa.simulate(&mut "aba".chars()));
+        assert!(!dfa.simulate(&mut "abb".chars()));
+    }
+
+    #[test]
+    fn nfa_to_dfa_simulate_or() {
+        let re = Regex::Or(Box::new(Regex::Char('a')), Box::new(Regex::Char('b')));
+        let dfa = regex_to_dfa(&re);
+        assert!(!dfa.simulate(&mut "".chars()));
+        assert!(dfa.simulate(&mut "a".chars()));
+        assert!(dfa.simulate(&mut "b".chars()));
+        assert!(!dfa.simulate(&mut "aa".chars()));
+        assert!(!dfa.simulate(&mut "ab".chars()));
     }
 }

@@ -1,9 +1,9 @@
-use fxhash::FxHashMap;
+use fxhash::{FxHashMap, FxHashSet};
 
 #[derive(Debug)]
 pub(crate) struct DFA {
     states: Vec<State>,
-    accepting: Option<StateIdx>,
+    accepting: FxHashSet<StateIdx>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -29,7 +29,7 @@ impl DFA {
         (
             DFA {
                 states: vec![State::new()],
-                accepting: None,
+                accepting: Default::default(),
             },
             StateIdx(0),
         )
@@ -39,8 +39,8 @@ impl DFA {
         StateIdx(0)
     }
 
-    pub(crate) fn set_accepting_state(&mut self, state: StateIdx) {
-        self.accepting = Some(state);
+    pub(crate) fn add_accepting_state(&mut self, state: StateIdx) {
+        self.accepting.insert(state);
     }
 
     pub(crate) fn new_state(&mut self) -> StateIdx {
@@ -86,6 +86,6 @@ impl DFA {
             return false;
         }
 
-        self.accepting == Some(state)
+        self.accepting.contains(&state)
     }
 }

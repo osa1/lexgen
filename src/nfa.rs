@@ -45,6 +45,10 @@ impl NFA {
         &self.accepting
     }
 
+    pub(crate) fn is_accepting_state(&self, state: StateIdx) -> bool {
+        self.accepting.contains(&state)
+    }
+
     pub(crate) fn char_transitions(
         &self,
         state: StateIdx,
