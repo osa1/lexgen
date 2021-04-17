@@ -156,20 +156,30 @@ use quote::quote;
 
 impl DFA<syn::Expr> {
     pub fn reify(&self, type_name: syn::Ident, token_type: syn::Type) -> TokenStream {
+        let DFA { states, accepting } = self;
+
         let mut match_arms: Vec<TokenStream> = vec![];
 
-        for (state_idx, state) in self.states.iter().enumerate() {
+        for (
+            state_idx,
+            State {
+                char_transitions,
+                range_transitions,
+            },
+        ) in states.iter().enumerate()
+        {
             let mut state_char_arms: Vec<TokenStream> = vec![];
-            let accepting = self.accepting.get(&StateIdx(state_idx));
+            let accepting = accepting.get(&StateIdx(state_idx));
 
             // Add char transitions
-            for (char, StateIdx(next_state)) in &state.char_transitions {
+            for (char, StateIdx(next_state)) in char_transitions {
                 if accepting.is_some() {
                     // In an accepting state we only consume the next character if we're making a
                     // transition. See `state_code` below for where we use `peek` instead of `next`
                     // in accepting states.
                     state_char_arms.push(quote!(
                         #char => {
+                            self.current_match_end += #char.len_utf8();
                             let _ = self.iter.next();
                             self.state = #next_state;
                         }
@@ -177,6 +187,24 @@ impl DFA<syn::Expr> {
                 } else {
                     state_char_arms.push(quote!(#char => self.state = #next_state));
                 }
+            }
+
+            // Add range transitions
+            for ((range_begin, range_end), StateIdx(next_state)) in range_transitions {
+                // Same as above. When using `peek`, `x` will be a reference so we need to add a
+                // deref.
+                let x = if accepting.is_some() {
+                    quote!(*x)
+                } else {
+                    quote!(x)
+                };
+                state_char_arms.push(quote!(
+                    x if #x >= #range_begin && #x <= #range_end => {
+                        self.current_match_end += x.len_utf8();
+                        let _ = self.iter.next();
+                        self.state = #next_state;
+                    }
+                ));
             }
 
             // Add default case
@@ -207,7 +235,6 @@ impl DFA<syn::Expr> {
                     match self.iter.peek() {
                         None => return self.pop_match_or_fail(),
                         Some((char_idx, char)) => {
-                            self.current_match_end += char.len_utf8();
                             match char {
                                 #(#state_char_arms,)*
                             }
@@ -220,7 +247,6 @@ impl DFA<syn::Expr> {
                 quote!(match self.iter.next() {
                     None => return self.pop_match_or_fail(),
                     Some((char_idx, char)) => {
-                        self.current_match_end += char.len_utf8();
                         match char {
                             #(#state_char_arms,)*
                         }
