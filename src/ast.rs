@@ -2,14 +2,23 @@
 
 use syn::parse::{Parse, ParseStream};
 
-#[derive(Debug)]
 pub struct Lexer {
+    pub token_type: syn::Type,
     pub rules: Vec<Rule>,
 }
 
 pub struct Rule {
     pub lhs: Regex,
-    pub rhs: syn::ExprClosure,
+    pub rhs: syn::Expr,
+}
+
+impl std::fmt::Debug for Lexer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Lexer")
+            .field("token_type", &"...")
+            .field("rules", &self.rules)
+            .finish()
+    }
 }
 
 impl std::fmt::Debug for Rule {
@@ -130,15 +139,7 @@ impl Parse for Rule {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let lhs = Regex::parse(input)?;
         input.parse::<syn::token::FatArrow>()?;
-        let rhs = match input.parse::<syn::Expr>()? {
-            syn::Expr::Closure(rhs) => rhs,
-            other => {
-                return Err(syn::Error::new_spanned(
-                    other,
-                    "RHS of rule should be closure with one `&str` argument",
-                ))
-            }
-        };
+        let rhs = input.parse::<syn::Expr>()?;
         input.parse::<syn::token::Comma>()?;
         Ok(Rule { lhs, rhs })
     }
@@ -146,10 +147,15 @@ impl Parse for Rule {
 
 impl Parse for Lexer {
     fn parse(input: ParseStream) -> syn::Result<Self> {
+        input.parse::<syn::token::RArrow>()?;
+        let token_type = input.parse::<syn::Type>()?;
+        input.parse::<syn::token::Semi>()?;
+
         let mut rules = vec![];
         while !input.is_empty() {
             rules.push(Rule::parse(input)?);
         }
-        Ok(Lexer { rules })
+
+        Ok(Lexer { rules, token_type })
     }
 }

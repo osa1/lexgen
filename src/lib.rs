@@ -16,9 +16,9 @@ use nfa::NFA;
 
 #[proc_macro]
 pub fn lexer_gen(input: TokenStream) -> TokenStream {
-    let Lexer { rules } = syn::parse_macro_input!(input as Lexer);
+    let Lexer { rules, token_type } = syn::parse_macro_input!(input as Lexer);
 
-    let (mut nfa, _): (NFA<syn::ExprClosure>, _) = NFA::new();
+    let (mut nfa, _): (NFA<syn::Expr>, _) = NFA::new();
 
     for Rule { lhs, rhs } in rules {
         println!("{:?}", lhs);
@@ -32,5 +32,5 @@ pub fn lexer_gen(input: TokenStream) -> TokenStream {
     println!("DFA:");
     println!("{}", dfa);
 
-    TokenStream::new()
+    dfa.reify(token_type).into()
 }

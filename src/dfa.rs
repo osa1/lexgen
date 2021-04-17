@@ -151,11 +151,128 @@ impl<A> Display for DFA<A> {
     }
 }
 
-use proc_macro::TokenStream;
+use proc_macro2::TokenStream;
 use quote::quote;
 
 impl DFA<syn::Expr> {
-    pub fn reify(&self) -> TokenStream {
-        quote!(()).into()
+    pub fn reify(&self, token_type: syn::Type) -> TokenStream {
+        let mut match_arms: Vec<TokenStream> = vec![];
+
+        for (state_idx, state) in self.states.iter().enumerate() {
+            let mut state_char_arms: Vec<TokenStream> = vec![];
+
+            // Add char transitions
+            for (char, StateIdx(next_state)) in &state.char_transitions {
+                state_char_arms.push(quote!(#char => self.state = #next_state));
+            }
+
+            // Add default case
+            state_char_arms.push(quote!(_ => return self.pop_match_or_fail()));
+
+            let state_code: TokenStream = if state_idx == 0 {
+                // Initial state. Difference from other states is we return `None` when the
+                // iterator ends. In non-initial states EOF returns the last (longest) match, or
+                // fails (error).
+                quote!(
+                    match self.iter.next() {
+                        None if self.match_stack.is_empty() => return None,
+                        None => return self.pop_match_or_fail(),
+                        Some((char_idx, char)) => {
+                            self.current_match_start = char_idx;
+                            self.current_match_end = char_idx + char.len_utf8();
+                            match char {
+                                #(#state_char_arms,)*
+                            }
+                        }
+                    }
+                )
+            } else if let Some(rhs) = self.accepting.get(&StateIdx(state_idx)) {
+                // Non-initial, accepting state
+                quote!({
+                    let str = &self.input[self.current_match_start..self.current_match_end];
+                    self.match_stack.push((self.current_match_start, (#rhs)(str), self.current_match_end));
+                    match self.iter.next() {
+                        None => return self.pop_match_or_fail(),
+                        Some((char_idx, char)) => {
+                            self.current_match_end += char.len_utf8();
+                            match char {
+                                #(#state_char_arms,)*
+                            }
+                        }
+                    }
+                })
+            } else {
+                // Non-initial, non-accepting state
+                quote!(match self.iter.next() {
+                    None => return self.pop_match_or_fail(),
+                    Some((char_idx, char)) => {
+                        self.current_match_end += char.len_utf8();
+                        match char {
+                            #(#state_char_arms,)*
+                        }
+                    }
+                })
+            };
+
+            match_arms.push(quote!(
+                    #state_idx => #state_code
+            ));
+        }
+
+        match_arms.push(quote!(_ => unreachable!()));
+
+        quote!(
+            struct Lexer<'input> {
+                state: usize,
+                input: &'input str,
+                iter: std::str::CharIndices<'input>,
+                match_stack: Vec<(usize, #token_type, usize)>,
+                current_match_start: usize,
+                current_match_end: usize,
+            }
+
+            #[derive(Debug)]
+            struct LexerError {
+                char_idx: usize,
+            }
+
+            impl<'input> Lexer<'input> {
+                fn new(input: &'input str) -> Self {
+                    Lexer {
+                        state: 0,
+                        input,
+                        iter: input.char_indices(),
+                        match_stack: vec![],
+                        current_match_start: 0,
+                        current_match_end: 0,
+                    }
+                }
+
+                fn pop_match_or_fail(&mut self) -> Option<Result<(usize, #token_type, usize), LexerError>> {
+                    match self.match_stack.pop() {
+                        Some((match_begin, a, match_end)) => {
+                            self.match_stack.clear();
+                            self.state = 0;
+                            Some(Ok((match_begin, a, match_end)))
+                        }
+                        None => Some(Err(LexerError {
+                            char_idx: self.current_match_start,
+                        })),
+                    }
+                }
+            }
+
+            impl<'input> Iterator for Lexer<'input> {
+                type Item = Result<(usize, #token_type, usize), LexerError>;
+
+                fn next(&mut self) -> Option<Self::Item> {
+                    loop {
+                        match self.state {
+                            #(#match_arms,)*
+                        }
+                    }
+                }
+            }
+        )
     }
 }
