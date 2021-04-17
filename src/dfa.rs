@@ -247,6 +247,7 @@ impl DFA<syn::Expr> {
                 quote!(match self.iter.next() {
                     None => return self.pop_match_or_fail(),
                     Some((char_idx, char)) => {
+                        self.current_match_end += char.len_utf8();
                         match char {
                             #(#state_char_arms,)*
                         }
