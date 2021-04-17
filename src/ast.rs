@@ -3,6 +3,7 @@
 use syn::parse::{Parse, ParseStream};
 
 pub struct Lexer {
+    pub type_name: syn::Ident,
     pub token_type: syn::Type,
     pub rules: Vec<Rule>,
 }
@@ -147,6 +148,7 @@ impl Parse for Rule {
 
 impl Parse for Lexer {
     fn parse(input: ParseStream) -> syn::Result<Self> {
+        let type_name = input.parse::<syn::Ident>()?;
         input.parse::<syn::token::RArrow>()?;
         let token_type = input.parse::<syn::Type>()?;
         input.parse::<syn::token::Semi>()?;
@@ -156,6 +158,10 @@ impl Parse for Lexer {
             rules.push(Rule::parse(input)?);
         }
 
-        Ok(Lexer { rules, token_type })
+        Ok(Lexer {
+            type_name,
+            token_type,
+            rules,
+        })
     }
 }

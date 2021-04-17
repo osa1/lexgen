@@ -155,7 +155,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 
 impl DFA<syn::Expr> {
-    pub fn reify(&self, token_type: syn::Type) -> TokenStream {
+    pub fn reify(&self, type_name: syn::Ident, token_type: syn::Type) -> TokenStream {
         let mut match_arms: Vec<TokenStream> = vec![];
 
         for (state_idx, state) in self.states.iter().enumerate() {
@@ -236,7 +236,7 @@ impl DFA<syn::Expr> {
         match_arms.push(quote!(_ => unreachable!()));
 
         quote!(
-            struct Lexer<'input> {
+            struct #type_name<'input> {
                 state: usize,
                 input: &'input str,
                 iter: std::iter::Peekable<std::str::CharIndices<'input>>,
@@ -250,9 +250,9 @@ impl DFA<syn::Expr> {
                 char_idx: usize,
             }
 
-            impl<'input> Lexer<'input> {
+            impl<'input> #type_name<'input> {
                 fn new(input: &'input str) -> Self {
-                    Lexer {
+                    #type_name {
                         state: 0,
                         input,
                         iter: input.char_indices().peekable(),
@@ -276,7 +276,7 @@ impl DFA<syn::Expr> {
                 }
             }
 
-            impl<'input> Iterator for Lexer<'input> {
+            impl<'input> Iterator for #type_name<'input> {
                 type Item = Result<(usize, #token_type, usize), LexerError>;
 
                 fn next(&mut self) -> Option<Self::Item> {
