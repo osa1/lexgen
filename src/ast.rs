@@ -129,7 +129,6 @@ impl Parse for CharOrRange {
 impl Parse for Rule {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let lhs = Regex::parse(input)?;
-        println!("lha={:?}", lhs);
         input.parse::<syn::token::FatArrow>()?;
         let rhs = match input.parse::<syn::Expr>()? {
             syn::Expr::Closure(rhs) => rhs,

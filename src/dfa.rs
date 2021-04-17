@@ -150,3 +150,12 @@ impl<A> Display for DFA<A> {
         Ok(())
     }
 }
+
+use proc_macro::TokenStream;
+use quote::quote;
+
+impl DFA<syn::Expr> {
+    pub fn reify(&self) -> TokenStream {
+        quote!(()).into()
+    }
+}
