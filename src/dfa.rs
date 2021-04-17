@@ -160,10 +160,23 @@ impl DFA<syn::Expr> {
 
         for (state_idx, state) in self.states.iter().enumerate() {
             let mut state_char_arms: Vec<TokenStream> = vec![];
+            let accepting = self.accepting.get(&StateIdx(state_idx));
 
             // Add char transitions
             for (char, StateIdx(next_state)) in &state.char_transitions {
-                state_char_arms.push(quote!(#char => self.state = #next_state));
+                if accepting.is_some() {
+                    // In an accepting state we only consume the next character if we're making a
+                    // transition. See `state_code` below for where we use `peek` instead of `next`
+                    // in accepting states.
+                    state_char_arms.push(quote!(
+                        #char => {
+                            let _ = self.iter.next();
+                            self.state = #next_state;
+                        }
+                    ));
+                } else {
+                    state_char_arms.push(quote!(#char => self.state = #next_state));
+                }
             }
 
             // Add default case
@@ -186,12 +199,12 @@ impl DFA<syn::Expr> {
                         }
                     }
                 )
-            } else if let Some(rhs) = self.accepting.get(&StateIdx(state_idx)) {
+            } else if let Some(rhs) = accepting {
                 // Non-initial, accepting state
                 quote!({
                     let str = &self.input[self.current_match_start..self.current_match_end];
                     self.match_stack.push((self.current_match_start, (#rhs)(str), self.current_match_end));
-                    match self.iter.next() {
+                    match self.iter.peek() {
                         None => return self.pop_match_or_fail(),
                         Some((char_idx, char)) => {
                             self.current_match_end += char.len_utf8();
@@ -202,7 +215,8 @@ impl DFA<syn::Expr> {
                     }
                 })
             } else {
-                // Non-initial, non-accepting state
+                // Non-initial, non-accepting state. In a non-accepting state we want to consume a
+                // character anyway so we can use `next` instead of `peek`.
                 quote!(match self.iter.next() {
                     None => return self.pop_match_or_fail(),
                     Some((char_idx, char)) => {
@@ -225,7 +239,7 @@ impl DFA<syn::Expr> {
             struct Lexer<'input> {
                 state: usize,
                 input: &'input str,
-                iter: std::str::CharIndices<'input>,
+                iter: std::iter::Peekable<std::str::CharIndices<'input>>,
                 match_stack: Vec<(usize, #token_type, usize)>,
                 current_match_start: usize,
                 current_match_end: usize,
@@ -241,7 +255,7 @@ impl DFA<syn::Expr> {
                     Lexer {
                         state: 0,
                         input,
-                        iter: input.char_indices(),
+                        iter: input.char_indices().peekable(),
                         match_stack: vec![],
                         current_match_start: 0,
                         current_match_end: 0,
