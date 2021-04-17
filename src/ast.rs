@@ -3,6 +3,25 @@
 use syn::parse::{Parse, ParseStream};
 
 #[derive(Debug)]
+pub struct Lexer {
+    pub rules: Vec<Rule>,
+}
+
+pub struct Rule {
+    pub lhs: Regex,
+    pub rhs: syn::ExprClosure,
+}
+
+impl std::fmt::Debug for Rule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Rule")
+            .field("lhs", &self.lhs)
+            .field("rhs", &"...")
+            .finish()
+    }
+}
+
+#[derive(Debug)]
 pub enum Regex {
     Var(String),
     Char(char),
@@ -25,11 +44,12 @@ pub enum CharOrRange {
     Range(char, char),
 }
 
+/// Parses a `=>` terminated regex
 impl Parse for Regex {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut re = parse_regex_1(input)?;
 
-        while !input.is_empty() {
+        while !input.peek(syn::token::FatArrow) {
             if input.peek(syn::token::Star) {
                 let _ = input.parse::<syn::token::Star>()?;
                 re = Regex::ZeroOrMore(Box::new(re));
@@ -103,5 +123,34 @@ impl Parse for CharOrRange {
         } else {
             Ok(CharOrRange::Char(char))
         }
+    }
+}
+
+impl Parse for Rule {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let lhs = Regex::parse(input)?;
+        println!("lha={:?}", lhs);
+        input.parse::<syn::token::FatArrow>()?;
+        let rhs = match input.parse::<syn::Expr>()? {
+            syn::Expr::Closure(rhs) => rhs,
+            other => {
+                return Err(syn::Error::new_spanned(
+                    other,
+                    "RHS of rule should be closure with one `&str` argument",
+                ))
+            }
+        };
+        input.parse::<syn::token::Comma>()?;
+        Ok(Rule { lhs, rhs })
+    }
+}
+
+impl Parse for Lexer {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let mut rules = vec![];
+        while !input.is_empty() {
+            rules.push(Rule::parse(input)?);
+        }
+        Ok(Lexer { rules })
     }
 }

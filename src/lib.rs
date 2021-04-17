@@ -11,14 +11,12 @@ mod reify_test;
 
 use proc_macro::TokenStream;
 
-use ast::Regex;
+use ast::Lexer;
 
 #[proc_macro]
 pub fn lexer_gen(input: TokenStream) -> TokenStream {
-    let re: Regex = syn::parse_macro_input!(input as Regex);
-    println!("{:#?}", re);
-    let nfa = regex_to_nfa::regex_to_nfa(&re, ());
-    println!("{:#?}", nfa);
+    let lexer: Lexer = syn::parse_macro_input!(input as Lexer);
+    println!("{:#?}", lexer);
 
     TokenStream::new()
 }
