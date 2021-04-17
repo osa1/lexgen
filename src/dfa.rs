@@ -110,7 +110,7 @@ impl<A> Display for DFA<A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         for (state_idx, state) in self.states.iter().enumerate() {
             if self.accepting.contains_key(&StateIdx(state_idx)) {
-                write!(f, "{:>4}", format!("*{}", state_idx))?;
+                write!(f, "{:>4}:", format!("*{}", state_idx))?;
             } else {
                 write!(f, "{:>4}:", state_idx)?;
             }
