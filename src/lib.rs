@@ -18,12 +18,11 @@ use nfa::NFA;
 pub fn lexer_gen(input: TokenStream) -> TokenStream {
     let Lexer { rules } = syn::parse_macro_input!(input as Lexer);
 
-    let (mut nfa, initial): (NFA<syn::ExprClosure>, _) = NFA::new();
+    let (mut nfa, _): (NFA<syn::ExprClosure>, _) = NFA::new();
 
     for Rule { lhs, rhs } in rules {
-        let accepting = nfa.new_state();
-        nfa.make_accepting(accepting, rhs);
-        regex_to_nfa::add_re(&mut nfa, &lhs, initial, accepting);
+        println!("{:?}", lhs);
+        nfa.add_regex(&lhs, rhs);
     }
 
     println!("NFA:");

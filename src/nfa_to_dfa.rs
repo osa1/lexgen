@@ -114,6 +114,7 @@ fn dfa_state_of_nfa_states<A>(
 mod test {
     use super::*;
     use crate::ast::{CharOrRange, CharSet, Regex};
+    use crate::nfa::NFA;
     use crate::regex_to_nfa::regex_to_nfa;
 
     fn regex_to_dfa(re: &Regex) -> DFA<()> {
@@ -223,7 +224,7 @@ mod test {
     }
 
     #[test]
-    fn multiple_accepting_states() {
+    fn multiple_accepting_states_1() {
         let re1 = Regex::String("aaa".to_owned());
         let re2 = Regex::String("aab".to_owned());
         let mut nfa = regex_to_nfa(&re1, 1usize);
@@ -233,5 +234,28 @@ mod test {
         assert_eq!(dfa.simulate(&mut "aab".chars()), Some(&2));
         assert_eq!(dfa.simulate(&mut "aaba".chars()), None);
         assert_eq!(dfa.simulate(&mut "aac".chars()), None);
+    }
+
+    #[test]
+    fn multiple_accepting_states_2() {
+        // Same test case as `nfa::test::or_one_or_more_char`
+        let re1 = Regex::Or(
+            Box::new(Regex::OneOrMore(Box::new(Regex::Char('a')))),
+            Box::new(Regex::Char('b')),
+        );
+        let re2 = Regex::CharSet(CharSet(vec![CharOrRange::Range('0', '9')]));
+
+        let (mut nfa, _): (NFA<usize>, _) = NFA::new();
+        nfa.add_regex(&re1, 1);
+        nfa.add_regex(&re2, 2);
+
+        let dfa = nfa_to_dfa(&nfa);
+
+        assert_eq!(dfa.simulate(&mut "b".chars()), Some(&1));
+        assert_eq!(dfa.simulate(&mut "a".chars()), Some(&1));
+        assert_eq!(dfa.simulate(&mut "aa".chars()), Some(&1));
+        assert_eq!(dfa.simulate(&mut "".chars()), None);
+        assert_eq!(dfa.simulate(&mut "0".chars()), Some(&2));
+        assert_eq!(dfa.simulate(&mut "5".chars()), Some(&2));
     }
 }

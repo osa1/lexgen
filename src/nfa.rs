@@ -131,7 +131,6 @@ impl<A: Clone> NFA<A> {
                     worklist.push(*next_state);
                 }
             }
-
         }
 
         closure
