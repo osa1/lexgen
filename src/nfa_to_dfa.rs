@@ -121,7 +121,7 @@ mod test {
     }
 
     #[test]
-    fn nfa_to_dfa_simulate_char() {
+    fn simulate_char() {
         let re = Regex::Char('a');
         let dfa = regex_to_dfa(&re);
         assert_eq!(dfa.simulate(&mut "".chars()), None);
@@ -131,7 +131,7 @@ mod test {
     }
 
     #[test]
-    fn nfa_to_dfa_simulate_string() {
+    fn simulate_string() {
         let re = Regex::String("ab".to_owned());
         let dfa = regex_to_dfa(&re);
         assert_eq!(dfa.simulate(&mut "".chars()), None);
@@ -141,7 +141,7 @@ mod test {
     }
 
     #[test]
-    fn nfa_to_dfa_simulate_char_set_char() {
+    fn simulate_char_set_char() {
         let re = Regex::CharSet(CharSet(vec![
             CharOrRange::Char('a'),
             CharOrRange::Char('b'),
@@ -155,7 +155,7 @@ mod test {
     }
 
     #[test]
-    fn nfa_to_dfa_simulate_char_set_range() {
+    fn simulate_char_set_range() {
         let re = Regex::CharSet(CharSet(vec![
             CharOrRange::Char('a'),
             CharOrRange::Char('b'),
@@ -172,7 +172,7 @@ mod test {
     }
 
     #[test]
-    fn nfa_to_dfa_simulate_zero_or_more() {
+    fn simulate_zero_or_more() {
         let re = Regex::ZeroOrMore(Box::new(Regex::Char('a')));
         let dfa = regex_to_dfa(&re);
         assert_eq!(dfa.simulate(&mut "".chars()), Some(&()));
@@ -182,7 +182,7 @@ mod test {
     }
 
     #[test]
-    fn nfa_to_dfa_simulate_one_or_more() {
+    fn simulate_one_or_more() {
         let re = Regex::OneOrMore(Box::new(Regex::Char('a')));
         let dfa = regex_to_dfa(&re);
         assert_eq!(dfa.simulate(&mut "".chars()), None);
@@ -192,7 +192,7 @@ mod test {
     }
 
     #[test]
-    fn nfa_to_dfa_simulate_zero_or_one() {
+    fn simulate_zero_or_one() {
         let re = Regex::ZeroOrOne(Box::new(Regex::Char('a')));
         let dfa = regex_to_dfa(&re);
         assert_eq!(dfa.simulate(&mut "".chars()), Some(&()));
@@ -201,7 +201,7 @@ mod test {
     }
 
     #[test]
-    fn nfa_to_dfa_simulate_concat() {
+    fn simulate_concat() {
         let re = Regex::Concat(Box::new(Regex::Char('a')), Box::new(Regex::Char('b')));
         let dfa = regex_to_dfa(&re);
         assert_eq!(dfa.simulate(&mut "".chars()), None);
@@ -212,7 +212,7 @@ mod test {
     }
 
     #[test]
-    fn nfa_to_dfa_simulate_or() {
+    fn simulate_or() {
         let re = Regex::Or(Box::new(Regex::Char('a')), Box::new(Regex::Char('b')));
         let dfa = regex_to_dfa(&re);
         assert_eq!(dfa.simulate(&mut "".chars()), None);
@@ -223,7 +223,7 @@ mod test {
     }
 
     #[test]
-    fn fna_to_dfa_multiple_accepting_states() {
+    fn multiple_accepting_states() {
         let re1 = Regex::String("aaa".to_owned());
         let re2 = Regex::String("aab".to_owned());
         let mut nfa = regex_to_nfa(&re1, 1usize);
