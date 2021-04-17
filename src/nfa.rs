@@ -74,10 +74,15 @@ impl<A: Clone> NFA<A> {
     }
 
     pub fn add_regex(&mut self, re: &Regex, value: A) {
-        let accepting_state = self.new_state();
-        let initial_state = self.initial_state();
-        regex_to_nfa::add_re(self, re, initial_state, accepting_state);
-        self.make_accepting(accepting_state, value);
+        let re_accepting_state = self.new_state();
+        self.make_accepting(re_accepting_state, value);
+
+        let re_initial_state = self.new_state();
+        let nfa_initial_state = self.initial_state();
+
+        regex_to_nfa::add_re(self, re, re_initial_state, re_accepting_state);
+
+        self.add_empty_transition(nfa_initial_state, re_initial_state);
     }
 
     pub fn add_char_transition(&mut self, state: StateIdx, char: char, next: StateIdx) {
@@ -117,25 +122,19 @@ impl<A: Clone> NFA<A> {
     }
 
     pub fn compute_state_closure(&self, states: &FxHashSet<StateIdx>) -> FxHashSet<StateIdx> {
-        let mut changed = true;
+        let mut worklist: Vec<StateIdx> = states.iter().copied().collect();
+        let mut closure: FxHashSet<StateIdx> = states.clone();
 
-        let mut ret = states.clone();
-
-        while changed {
-            changed = false;
-
-            let mut next = ret.clone();
-
-            for state in states.iter() {
-                for next_state in self.next_empty_states(*state) {
-                    changed |= next.insert(*next_state);
+        while let Some(work) = worklist.pop() {
+            for next_state in self.next_empty_states(work) {
+                if closure.insert(*next_state) {
+                    worklist.push(*next_state);
                 }
             }
 
-            ret = next;
         }
 
-        ret
+        closure
     }
 
     fn next_empty_states(&self, state: StateIdx) -> &FxHashSet<StateIdx> {
@@ -386,5 +385,19 @@ mod tests {
         assert_eq!(nfa.simulate(&mut "aaab".chars()), Some(&2));
         assert_eq!(nfa.simulate(&mut "aaaba".chars()), None);
         assert_eq!(nfa.simulate(&mut "aaac".chars()), None);
+    }
+
+    #[test]
+    fn or_one_or_more_char() {
+        let re = Regex::Or(
+            Box::new(Regex::OneOrMore(Box::new(Regex::Char('a')))),
+            Box::new(Regex::Char('b')),
+        );
+        let nfa = regex_to_nfa(&re, ());
+        println!("{}", nfa);
+        assert_eq!(nfa.simulate(&mut "b".chars()), Some(&()));
+        assert_eq!(nfa.simulate(&mut "a".chars()), Some(&()));
+        assert_eq!(nfa.simulate(&mut "aa".chars()), Some(&()));
+        assert_eq!(nfa.simulate(&mut "".chars()), None);
     }
 }
