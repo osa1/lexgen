@@ -7,6 +7,8 @@ mod nfa;
 mod nfa_to_dfa;
 mod regex_to_nfa;
 
+mod reify_test;
+
 use proc_macro::TokenStream;
 
 use ast::Regex;
