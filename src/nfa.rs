@@ -5,13 +5,13 @@ use fxhash::{FxHashMap, FxHashSet};
 
 /// Non-deterministic finite automate, parameterized on values of accepting states.
 #[derive(Debug)]
-pub(crate) struct NFA<A: Clone> {
+pub struct NFA<A: Clone> {
     states: Vec<State>,
     accepting: FxHashMap<StateIdx, A>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct StateIdx(usize);
+pub struct StateIdx(usize);
 
 #[derive(Debug)]
 struct State {
@@ -31,7 +31,7 @@ impl State {
 }
 
 impl<A: Clone> NFA<A> {
-    pub(crate) fn new() -> (NFA<A>, StateIdx) {
+    pub fn new() -> (NFA<A>, StateIdx) {
         (
             NFA {
                 states: vec![State::new()],
@@ -41,46 +41,46 @@ impl<A: Clone> NFA<A> {
         )
     }
 
-    pub(crate) fn initial_state(&self) -> StateIdx {
+    pub fn initial_state(&self) -> StateIdx {
         StateIdx(0)
     }
 
-    pub(crate) fn accepting_states(&self) -> impl Iterator<Item = &StateIdx> {
+    pub fn accepting_states(&self) -> impl Iterator<Item = &StateIdx> {
         self.accepting.keys()
     }
 
-    pub(crate) fn get_accepting_state(&self, state: StateIdx) -> Option<A> {
+    pub fn get_accepting_state(&self, state: StateIdx) -> Option<A> {
         self.accepting.get(&state).cloned()
     }
 
-    pub(crate) fn char_transitions(
+    pub fn char_transitions(
         &self,
         state: StateIdx,
     ) -> impl Iterator<Item = (&char, &FxHashSet<StateIdx>)> {
         self.states[state.0].char_transitions.iter()
     }
 
-    pub(crate) fn range_transitions(
+    pub fn range_transitions(
         &self,
         state: StateIdx,
     ) -> impl Iterator<Item = (&(char, char), &FxHashSet<StateIdx>)> {
         self.states[state.0].range_transitions.iter()
     }
 
-    pub(crate) fn new_state(&mut self) -> StateIdx {
+    pub fn new_state(&mut self) -> StateIdx {
         let new_state_idx = StateIdx(self.states.len());
         self.states.push(State::new());
         new_state_idx
     }
 
-    pub(crate) fn add_regex(&mut self, re: &Regex, value: A) {
+    pub fn add_regex(&mut self, re: &Regex, value: A) {
         let accepting_state = self.new_state();
         let initial_state = self.initial_state();
         regex_to_nfa::add_re(self, re, initial_state, accepting_state);
         self.make_accepting(accepting_state, value);
     }
 
-    pub(crate) fn add_char_transition(&mut self, state: StateIdx, char: char, next: StateIdx) {
+    pub fn add_char_transition(&mut self, state: StateIdx, char: char, next: StateIdx) {
         let not_exists = self.states[state.0]
             .char_transitions
             .entry(char)
@@ -90,7 +90,7 @@ impl<A: Clone> NFA<A> {
         assert!(not_exists, "add_char_transition");
     }
 
-    pub(crate) fn add_range_transition(
+    pub fn add_range_transition(
         &mut self,
         state: StateIdx,
         range_begin: char,
@@ -106,20 +106,17 @@ impl<A: Clone> NFA<A> {
         assert!(not_exists, "add_range_transition");
     }
 
-    pub(crate) fn add_empty_transition(&mut self, state: StateIdx, next: StateIdx) {
+    pub fn add_empty_transition(&mut self, state: StateIdx, next: StateIdx) {
         let not_exists = self.states[state.0].empty_transitions.insert(next);
 
         assert!(not_exists, "add_empty_transition");
     }
 
-    pub(crate) fn make_accepting(&mut self, state: StateIdx, value: A) {
+    pub fn make_accepting(&mut self, state: StateIdx, value: A) {
         self.accepting.insert(state, value);
     }
 
-    pub(crate) fn compute_state_closure(
-        &self,
-        states: &FxHashSet<StateIdx>,
-    ) -> FxHashSet<StateIdx> {
+    pub fn compute_state_closure(&self, states: &FxHashSet<StateIdx>) -> FxHashSet<StateIdx> {
         let mut changed = true;
 
         let mut ret = states.clone();
@@ -146,7 +143,7 @@ impl<A: Clone> NFA<A> {
         &state.empty_transitions
     }
 
-    pub(crate) fn simulate(&self, chars: &mut dyn Iterator<Item = char>) -> Option<&A> {
+    pub fn simulate(&self, chars: &mut dyn Iterator<Item = char>) -> Option<&A> {
         let mut states: FxHashSet<StateIdx> = Default::default();
         states.insert(StateIdx(0));
         states = self.compute_state_closure(&states);

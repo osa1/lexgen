@@ -3,7 +3,7 @@
 use syn::parse::{Parse, ParseStream};
 
 #[derive(Debug)]
-pub(crate) enum Regex {
+pub enum Regex {
     Var(String),
     Char(char),
     String(String),
@@ -17,10 +17,10 @@ pub(crate) enum Regex {
 }
 
 #[derive(Debug)]
-pub(crate) struct CharSet(pub(crate) Vec<CharOrRange>);
+pub struct CharSet(pub Vec<CharOrRange>);
 
 #[derive(Debug)]
-pub(crate) enum CharOrRange {
+pub enum CharOrRange {
     Char(char),
     Range(char, char),
 }

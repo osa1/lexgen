@@ -1,9 +1,9 @@
 use std::collections::{BTreeSet, HashSet};
 use std::fmt::{self, Display, Formatter};
 
-pub(crate) struct BTreeSetDisplay<'a, A: Display>(pub(crate) &'a BTreeSet<A>);
+pub struct BTreeSetDisplay<'a, A: Display>(pub &'a BTreeSet<A>);
 
-pub(crate) struct HashSetDisplay<'a, A: Display, S>(pub(crate) &'a HashSet<A, S>);
+pub struct HashSetDisplay<'a, A: Display, S>(pub &'a HashSet<A, S>);
 
 impl<'a, A: Display> Display for BTreeSetDisplay<'a, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {

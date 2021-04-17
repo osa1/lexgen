@@ -2,13 +2,13 @@ use fxhash::FxHashMap;
 
 /// Deterministic finite automate, parameterized on values of accepting states.
 #[derive(Debug)]
-pub(crate) struct DFA<A> {
+pub struct DFA<A> {
     states: Vec<State>,
     accepting: FxHashMap<StateIdx, A>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct StateIdx(usize);
+pub struct StateIdx(usize);
 
 #[derive(Debug)]
 struct State {
@@ -26,7 +26,7 @@ impl State {
 }
 
 impl<A> DFA<A> {
-    pub(crate) fn new() -> (DFA<A>, StateIdx) {
+    pub fn new() -> (DFA<A>, StateIdx) {
         (
             DFA {
                 states: vec![State::new()],
@@ -36,21 +36,21 @@ impl<A> DFA<A> {
         )
     }
 
-    pub(crate) fn initial_state(&self) -> StateIdx {
+    pub fn initial_state(&self) -> StateIdx {
         StateIdx(0)
     }
 
-    pub(crate) fn add_accepting_state(&mut self, state: StateIdx, value: A) {
+    pub fn add_accepting_state(&mut self, state: StateIdx, value: A) {
         self.accepting.insert(state, value);
     }
 
-    pub(crate) fn new_state(&mut self) -> StateIdx {
+    pub fn new_state(&mut self) -> StateIdx {
         let new_state_idx = StateIdx(self.states.len());
         self.states.push(State::new());
         new_state_idx
     }
 
-    pub(crate) fn add_char_transition(&mut self, state: StateIdx, char: char, next: StateIdx) {
+    pub fn add_char_transition(&mut self, state: StateIdx, char: char, next: StateIdx) {
         let old = self.states[state.0].char_transitions.insert(char, next);
         assert!(
             old.is_none(),
@@ -62,7 +62,7 @@ impl<A> DFA<A> {
         );
     }
 
-    pub(crate) fn add_range_transition(
+    pub fn add_range_transition(
         &mut self,
         state: StateIdx,
         range_begin: char,
@@ -75,7 +75,7 @@ impl<A> DFA<A> {
         assert!(old.is_none());
     }
 
-    pub(crate) fn simulate(&self, chars: &mut dyn Iterator<Item = char>) -> Option<&A> {
+    pub fn simulate(&self, chars: &mut dyn Iterator<Item = char>) -> Option<&A> {
         let mut state = StateIdx(0);
 
         'char_loop: for char in chars {

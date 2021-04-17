@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 
 use fxhash::{FxHashMap, FxHashSet};
 
-pub(crate) fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
+pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
     let initial_state = nfa.initial_state();
 
     let initial_states: BTreeSet<NfaStateIdx> = {
