@@ -271,7 +271,7 @@ impl DFA<syn::Expr> {
                 current_match_end: usize,
             }
 
-            #[derive(Debug)]
+            #[derive(Debug, PartialEq, Eq)]
             struct LexerError {
                 char_idx: usize,
             }
