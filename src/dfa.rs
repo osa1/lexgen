@@ -178,13 +178,14 @@ impl DFA<Option<syn::Expr>> {
 
             // Add char transitions
             for (char, StateIdx(next_state)) in char_transitions {
+                let char_len = char.len_utf8();
                 if accepting.is_some() {
                     // In an accepting state we only consume the next character if we're making a
                     // transition. See `state_code` below for where we use `peek` instead of `next`
                     // in accepting states.
                     state_char_arms.push(quote!(
                         #char => {
-                            self.current_match_end += #char.len_utf8();
+                            self.current_match_end += #char_len;
                             let _ = self.iter.next();
                             self.state = #next_state;
                         }
