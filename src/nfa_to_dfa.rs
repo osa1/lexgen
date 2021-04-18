@@ -113,7 +113,8 @@ fn dfa_state_of_nfa_states<A>(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::ast::{CharOrRange, CharSet, Regex};
+
+    use crate::ast::{CharOrRange, CharSet, Regex, Var};
     use crate::nfa::NFA;
     use crate::regex_to_nfa::regex_to_nfa;
 
@@ -228,7 +229,7 @@ mod test {
         let re1 = Regex::String("aaa".to_owned());
         let re2 = Regex::String("aab".to_owned());
         let mut nfa = regex_to_nfa(&re1, 1usize);
-        nfa.add_regex(&re2, 2usize);
+        nfa.add_regex(&Default::default(), &re2, 2usize);
         let dfa = nfa_to_dfa(&nfa);
         assert_eq!(dfa.simulate(&mut "aaa".chars()), Some(&1));
         assert_eq!(dfa.simulate(&mut "aab".chars()), Some(&2));
@@ -246,8 +247,8 @@ mod test {
         let re2 = Regex::CharSet(CharSet(vec![CharOrRange::Range('0', '9')]));
 
         let (mut nfa, _): (NFA<usize>, _) = NFA::new();
-        nfa.add_regex(&re1, 1);
-        nfa.add_regex(&re2, 2);
+        nfa.add_regex(&Default::default(), &re1, 1);
+        nfa.add_regex(&Default::default(), &re2, 2);
 
         let dfa = nfa_to_dfa(&nfa);
 
@@ -257,5 +258,38 @@ mod test {
         assert_eq!(dfa.simulate(&mut "".chars()), None);
         assert_eq!(dfa.simulate(&mut "0".chars()), Some(&2));
         assert_eq!(dfa.simulate(&mut "5".chars()), Some(&2));
+    }
+
+    #[test]
+    fn variables() {
+        let mut bindings: FxHashMap<Var, Regex> = Default::default();
+        bindings.insert(
+            Var("initial".to_owned()),
+            Regex::CharSet(CharSet(vec![CharOrRange::Range('a', 'z')])),
+        );
+        bindings.insert(
+            Var("subsequent".to_owned()),
+            Regex::CharSet(CharSet(vec![
+                CharOrRange::Range('a', 'z'),
+                CharOrRange::Range('A', 'Z'),
+                CharOrRange::Range('0', '9'),
+                CharOrRange::Char('-'),
+                CharOrRange::Char('_'),
+            ])),
+        );
+        let re = Regex::Concat(
+            Box::new(Regex::Var(Var("initial".to_owned()))),
+            Box::new(Regex::ZeroOrMore(Box::new(Regex::Var(Var(
+                "subsequent".to_owned()
+            ))))),
+        );
+        let (mut nfa, _): (NFA<()>, _) = NFA::new();
+        nfa.add_regex(&bindings, &re, ());
+
+        let dfa = nfa_to_dfa(&nfa);
+
+        assert_eq!(dfa.simulate(&mut "a".chars()), Some(&()));
+        assert_eq!(dfa.simulate(&mut "aA".chars()), Some(&()));
+        assert_eq!(dfa.simulate(&mut "aA123-a".chars()), Some(&()));
     }
 }

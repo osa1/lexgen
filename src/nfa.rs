@@ -1,4 +1,4 @@
-use crate::ast::Regex;
+use crate::ast::{Regex, Var};
 use crate::regex_to_nfa;
 
 use fxhash::{FxHashMap, FxHashSet};
@@ -73,14 +73,14 @@ impl<A: Clone> NFA<A> {
         new_state_idx
     }
 
-    pub fn add_regex(&mut self, re: &Regex, value: A) {
+    pub fn add_regex(&mut self, bindings: &FxHashMap<Var, Regex>, re: &Regex, value: A) {
         let re_accepting_state = self.new_state();
         self.make_accepting(re_accepting_state, value);
 
         let re_initial_state = self.new_state();
         let nfa_initial_state = self.initial_state();
 
-        regex_to_nfa::add_re(self, re, re_initial_state, re_accepting_state);
+        regex_to_nfa::add_re(self, bindings, re, re_initial_state, re_accepting_state);
 
         self.add_empty_transition(nfa_initial_state, re_initial_state);
     }
@@ -269,8 +269,12 @@ impl Display for StateSetDisplay<'_> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::{CharOrRange, CharSet, Regex};
+    use super::*;
+
+    use crate::ast::{CharOrRange, CharSet, Regex, Var};
     use crate::regex_to_nfa::regex_to_nfa;
+
+    use fxhash::FxHashMap;
 
     #[test]
     fn simulate_char() {
@@ -379,7 +383,7 @@ mod tests {
         let re1 = Regex::String("aaaa".to_owned());
         let re2 = Regex::String("aaab".to_owned());
         let mut nfa = regex_to_nfa(&re1, 1usize);
-        nfa.add_regex(&re2, 2usize);
+        nfa.add_regex(&Default::default(), &re2, 2usize);
         assert_eq!(nfa.simulate(&mut "aaaa".chars()), Some(&1));
         assert_eq!(nfa.simulate(&mut "aaab".chars()), Some(&2));
         assert_eq!(nfa.simulate(&mut "aaaba".chars()), None);
@@ -398,5 +402,35 @@ mod tests {
         assert_eq!(nfa.simulate(&mut "a".chars()), Some(&()));
         assert_eq!(nfa.simulate(&mut "aa".chars()), Some(&()));
         assert_eq!(nfa.simulate(&mut "".chars()), None);
+    }
+
+    #[test]
+    fn variables() {
+        let mut bindings: FxHashMap<Var, Regex> = Default::default();
+        bindings.insert(
+            Var("initial".to_owned()),
+            Regex::CharSet(CharSet(vec![CharOrRange::Range('a', 'z')])),
+        );
+        bindings.insert(
+            Var("subsequent".to_owned()),
+            Regex::CharSet(CharSet(vec![
+                CharOrRange::Range('a', 'z'),
+                CharOrRange::Range('A', 'Z'),
+                CharOrRange::Range('0', '9'),
+                CharOrRange::Char('-'),
+                CharOrRange::Char('_'),
+            ])),
+        );
+        let re = Regex::Concat(
+            Box::new(Regex::Var(Var("initial".to_owned()))),
+            Box::new(Regex::ZeroOrMore(Box::new(Regex::Var(Var(
+                "subsequent".to_owned()
+            ))))),
+        );
+        let (mut nfa, _): (NFA<()>, _) = NFA::new();
+        nfa.add_regex(&bindings, &re, ());
+        assert_eq!(nfa.simulate(&mut "a".chars()), Some(&()));
+        assert_eq!(nfa.simulate(&mut "aA".chars()), Some(&()));
+        assert_eq!(nfa.simulate(&mut "aA123-a".chars()), Some(&()));
     }
 }

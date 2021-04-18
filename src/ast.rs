@@ -2,15 +2,18 @@
 
 use syn::parse::{Parse, ParseStream};
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Var(pub String);
+
 pub struct Lexer {
     pub type_name: syn::Ident,
     pub token_type: syn::Type,
     pub rules: Vec<Rule>,
 }
 
-pub struct Rule {
-    pub lhs: Regex,
-    pub rhs: syn::Expr,
+pub enum Rule {
+    Binding { var: Var, re: Regex },
+    Rule { lhs: Regex, rhs: syn::Expr },
 }
 
 impl std::fmt::Debug for Lexer {
@@ -24,16 +27,24 @@ impl std::fmt::Debug for Lexer {
 
 impl std::fmt::Debug for Rule {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Rule")
-            .field("lhs", &self.lhs)
-            .field("rhs", &"...")
-            .finish()
+        match self {
+            Rule::Binding { var, re } => f
+                .debug_struct("Rule::Binding")
+                .field("var", var)
+                .field("re", re)
+                .finish(),
+            Rule::Rule { lhs, rhs: _ } => f
+                .debug_struct("Rule::Rule")
+                .field("lhs", lhs)
+                .field("rhs", &"...")
+                .finish(),
+        }
     }
 }
 
 #[derive(Debug)]
 pub enum Regex {
-    Var(String),
+    Var(Var),
     Char(char),
     String(String),
     CharSet(CharSet),
@@ -54,12 +65,12 @@ pub enum CharOrRange {
     Range(char, char),
 }
 
-/// Parses a `=>` terminated regex
+/// Parses a `=>` or `;` terminated regex
 impl Parse for Regex {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut re = parse_regex_1(input)?;
 
-        while !input.peek(syn::token::FatArrow) {
+        while !(input.peek(syn::token::FatArrow) || input.peek(syn::token::Semi)) {
             if input.peek(syn::token::Star) {
                 let _ = input.parse::<syn::token::Star>()?;
                 re = Regex::ZeroOrMore(Box::new(re));
@@ -90,10 +101,11 @@ fn parse_regex_1(input: ParseStream) -> syn::Result<Regex> {
         Regex::parse(&parenthesized)
     } else if input.peek(syn::Ident) {
         let ident = input.parse::<syn::Ident>()?;
-        Ok(Regex::Var(ident.to_string()))
+        Ok(Regex::Var(Var(ident.to_string())))
     } else if input.peek(syn::token::Dollar) {
         let _ = input.parse::<syn::token::Dollar>()?;
-        todo!()
+        let ident = input.parse::<syn::Ident>()?;
+        Ok(Regex::Var(Var(ident.to_string())))
     } else if input.peek(syn::LitChar) {
         let char = input.parse::<syn::LitChar>()?;
         Ok(Regex::Char(char.value()))
@@ -138,11 +150,23 @@ impl Parse for CharOrRange {
 
 impl Parse for Rule {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let lhs = Regex::parse(input)?;
-        input.parse::<syn::token::FatArrow>()?;
-        let rhs = input.parse::<syn::Expr>()?;
-        input.parse::<syn::token::Comma>()?;
-        Ok(Rule { lhs, rhs })
+        if input.peek(syn::token::Let) {
+            input.parse::<syn::token::Let>()?;
+            let var = input.parse::<syn::Ident>()?;
+            input.parse::<syn::token::Eq>()?;
+            let re = Regex::parse(input)?;
+            input.parse::<syn::token::Semi>()?;
+            Ok(Rule::Binding {
+                var: Var(var.to_string()),
+                re,
+            })
+        } else {
+            let lhs = Regex::parse(input)?;
+            input.parse::<syn::token::FatArrow>()?;
+            let rhs = input.parse::<syn::Expr>()?;
+            input.parse::<syn::token::Comma>()?;
+            Ok(Rule::Rule { lhs, rhs })
+        }
     }
 }
 
