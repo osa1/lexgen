@@ -226,13 +226,33 @@ impl DFA<Option<syn::Expr>> {
                 }
             }
 
-            // Add range transitions
-            for ((range_begin, range_end), StateIdx(next_state)) in range_transitions {
-                // Same as above. When using `peek`, `x` will be a reference so we need to add a
-                // deref.
+            // Add range transitions. Same as above, use chain of "or"s for ranges with same transition.
+            let mut state_ranges: FxHashMap<StateIdx, Vec<(char, char)>> = Default::default();
+            for (range, state_idx) in range_transitions {
+                state_ranges.entry(*state_idx).or_default().push(*range);
+            }
+
+            for (StateIdx(next_state), mut ranges) in state_ranges.into_iter() {
+                let x = if accepting.is_some() {
+                    quote!(*x)
+                } else {
+                    quote!(x)
+                };
+                let guard = if ranges.len() == 1 {
+                    let (range_begin, range_end) = ranges.pop().unwrap();
+                    quote!(#x >= #range_begin && #x <= #range_end)
+                } else {
+                    let (range_begin, range_end) = ranges.pop().unwrap();
+                    let mut guard = quote!(#x >= #range_begin && #x <= #range_end);
+                    while let Some((range_begin, range_end)) = ranges.pop() {
+                        guard = quote!((#x >= #range_begin && #x <= #range_end) || #guard);
+                    }
+                    guard
+                };
+
                 if accepting.is_some() {
                     state_char_arms.push(quote!(
-                        x if *x >= #range_begin && *x <= #range_end => {
+                        x if #guard => {
                             self.current_match_end += x.len_utf8();
                             let _ = self.iter.next();
                             self.state = #next_state;
@@ -240,7 +260,7 @@ impl DFA<Option<syn::Expr>> {
                     ));
                 } else {
                     state_char_arms.push(quote!(
-                        x if x >= #range_begin && x <= #range_end => {
+                        x if #guard => {
                             self.state = #next_state;
                         }
                     ));
