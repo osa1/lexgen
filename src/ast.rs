@@ -13,7 +13,7 @@ pub struct Lexer {
 
 pub enum Rule {
     Binding { var: Var, re: Regex },
-    Rule { lhs: Regex, rhs: syn::Expr },
+    Rule { lhs: Regex, rhs: Option<syn::Expr> },
 }
 
 impl std::fmt::Debug for Lexer {
@@ -65,12 +65,16 @@ pub enum CharOrRange {
     Range(char, char),
 }
 
-/// Parses a `=>` or `;` terminated regex
+/// Parses a regex terminated with: `=>` (used in rules with RHSs), `,` (used in rules without
+/// RHSs), or `;` (used in let bindings)
 impl Parse for Regex {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut re = parse_regex_1(input)?;
 
-        while !(input.peek(syn::token::FatArrow) || input.peek(syn::token::Semi)) {
+        while !(input.peek(syn::token::FatArrow)
+            || input.peek(syn::token::Comma)
+            || input.peek(syn::token::Semi))
+        {
             if input.peek(syn::token::Star) {
                 let _ = input.parse::<syn::token::Star>()?;
                 re = Regex::ZeroOrMore(Box::new(re));
@@ -162,10 +166,19 @@ impl Parse for Rule {
             })
         } else {
             let lhs = Regex::parse(input)?;
-            input.parse::<syn::token::FatArrow>()?;
-            let rhs = input.parse::<syn::Expr>()?;
-            input.parse::<syn::token::Comma>()?;
-            Ok(Rule::Rule { lhs, rhs })
+            if input.peek(syn::token::Comma) {
+                input.parse::<syn::token::Comma>()?;
+                Ok(Rule::Rule { lhs, rhs: None })
+            } else {
+                // Assume rule with RHS
+                input.parse::<syn::token::FatArrow>()?;
+                let rhs = input.parse::<syn::Expr>()?;
+                input.parse::<syn::token::Comma>()?;
+                Ok(Rule::Rule {
+                    lhs,
+                    rhs: Some(rhs),
+                })
+            }
         }
     }
 }

@@ -155,6 +155,7 @@ impl DFA<syn::Expr> {
     pub fn reify(&self, type_name: syn::Ident, token_type: syn::Type) -> TokenStream {
         let DFA { states, accepting } = self;
 
+        // Arms of the `match` for the DFA states
         let mut match_arms: Vec<TokenStream> = vec![];
 
         for (
@@ -165,6 +166,7 @@ impl DFA<syn::Expr> {
             },
         ) in states.iter().enumerate()
         {
+            // Arms of the `match` for the current character
             let mut state_char_arms: Vec<TokenStream> = vec![];
             let accepting = accepting.get(&StateIdx(state_idx));
 

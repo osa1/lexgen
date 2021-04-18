@@ -31,7 +31,10 @@ pub fn lexer_gen(input: TokenStream) -> TokenStream {
             }
             Rule::Rule { lhs, rhs } => {
                 println!("{:?}", lhs);
-                nfa.add_regex(&bindings, &lhs, rhs);
+                match rhs {
+                    None => todo!(),
+                    Some(rhs) => nfa.add_regex(&bindings, &lhs, rhs),
+                }
             }
         }
     }
