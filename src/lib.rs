@@ -30,19 +30,12 @@ pub fn lexer_gen(input: TokenStream) -> TokenStream {
                 }
             }
             Rule::Rule { lhs, rhs } => {
-                println!("{:?}", lhs);
                 nfa.add_regex(&bindings, &lhs, rhs);
             }
         }
     }
 
-    println!("NFA:");
-    println!("{}", nfa);
-
     let dfa = nfa_to_dfa::nfa_to_dfa(&nfa);
-    println!("DFA:");
-    println!("{}", dfa);
-
     dfa.reify(type_name, token_type).into()
 }
 
