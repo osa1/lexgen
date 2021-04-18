@@ -116,10 +116,11 @@ mod test {
 
     use crate::ast::{CharOrRange, CharSet, Regex, Var};
     use crate::nfa::NFA;
-    use crate::regex_to_nfa::regex_to_nfa;
 
     fn regex_to_dfa(re: &Regex) -> DFA<()> {
-        nfa_to_dfa(&regex_to_nfa(re, ()))
+        let mut nfa: NFA<()> = NFA::new();
+        nfa.add_regex(&Default::default(), &re, ());
+        nfa_to_dfa(&nfa)
     }
 
     #[test]
@@ -228,7 +229,8 @@ mod test {
     fn multiple_accepting_states_1() {
         let re1 = Regex::String("aaa".to_owned());
         let re2 = Regex::String("aab".to_owned());
-        let mut nfa = regex_to_nfa(&re1, 1usize);
+        let mut nfa = NFA::new();
+        nfa.add_regex(&Default::default(), &re1, 1usize);
         nfa.add_regex(&Default::default(), &re2, 2usize);
         let dfa = nfa_to_dfa(&nfa);
         assert_eq!(dfa.simulate(&mut "aaa".chars()), Some(&1));
@@ -246,7 +248,7 @@ mod test {
         );
         let re2 = Regex::CharSet(CharSet(vec![CharOrRange::Range('0', '9')]));
 
-        let (mut nfa, _): (NFA<usize>, _) = NFA::new();
+        let mut nfa: NFA<usize> = NFA::new();
         nfa.add_regex(&Default::default(), &re1, 1);
         nfa.add_regex(&Default::default(), &re2, 2);
 
@@ -283,7 +285,7 @@ mod test {
                 "subsequent".to_owned()
             ))))),
         );
-        let (mut nfa, _): (NFA<()>, _) = NFA::new();
+        let mut nfa: NFA<()> = NFA::new();
         nfa.add_regex(&bindings, &re, ());
 
         let dfa = nfa_to_dfa(&nfa);

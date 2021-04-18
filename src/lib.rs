@@ -19,7 +19,7 @@ pub fn lexer_gen(input: TokenStream) -> TokenStream {
         rules,
     } = syn::parse_macro_input!(input as Lexer);
 
-    let (mut nfa, _): (NFA<syn::Expr>, _) = NFA::new();
+    let mut nfa: NFA<syn::Expr> = NFA::new();
 
     let mut bindings: FxHashMap<Var, Regex> = Default::default();
     for rule in rules {

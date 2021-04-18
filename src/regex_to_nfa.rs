@@ -3,15 +3,6 @@ use crate::nfa::{StateIdx, NFA};
 
 use fxhash::FxHashMap;
 
-#[cfg(test)]
-pub fn regex_to_nfa<A: Clone>(re: &Regex, value: A) -> NFA<A> {
-    let (mut nfa, initial) = NFA::new();
-    let accepting = nfa.new_state();
-    nfa.make_accepting(accepting, value);
-    add_re(&mut nfa, &Default::default(), re, initial, accepting);
-    nfa
-}
-
 pub fn add_re<A: Clone>(
     nfa: &mut NFA<A>,
     bindings: &FxHashMap<Var, Regex>,
