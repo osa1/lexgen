@@ -36,10 +36,6 @@ impl<A> DFA<A> {
         )
     }
 
-    pub fn initial_state(&self) -> StateIdx {
-        StateIdx(0)
-    }
-
     pub fn add_accepting_state(&mut self, state: StateIdx, value: A) {
         self.accepting.insert(state, value);
     }
@@ -75,6 +71,7 @@ impl<A> DFA<A> {
         assert!(old.is_none());
     }
 
+    #[cfg(test)]
     pub fn simulate(&self, chars: &mut dyn Iterator<Item = char>) -> Option<&A> {
         let mut state = StateIdx(0);
 

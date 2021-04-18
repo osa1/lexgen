@@ -1,13 +1,9 @@
-#![allow(dead_code)]
-
 mod ast;
 mod dfa;
 mod display;
 mod nfa;
 mod nfa_to_dfa;
 mod regex_to_nfa;
-
-mod reify_test;
 
 use ast::{Lexer, Regex, Rule, Var};
 use nfa::NFA;

@@ -45,10 +45,6 @@ impl<A: Clone> NFA<A> {
         StateIdx(0)
     }
 
-    pub fn accepting_states(&self) -> impl Iterator<Item = &StateIdx> {
-        self.accepting.keys()
-    }
-
     pub fn get_accepting_state(&self, state: StateIdx) -> Option<A> {
         self.accepting.get(&state).cloned()
     }
@@ -141,6 +137,7 @@ impl<A: Clone> NFA<A> {
         &state.empty_transitions
     }
 
+    #[cfg(test)]
     pub fn simulate(&self, chars: &mut dyn Iterator<Item = char>) -> Option<&A> {
         let mut states: FxHashSet<StateIdx> = Default::default();
         states.insert(StateIdx(0));
