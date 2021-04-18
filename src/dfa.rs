@@ -149,7 +149,7 @@ impl<A> Display for DFA<A> {
 }
 
 use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{quote, ToTokens};
 
 impl DFA<Option<syn::Expr>> {
     pub fn reify(&self, type_name: syn::Ident, token_type: syn::Type) -> TokenStream {
@@ -176,22 +176,53 @@ impl DFA<Option<syn::Expr>> {
             let mut state_char_arms: Vec<TokenStream> = vec![];
             let accepting = accepting.get(&StateIdx(state_idx));
 
-            // Add char transitions
-            for (char, StateIdx(next_state)) in char_transitions {
-                let char_len = char.len_utf8();
+            // Add char transitions. Collect characters for next states, to be able to use or
+            // patterns in arms and reduce code size
+            let mut state_chars: FxHashMap<StateIdx, Vec<char>> = Default::default();
+            for (char, state_idx) in char_transitions {
+                state_chars.entry(*state_idx).or_default().push(*char);
+            }
+
+            for (StateIdx(next_state), chars) in state_chars.iter() {
+                let mut or_pat_cases: syn::punctuated::Punctuated<syn::Pat, syn::token::Or> =
+                    syn::punctuated::Punctuated::new();
+
+                for char in chars {
+                    or_pat_cases.push(syn::Pat::Lit(syn::PatLit {
+                        attrs: vec![],
+                        expr: Box::new(syn::Expr::Lit(syn::ExprLit {
+                            attrs: vec![],
+                            lit: syn::Lit::Char(syn::LitChar::new(
+                                *char,
+                                proc_macro2::Span::call_site(),
+                            )),
+                        })),
+                    }));
+                }
+
+                let or_pat = syn::PatOr {
+                    attrs: vec![],
+                    leading_vert: None,
+                    cases: or_pat_cases,
+                };
+
+                let or_pat_tokens = syn::Pat::Or(or_pat).into_token_stream();
+
                 if accepting.is_some() {
                     // In an accepting state we only consume the next character if we're making a
                     // transition. See `state_code` below for where we use `peek` instead of `next`
                     // in accepting states.
                     state_char_arms.push(quote!(
-                        #char => {
-                            self.current_match_end += #char_len;
+                        #or_pat_tokens => {
+                            self.current_match_end += char.len_utf8();
                             let _ = self.iter.next();
                             self.state = #next_state;
                         }
                     ));
                 } else {
-                    state_char_arms.push(quote!(#char => self.state = #next_state));
+                    state_char_arms.push(quote!(
+                        #or_pat_tokens => self.state = #next_state
+                    ));
                 }
             }
 
@@ -199,18 +230,21 @@ impl DFA<Option<syn::Expr>> {
             for ((range_begin, range_end), StateIdx(next_state)) in range_transitions {
                 // Same as above. When using `peek`, `x` will be a reference so we need to add a
                 // deref.
-                let x = if accepting.is_some() {
-                    quote!(*x)
+                if accepting.is_some() {
+                    state_char_arms.push(quote!(
+                        x if *x >= #range_begin && *x <= #range_end => {
+                            self.current_match_end += x.len_utf8();
+                            let _ = self.iter.next();
+                            self.state = #next_state;
+                        }
+                    ));
                 } else {
-                    quote!(x)
-                };
-                state_char_arms.push(quote!(
-                    x if #x >= #range_begin && #x <= #range_end => {
-                        self.current_match_end += x.len_utf8();
-                        let _ = self.iter.next();
-                        self.state = #next_state;
-                    }
-                ));
+                    state_char_arms.push(quote!(
+                        x if x >= #range_begin && x <= #range_end => {
+                            self.state = #next_state;
+                        }
+                    ));
+                }
             }
 
             // Add default case
