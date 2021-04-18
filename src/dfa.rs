@@ -151,9 +151,15 @@ impl<A> Display for DFA<A> {
 use proc_macro2::TokenStream;
 use quote::quote;
 
-impl DFA<syn::Expr> {
+impl DFA<Option<syn::Expr>> {
     pub fn reify(&self, type_name: syn::Ident, token_type: syn::Type) -> TokenStream {
         let DFA { states, accepting } = self;
+
+        let pop_match: TokenStream = quote!(match self.pop_match_or_fail() {
+            Ok(None) => continue,
+            Ok(Some(tok)) => return Some(Ok(tok)),
+            Err(err) => return Some(Err(err)),
+        });
 
         // Arms of the `match` for the DFA states
         let mut match_arms: Vec<TokenStream> = vec![];
@@ -207,7 +213,7 @@ impl DFA<syn::Expr> {
             }
 
             // Add default case
-            state_char_arms.push(quote!(_ => return self.pop_match_or_fail()));
+            state_char_arms.push(quote!(_ => #pop_match));
 
             let state_code: TokenStream = if state_idx == 0 {
                 // Initial state. Difference from other states is we return `None` when the
@@ -216,7 +222,7 @@ impl DFA<syn::Expr> {
                 quote!(
                     match self.iter.next() {
                         None if self.match_stack.is_empty() => return None,
-                        None => return self.pop_match_or_fail(),
+                        None => #pop_match,
                         Some((char_idx, char)) => {
                             self.current_match_start = char_idx;
                             self.current_match_end = char_idx + char.len_utf8();
@@ -228,11 +234,17 @@ impl DFA<syn::Expr> {
                 )
             } else if let Some(rhs) = accepting {
                 // Non-initial, accepting state
+                let token = match rhs {
+                    None => quote!(None),
+                    Some(rhs) => {
+                        quote!(Some((self.current_match_start, (#rhs)(str), self.current_match_end)))
+                    }
+                };
                 quote!({
                     let str = &self.input[self.current_match_start..self.current_match_end];
-                    self.match_stack.push((self.current_match_start, (#rhs)(str), self.current_match_end));
+                    self.match_stack.push(#token);
                     match self.iter.peek() {
-                        None => return self.pop_match_or_fail(),
+                        None => #pop_match,
                         Some((char_idx, char)) => {
                             match char {
                                 #(#state_char_arms,)*
@@ -244,7 +256,7 @@ impl DFA<syn::Expr> {
                 // Non-initial, non-accepting state. In a non-accepting state we want to consume a
                 // character anyway so we can use `next` instead of `peek`.
                 quote!(match self.iter.next() {
-                    None => return self.pop_match_or_fail(),
+                    None => #pop_match,
                     Some((char_idx, char)) => {
                         self.current_match_end += char.len_utf8();
                         match char {
@@ -266,7 +278,7 @@ impl DFA<syn::Expr> {
                 state: usize,
                 input: &'input str,
                 iter: std::iter::Peekable<std::str::CharIndices<'input>>,
-                match_stack: Vec<(usize, #token_type, usize)>,
+                match_stack: Vec<Option<(usize, #token_type, usize)>>,
                 current_match_start: usize,
                 current_match_end: usize,
             }
@@ -288,16 +300,21 @@ impl DFA<syn::Expr> {
                     }
                 }
 
-                fn pop_match_or_fail(&mut self) -> Option<Result<(usize, #token_type, usize), LexerError>> {
+                fn pop_match_or_fail(&mut self) -> Result<Option<(usize, #token_type, usize)>, LexerError> {
                     match self.match_stack.pop() {
-                        Some((match_begin, a, match_end)) => {
+                        Some(None) => {
                             self.match_stack.clear();
                             self.state = 0;
-                            Some(Ok((match_begin, a, match_end)))
+                            Ok(None)
                         }
-                        None => Some(Err(LexerError {
+                        Some(Some(tok)) => {
+                            self.match_stack.clear();
+                            self.state = 0;
+                            Ok(Some(tok))
+                        }
+                        None => Err(LexerError {
                             char_idx: self.current_match_start,
-                        })),
+                        }),
                     }
                 }
             }

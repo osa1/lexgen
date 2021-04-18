@@ -19,7 +19,7 @@ pub fn lexer_gen(input: TokenStream) -> TokenStream {
         rules,
     } = syn::parse_macro_input!(input as Lexer);
 
-    let mut nfa: NFA<syn::Expr> = NFA::new();
+    let mut nfa: NFA<Option<syn::Expr>> = NFA::new();
 
     let mut bindings: FxHashMap<Var, Regex> = Default::default();
     for rule in rules {
@@ -31,10 +31,7 @@ pub fn lexer_gen(input: TokenStream) -> TokenStream {
             }
             Rule::Rule { lhs, rhs } => {
                 println!("{:?}", lhs);
-                match rhs {
-                    None => todo!(),
-                    Some(rhs) => nfa.add_regex(&bindings, &lhs, rhs),
-                }
+                nfa.add_regex(&bindings, &lhs, rhs);
             }
         }
     }

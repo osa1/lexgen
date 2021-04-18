@@ -13,12 +13,21 @@ fn simple() {
         let init = ['a'-'z'];
         let subseq = $init | ['A'-'Z' '0'-'9' '-' '_'];
 
+        // Whitespace
+        [' ' '\t' '\n']+,
+
         $init $subseq* => |str: &str| Token::Id(str.to_owned()),
     }
 
-    let mut lexer: Lexer<'static> = Lexer::new("aA123_123-123");
+    let mut lexer = Lexer::new(" abc123Q-t  z9_9");
     assert_eq!(
         lexer.next(),
-        Some(Ok((0, Token::Id("aA123_123-123".to_owned()), 13)))
+        Some(Ok((1, Token::Id("abc123Q-t".to_owned()), 10)))
     );
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((12, Token::Id("z9_9".to_owned()), 16)))
+    );
+    assert_eq!(lexer.next(), None);
+
 }
