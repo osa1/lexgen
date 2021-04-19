@@ -37,7 +37,7 @@ pub fn lexer_gen(input: TokenStream) -> TokenStream {
                 }
             }
             Rule::DefaultRule(single_rule) => {
-                default_nfa.add_regex(&bindings, &single_rule.lhs, single_rule.rhs);
+                default_nfa.add_regex(&bindings, &single_rule.lhs, single_rule.rhs.clone());
                 default_rules.push(single_rule);
             }
             Rule::NamedRules { .. } => {}
@@ -46,17 +46,17 @@ pub fn lexer_gen(input: TokenStream) -> TokenStream {
 
     let default_dfa = nfa_to_dfa(&default_nfa);
 
-    for rule in rules {
+    for rule in &rules {
         match rule {
             Rule::Binding { .. } => {}
             Rule::DefaultRule(_) => {}
             Rule::NamedRules { name, rules } => {
                 let mut nfa: NFA<Option<syn::Expr>> = NFA::new();
                 for default_rule in &default_rules {
-                    nfa.add_regex(&bindings, &default_rule.lhs, default_rule.rhs);
+                    nfa.add_regex(&bindings, &default_rule.lhs, default_rule.rhs.clone());
                 }
                 for rule in rules {
-                    nfa.add_regex(&bindings, &rule.lhs, rule.rhs);
+                    nfa.add_regex(&bindings, &rule.lhs, rule.rhs.clone());
                 }
                 named_dfas.insert(name.to_string(), nfa_to_dfa(&nfa));
             }

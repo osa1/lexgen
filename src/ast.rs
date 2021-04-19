@@ -84,10 +84,10 @@ pub enum Regex {
     // Diff(Box<Regex>, Box<Regex>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CharSet(pub Vec<CharOrRange>);
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum CharOrRange {
     Char(char),
     Range(char, char),
