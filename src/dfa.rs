@@ -191,6 +191,7 @@ use quote::quote;
 
 pub fn reify(
     dfa: &DFA<Option<syn::Expr>>,
+    rule_states: &FxHashMap<String, StateIdx>,
     type_name: syn::Ident,
     token_type: syn::Type,
 ) -> TokenStream {
@@ -202,7 +203,18 @@ pub fn reify(
 
     let match_arms = generate_state_arms(dfa, &pop_match);
 
+    let rule_name_enum_name = syn::Ident::new(&(type_name.to_string() + "Rules"), type_name.span());
+    let rule_name_idents: Vec<syn::Ident> = rule_states
+        .keys()
+        .map(|rule_name| syn::Ident::new(rule_name, proc_macro2::Span::call_site()))
+        .collect();
+
     quote!(
+        enum #rule_name_enum_name {
+            Init,
+            #(#rule_name_idents,)*
+        }
+
         struct #type_name<'input> {
             state: usize,
             input: &'input str,

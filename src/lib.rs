@@ -44,7 +44,7 @@ pub fn lexer_gen(input: TokenStream) -> TokenStream {
         }
     }
 
-    let mut default_dfa = nfa_to_dfa(&default_nfa);
+    let mut dfa = nfa_to_dfa(&default_nfa);
 
     for rule in &rules {
         match rule {
@@ -58,15 +58,13 @@ pub fn lexer_gen(input: TokenStream) -> TokenStream {
                 for rule in rules {
                     nfa.add_regex(&bindings, &rule.lhs, rule.rhs.clone());
                 }
-                let dfa_idx = default_dfa.add_dfa(&nfa_to_dfa(&nfa));
+                let dfa_idx = dfa.add_dfa(&nfa_to_dfa(&nfa));
                 named_dfas.insert(name.to_string(), dfa_idx);
             }
         }
     }
 
-    // let dfa = nfa_to_dfa::nfa_to_dfa(&nfa);
-    // dfa::reify(&dfa, type_name, token_type).into()
-    todo!()
+    dfa::reify(&dfa, &named_dfas, type_name, token_type).into()
 }
 
 #[cfg(test)]
