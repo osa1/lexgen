@@ -16,7 +16,11 @@ fn simple() {
         // Whitespace
         [' ' '\t' '\n']+,
 
-        $init $subseq* => |str: &str| Token::Id(str.to_owned()),
+        $init $subseq* => |str: &str| LexerAction::Return(Token::Id(str.to_owned())),
+
+        rule Blah {
+            $init => |str: &str| todo!(),
+        }
     }
 
     let mut lexer = Lexer::new(" abc123Q-t  z9_9");
@@ -29,5 +33,4 @@ fn simple() {
         Some(Ok((12, Token::Id("z9_9".to_owned()), 16)))
     );
     assert_eq!(lexer.next(), None);
-
 }

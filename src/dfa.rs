@@ -201,7 +201,9 @@ pub fn reify(
         Err(err) => return Some(Err(err)),
     });
 
-    let match_arms = generate_state_arms(dfa, &pop_match);
+    let action_enum_name = syn::Ident::new(&(type_name.to_string() + "Action"), type_name.span());
+
+    let match_arms = generate_state_arms(dfa, &pop_match, &action_enum_name);
 
     let rule_name_enum_name = syn::Ident::new(&(type_name.to_string() + "Rules"), type_name.span());
     let rule_name_idents: Vec<syn::Ident> = rule_states
@@ -210,11 +212,23 @@ pub fn reify(
         .collect();
 
     quote!(
+        // Possible outcomes of a user action
+        enum #action_enum_name {
+            // User action did not return a token, continue with lexing
+            Continue,
+            // User action returned a token, add it to the match stack
+            Return(#token_type),
+            // User action requested switching to the given rule set
+            Switch(#rule_name_enum_name),
+        }
+
+        // An enum for the rule sets in the DFA. `Init` is the initial, unnamed rule set.
         enum #rule_name_enum_name {
             Init,
             #(#rule_name_idents,)*
         }
 
+        // The lexer type
         struct #type_name<'input> {
             state: usize,
             input: &'input str,
@@ -275,7 +289,11 @@ pub fn reify(
 }
 
 /// Generate arms of `match self.state { ... }` of a DFA.
-fn generate_state_arms(dfa: &DFA<Option<syn::Expr>>, pop_match: &TokenStream) -> Vec<TokenStream> {
+fn generate_state_arms(
+    dfa: &DFA<Option<syn::Expr>>,
+    pop_match: &TokenStream,
+    action_enum_name: &syn::Ident,
+) -> Vec<TokenStream> {
     let DFA { states, accepting } = dfa;
 
     let mut match_arms: Vec<TokenStream> = vec![];
@@ -317,15 +335,22 @@ fn generate_state_arms(dfa: &DFA<Option<syn::Expr>>, pop_match: &TokenStream) ->
             )
         } else if let Some(rhs) = accepting {
             // Non-initial, accepting state
-            let token = match rhs {
-                None => quote!(None),
-                Some(rhs) => {
-                    quote!(Some((self.current_match_start, (#rhs)(str), self.current_match_end)))
-                }
+            let push = match rhs {
+                None => quote!(self.match_stack.push(None)),
+                Some(rhs) => quote!(
+                    match (#rhs)(str) {
+                        #action_enum_name::Continue =>
+                            self.match_stack.push(None),
+                        #action_enum_name::Return(tok) =>
+                            self.match_stack.push(Some((self.current_match_start, tok, self.current_match_end))),
+                        #action_enum_name::Switch(rule_set) =>
+                            todo!(),
+                    }
+                ),
             };
             quote!({
                 let str = &self.input[self.current_match_start..self.current_match_end];
-                self.match_stack.push(#token);
+                #push;
                 match self.iter.peek() {
                     None => #pop_match,
                     Some((char_idx, char)) => {
