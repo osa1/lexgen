@@ -221,7 +221,6 @@ impl Parse for Rule {
             let rule_name = input.parse::<syn::Ident>()?;
             let braced;
             syn::braced!(braced in input);
-            println!("{:?}", braced);
             let mut single_rules = vec![];
             while !braced.is_empty() {
                 single_rules.push(SingleRule::parse(&braced)?);

@@ -47,10 +47,11 @@ fn switch() {
         "/*" => |_: &str| LexerAction::Switch(LexerRules::Comment),
 
         rule Comment {
-            "*/" => |_: &str| LexerAction::Return(Token::Comment),
+            "*/" => |_: &str| LexerAction::ReturnAndSwitch(Token::Comment, LexerRules::Init),
         }
     }
 
-    let mut lexer = Lexer::new(" /*   */");
-    assert_eq!(lexer.next(), Some(Ok((1, Token::Comment, 8))));
+    let mut lexer = Lexer::new("  /*   */  ");
+    assert_eq!(lexer.next(), Some(Ok((2, Token::Comment, 9))));
+    assert_eq!(lexer.next(), None);
 }

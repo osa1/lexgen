@@ -222,6 +222,9 @@ pub fn reify(
             Return(#token_type),
             // User action requested switching to the given rule set
             Switch(#rule_name_enum_name),
+            // Combination or `Return` and `Switch`: add token to the match stack, switch to the
+            // given rule set
+            ReturnAndSwitch(#token_type, #rule_name_enum_name),
         }
 
         // An enum for the rule sets in the DFA. `Init` is the initial, unnamed rule set.
@@ -233,7 +236,11 @@ pub fn reify(
 
         // The lexer type
         struct #type_name<'input> {
+            // Current state
             state: usize,
+            // State stack for switching to initial state of the current rule set on successful
+            // match. Initially empty: when empty, return to state 0.
+            state_stack: Vec<usize>,
             input: &'input str,
             iter: std::iter::Peekable<std::str::CharIndices<'input>>,
             match_stack: Vec<Option<(usize, #token_type, usize)>>,
@@ -251,6 +258,7 @@ pub fn reify(
                 #type_name {
                     state: 0,
                     input,
+                    state_stack: vec![],
                     iter: input.char_indices().peekable(),
                     match_stack: vec![],
                     current_match_start: 0,
@@ -264,12 +272,12 @@ pub fn reify(
                 match self.match_stack.pop() {
                     Some(None) => {
                         self.match_stack.clear();
-                        self.state = 0;
+                        self.state = self.state_stack.pop().unwrap_or(0);
                         Ok(None)
                     }
                     Some(Some(tok)) => {
                         self.match_stack.clear();
-                        self.state = 0;
+                        self.state = self.state_stack.pop().unwrap_or(0);
                         Ok(Some(tok))
                     }
                     None => Err(LexerError {
@@ -314,6 +322,7 @@ fn generate_switch(
                     self.state = 0,
                 #(#arms,)*
             }
+            self.state_stack.push(self.state);
         }
     )
 }
@@ -376,6 +385,11 @@ fn generate_state_arms(
                         #action_enum_name::Switch(rule_set) => {
                             self.switch(rule_set);
                             continue;
+                        }
+                        #action_enum_name::ReturnAndSwitch(tok, rule_set) => {
+                            self.match_stack.clear();
+                            self.switch(rule_set);
+                            return Some(Ok((self.current_match_start, tok, self.current_match_end)));
                         }
                     }
                 ),
