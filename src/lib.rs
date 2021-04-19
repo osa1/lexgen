@@ -5,7 +5,7 @@ mod nfa;
 mod nfa_to_dfa;
 mod regex_to_nfa;
 
-use ast::{Lexer, Regex, Rule, Var};
+use ast::{Lexer, Regex, Rule, SingleRule, Var};
 use nfa::NFA;
 
 use fxhash::FxHashMap;
@@ -29,9 +29,10 @@ pub fn lexer_gen(input: TokenStream) -> TokenStream {
                     panic!("Variable {:?} is defined multiple times", var.0);
                 }
             }
-            Rule::Rule { lhs, rhs } => {
+            Rule::DefaultRule(SingleRule { lhs, rhs }) => {
                 nfa.add_regex(&bindings, &lhs, rhs);
             }
+            Rule::NamedRules { .. } => {}
         }
     }
 

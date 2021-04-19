@@ -2,6 +2,8 @@
 
 use syn::parse::{Parse, ParseStream};
 
+use std::fmt;
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Var(pub String);
 
@@ -12,33 +14,59 @@ pub struct Lexer {
 }
 
 pub enum Rule {
+    /// `let <ident> = <regex>;`
     Binding { var: Var, re: Regex },
-    Rule { lhs: Regex, rhs: Option<syn::Expr> },
+
+    /// A `<regex> => <action>,` at the top level
+    DefaultRule(SingleRule),
+
+    /// A list of named rules at the top level: `rule <Ident> { <rules> },`
+    NamedRules {
+        name: syn::Ident,
+        rules: Vec<SingleRule>,
+    },
 }
 
-impl std::fmt::Debug for Lexer {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+/// `<regex> => <action>,`
+pub struct SingleRule {
+    pub lhs: Regex,
+    pub rhs: Option<syn::Expr>,
+}
+
+impl fmt::Debug for Lexer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Lexer")
+            .field("type_name", &self.type_name.to_string())
             .field("token_type", &"...")
             .field("rules", &self.rules)
             .finish()
     }
 }
 
-impl std::fmt::Debug for Rule {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for Rule {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Rule::Binding { var, re } => f
                 .debug_struct("Rule::Binding")
                 .field("var", var)
                 .field("re", re)
                 .finish(),
-            Rule::Rule { lhs, rhs: _ } => f
-                .debug_struct("Rule::Rule")
-                .field("lhs", lhs)
-                .field("rhs", &"...")
+            Rule::DefaultRule(rule) => rule.fmt(f),
+            Rule::NamedRules { name, rules } => f
+                .debug_struct("Rule::NamedRules")
+                .field("name", &name.to_string())
+                .field("rules", rules)
                 .finish(),
         }
+    }
+}
+
+impl fmt::Debug for SingleRule {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SingleRule")
+            .field("lhs", &self.lhs)
+            .field("rhs", &"...")
+            .finish()
     }
 }
 
@@ -103,9 +131,6 @@ fn parse_regex_1(input: ParseStream) -> syn::Result<Regex> {
         let parenthesized;
         syn::parenthesized!(parenthesized in input);
         Regex::parse(&parenthesized)
-    } else if input.peek(syn::Ident) {
-        let ident = input.parse::<syn::Ident>()?;
-        Ok(Regex::Var(Var(ident.to_string())))
     } else if input.peek(syn::token::Dollar) {
         let _ = input.parse::<syn::token::Dollar>()?;
         let ident = input.parse::<syn::Ident>()?;
@@ -152,9 +177,29 @@ impl Parse for CharOrRange {
     }
 }
 
+impl Parse for SingleRule {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let lhs = Regex::parse(input)?;
+        if input.peek(syn::token::Comma) {
+            input.parse::<syn::token::Comma>()?;
+            Ok(SingleRule { lhs, rhs: None })
+        } else {
+            // Assume rule with RHS
+            input.parse::<syn::token::FatArrow>()?;
+            let rhs = input.parse::<syn::Expr>()?;
+            input.parse::<syn::token::Comma>()?;
+            Ok(SingleRule {
+                lhs,
+                rhs: Some(rhs),
+            })
+        }
+    }
+}
+
 impl Parse for Rule {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         if input.peek(syn::token::Let) {
+            // Let binding
             input.parse::<syn::token::Let>()?;
             let var = input.parse::<syn::Ident>()?;
             input.parse::<syn::token::Eq>()?;
@@ -164,21 +209,32 @@ impl Parse for Rule {
                 var: Var(var.to_string()),
                 re,
             })
-        } else {
-            let lhs = Regex::parse(input)?;
-            if input.peek(syn::token::Comma) {
-                input.parse::<syn::token::Comma>()?;
-                Ok(Rule::Rule { lhs, rhs: None })
-            } else {
-                // Assume rule with RHS
-                input.parse::<syn::token::FatArrow>()?;
-                let rhs = input.parse::<syn::Expr>()?;
-                input.parse::<syn::token::Comma>()?;
-                Ok(Rule::Rule {
-                    lhs,
-                    rhs: Some(rhs),
-                })
+        } else if input.peek(syn::Ident) {
+            // Name rules
+            let ident = input.parse::<syn::Ident>()?;
+            if ident.to_string() != "rule" {
+                return Err(syn::Error::new(
+                    ident.span(),
+                    "Unknown identifier, expected \"rule\", \"let\", or a regex",
+                ));
             }
+            let rule_name = input.parse::<syn::Ident>()?;
+            let braced;
+            syn::braced!(braced in input);
+            println!("{:?}", braced);
+            let mut single_rules = vec![];
+            while !braced.is_empty() {
+                single_rules.push(SingleRule::parse(&braced)?);
+            }
+            // Consume trailing comma
+            let _ = input.parse::<syn::token::Comma>();
+            Ok(Rule::NamedRules {
+                name: rule_name,
+                rules: single_rules,
+            })
+        } else {
+            // Regex
+            Ok(Rule::DefaultRule(SingleRule::parse(input)?))
         }
     }
 }
