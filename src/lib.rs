@@ -6,7 +6,9 @@ mod nfa_to_dfa;
 mod regex_to_nfa;
 
 use ast::{Lexer, Regex, Rule, SingleRule, Var};
+use dfa::DFA;
 use nfa::NFA;
+use nfa_to_dfa::nfa_to_dfa;
 
 use fxhash::FxHashMap;
 use proc_macro::TokenStream;
@@ -19,25 +21,51 @@ pub fn lexer_gen(input: TokenStream) -> TokenStream {
         rules,
     } = syn::parse_macro_input!(input as Lexer);
 
-    let mut nfa: NFA<Option<syn::Expr>> = NFA::new();
+    let mut named_dfas: FxHashMap<String, DFA<Option<syn::Expr>>> = Default::default();
 
+    // First pass to collect default rules and build the NFA for the initial state. Default rules
+    // are added to named rules.
+    // TODO: Add the default NFA to the NFAs for named rules instead
+    let mut default_nfa: NFA<Option<syn::Expr>> = NFA::new();
+    let mut default_rules: Vec<&SingleRule> = vec![];
     let mut bindings: FxHashMap<Var, Regex> = Default::default();
-    for rule in rules {
+    for rule in &rules {
         match rule {
             Rule::Binding { var, re } => {
-                if let Some(_) = bindings.insert(var.clone(), re) {
+                if let Some(_) = bindings.insert(var.clone(), re.clone()) {
                     panic!("Variable {:?} is defined multiple times", var.0);
                 }
             }
-            Rule::DefaultRule(SingleRule { lhs, rhs }) => {
-                nfa.add_regex(&bindings, &lhs, rhs);
+            Rule::DefaultRule(single_rule) => {
+                default_nfa.add_regex(&bindings, &single_rule.lhs, single_rule.rhs);
+                default_rules.push(single_rule);
             }
             Rule::NamedRules { .. } => {}
         }
     }
 
-    let dfa = nfa_to_dfa::nfa_to_dfa(&nfa);
-    dfa::reify(&dfa, type_name, token_type).into()
+    let default_dfa = nfa_to_dfa(&default_nfa);
+
+    for rule in rules {
+        match rule {
+            Rule::Binding { .. } => {}
+            Rule::DefaultRule(_) => {}
+            Rule::NamedRules { name, rules } => {
+                let mut nfa: NFA<Option<syn::Expr>> = NFA::new();
+                for default_rule in &default_rules {
+                    nfa.add_regex(&bindings, &default_rule.lhs, default_rule.rhs);
+                }
+                for rule in rules {
+                    nfa.add_regex(&bindings, &rule.lhs, rule.rhs);
+                }
+                named_dfas.insert(name.to_string(), nfa_to_dfa(&nfa));
+            }
+        }
+    }
+
+    // let dfa = nfa_to_dfa::nfa_to_dfa(&nfa);
+    // dfa::reify(&dfa, type_name, token_type).into()
+    todo!()
 }
 
 #[cfg(test)]

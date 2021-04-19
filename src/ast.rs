@@ -70,7 +70,7 @@ impl fmt::Debug for SingleRule {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Regex {
     Var(Var),
     Char(char),
