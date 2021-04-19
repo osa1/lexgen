@@ -10,7 +10,7 @@ pub struct DFA<A> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StateIdx(usize);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct State {
     char_transitions: FxHashMap<char, StateIdx>,
     range_transitions: FxHashMap<(char, char), StateIdx>,
@@ -70,7 +70,45 @@ impl<A> DFA<A> {
             .insert((range_begin, range_end), next);
         assert!(old.is_none());
     }
+}
 
+impl<A: Clone> DFA<A> {
+    /// Extend the current DFA with another DFA. The extended DFA's states will be renumbered. This
+    /// does not add any transitions from the original DFA states to the extension. Accepting
+    /// states of the extension is preserved.
+    ///
+    /// Returns initial state for the extension in the new DFA.
+    pub fn add_dfa(&mut self, other: &DFA<A>) -> StateIdx {
+        let n_current_states = self.states.len();
+
+        for state in &other.states {
+            let mut char_transitions: FxHashMap<char, StateIdx> = Default::default();
+            let mut range_transitions: FxHashMap<(char, char), StateIdx> = Default::default();
+
+            for (char, next) in &state.char_transitions {
+                char_transitions.insert(*char, StateIdx(next.0 + n_current_states));
+            }
+
+            for (range, next) in &state.range_transitions {
+                range_transitions.insert(*range, StateIdx(next.0 + n_current_states));
+            }
+
+            self.states.push(State {
+                char_transitions,
+                range_transitions,
+            });
+        }
+
+        for (idx, action) in &other.accepting {
+            self.accepting
+                .insert(StateIdx(idx.0 + n_current_states), action.clone());
+        }
+
+        StateIdx(n_current_states)
+    }
+}
+
+impl<A> DFA<A> {
     #[cfg(test)]
     pub fn simulate(&self, chars: &mut dyn Iterator<Item = char>) -> Option<&A> {
         let mut state = StateIdx(0);

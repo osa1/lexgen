@@ -6,7 +6,6 @@ mod nfa_to_dfa;
 mod regex_to_nfa;
 
 use ast::{Lexer, Regex, Rule, SingleRule, Var};
-use dfa::DFA;
 use nfa::NFA;
 use nfa_to_dfa::nfa_to_dfa;
 
@@ -21,7 +20,8 @@ pub fn lexer_gen(input: TokenStream) -> TokenStream {
         rules,
     } = syn::parse_macro_input!(input as Lexer);
 
-    let mut named_dfas: FxHashMap<String, DFA<Option<syn::Expr>>> = Default::default();
+    // Maps named DFAs to their initial states
+    let mut named_dfas: FxHashMap<String, dfa::StateIdx> = Default::default();
 
     // First pass to collect default rules and build the NFA for the initial state. Default rules
     // are added to named rules.
@@ -44,7 +44,7 @@ pub fn lexer_gen(input: TokenStream) -> TokenStream {
         }
     }
 
-    let default_dfa = nfa_to_dfa(&default_nfa);
+    let mut default_dfa = nfa_to_dfa(&default_nfa);
 
     for rule in &rules {
         match rule {
@@ -58,7 +58,8 @@ pub fn lexer_gen(input: TokenStream) -> TokenStream {
                 for rule in rules {
                     nfa.add_regex(&bindings, &rule.lhs, rule.rhs.clone());
                 }
-                named_dfas.insert(name.to_string(), nfa_to_dfa(&nfa));
+                let dfa_idx = default_dfa.add_dfa(&nfa_to_dfa(&nfa));
+                named_dfas.insert(name.to_string(), dfa_idx);
             }
         }
     }
