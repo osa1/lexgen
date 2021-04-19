@@ -211,6 +211,8 @@ pub fn reify(
         .map(|rule_name| syn::Ident::new(rule_name, proc_macro2::Span::call_site()))
         .collect();
 
+    let switch_method = generate_switch(&rule_name_enum_name, rule_states);
+
     quote!(
         // Possible outcomes of a user action
         enum #action_enum_name {
@@ -223,6 +225,7 @@ pub fn reify(
         }
 
         // An enum for the rule sets in the DFA. `Init` is the initial, unnamed rule set.
+        #[derive(Clone, Copy)]
         enum #rule_name_enum_name {
             Init,
             #(#rule_name_idents,)*
@@ -255,6 +258,8 @@ pub fn reify(
                 }
             }
 
+            #switch_method
+
             fn pop_match_or_fail(&mut self) -> Result<Option<(usize, #token_type, usize)>, LexerError> {
                 match self.match_stack.pop() {
                     Some(None) => {
@@ -283,6 +288,31 @@ pub fn reify(
                         #(#match_arms,)*
                     }
                 }
+            }
+        }
+    )
+}
+
+fn generate_switch(
+    enum_name: &syn::Ident,
+    rule_states: &FxHashMap<String, StateIdx>,
+) -> TokenStream {
+    let mut arms: Vec<TokenStream> = vec![];
+
+    for (rule_name, StateIdx(state_idx)) in rule_states.iter() {
+        let rule_ident = syn::Ident::new(rule_name, proc_macro2::Span::call_site());
+        arms.push(quote!(
+            #enum_name::#rule_ident =>
+                self.state = #state_idx
+        ));
+    }
+
+    quote!(
+        fn switch(&mut self, rule: #enum_name) {
+            match rule {
+                #enum_name::Init =>
+                    self.state = 0,
+                #(#arms,)*
             }
         }
     )
@@ -343,8 +373,10 @@ fn generate_state_arms(
                             self.match_stack.push(None),
                         #action_enum_name::Return(tok) =>
                             self.match_stack.push(Some((self.current_match_start, tok, self.current_match_end))),
-                        #action_enum_name::Switch(rule_set) =>
-                            todo!(),
+                        #action_enum_name::Switch(rule_set) => {
+                            self.switch(rule_set);
+                            continue;
+                        }
                     }
                 ),
             };
