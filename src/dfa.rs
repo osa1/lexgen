@@ -151,240 +151,266 @@ impl<A> Display for DFA<A> {
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
 
-impl DFA<Option<syn::Expr>> {
-    pub fn reify(&self, type_name: syn::Ident, token_type: syn::Type) -> TokenStream {
-        let DFA { states, accepting } = self;
+pub fn reify(
+    dfa: &DFA<Option<syn::Expr>>,
+    type_name: syn::Ident,
+    token_type: syn::Type,
+) -> TokenStream {
+    let pop_match: TokenStream = quote!(match self.pop_match_or_fail() {
+        Ok(None) => continue,
+        Ok(Some(tok)) => return Some(Ok(tok)),
+        Err(err) => return Some(Err(err)),
+    });
 
-        let pop_match: TokenStream = quote!(match self.pop_match_or_fail() {
-            Ok(None) => continue,
-            Ok(Some(tok)) => return Some(Ok(tok)),
-            Err(err) => return Some(Err(err)),
-        });
+    let match_arms = generate_state_arms(dfa, &pop_match);
 
-        // Arms of the `match` for the DFA states
-        let mut match_arms: Vec<TokenStream> = vec![];
+    quote!(
+        struct #type_name<'input> {
+            state: usize,
+            input: &'input str,
+            iter: std::iter::Peekable<std::str::CharIndices<'input>>,
+            match_stack: Vec<Option<(usize, #token_type, usize)>>,
+            current_match_start: usize,
+            current_match_end: usize,
+        }
 
-        for (
+        #[derive(Debug, PartialEq, Eq)]
+        struct LexerError {
+            char_idx: usize,
+        }
+
+        impl<'input> #type_name<'input> {
+            fn new(input: &'input str) -> Self {
+                #type_name {
+                    state: 0,
+                    input,
+                    iter: input.char_indices().peekable(),
+                    match_stack: vec![],
+                    current_match_start: 0,
+                    current_match_end: 0,
+                }
+            }
+
+            fn pop_match_or_fail(&mut self) -> Result<Option<(usize, #token_type, usize)>, LexerError> {
+                match self.match_stack.pop() {
+                    Some(None) => {
+                        self.match_stack.clear();
+                        self.state = 0;
+                        Ok(None)
+                    }
+                    Some(Some(tok)) => {
+                        self.match_stack.clear();
+                        self.state = 0;
+                        Ok(Some(tok))
+                    }
+                    None => Err(LexerError {
+                        char_idx: self.current_match_start,
+                    }),
+                }
+            }
+        }
+
+        impl<'input> Iterator for #type_name<'input> {
+            type Item = Result<(usize, #token_type, usize), LexerError>;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                loop {
+                    match self.state {
+                        #(#match_arms,)*
+                    }
+                }
+            }
+        }
+    )
+}
+
+/// Generate arms of `match self.state { ... }` of a DFA.
+fn generate_state_arms(dfa: &DFA<Option<syn::Expr>>, pop_match: &TokenStream) -> Vec<TokenStream> {
+    let DFA { states, accepting } = dfa;
+
+    let mut match_arms: Vec<TokenStream> = vec![];
+
+    for (
+        state_idx,
+        State {
+            char_transitions,
+            range_transitions,
+        },
+    ) in states.iter().enumerate()
+    {
+        let state_char_arms = generate_state_char_arms(
+            accepting,
             state_idx,
-            State {
-                char_transitions,
-                range_transitions,
-            },
-        ) in states.iter().enumerate()
-        {
-            // Arms of the `match` for the current character
-            let mut state_char_arms: Vec<TokenStream> = vec![];
-            let accepting = accepting.get(&StateIdx(state_idx));
+            char_transitions,
+            range_transitions,
+            pop_match,
+        );
 
-            // Add char transitions. Collect characters for next states, to be able to use or
-            // patterns in arms and reduce code size
-            let mut state_chars: FxHashMap<StateIdx, Vec<char>> = Default::default();
-            for (char, state_idx) in char_transitions {
-                state_chars.entry(*state_idx).or_default().push(*char);
-            }
+        let accepting = accepting.get(&StateIdx(state_idx));
 
-            for (StateIdx(next_state), chars) in state_chars.iter() {
-                let mut or_pat_cases: syn::punctuated::Punctuated<syn::Pat, syn::token::Or> =
-                    syn::punctuated::Punctuated::new();
-
-                for char in chars {
-                    or_pat_cases.push(syn::Pat::Lit(syn::PatLit {
-                        attrs: vec![],
-                        expr: Box::new(syn::Expr::Lit(syn::ExprLit {
-                            attrs: vec![],
-                            lit: syn::Lit::Char(syn::LitChar::new(
-                                *char,
-                                proc_macro2::Span::call_site(),
-                            )),
-                        })),
-                    }));
-                }
-
-                let or_pat = syn::PatOr {
-                    attrs: vec![],
-                    leading_vert: None,
-                    cases: or_pat_cases,
-                };
-
-                let or_pat_tokens = syn::Pat::Or(or_pat).into_token_stream();
-
-                if accepting.is_some() {
-                    // In an accepting state we only consume the next character if we're making a
-                    // transition. See `state_code` below for where we use `peek` instead of `next`
-                    // in accepting states.
-                    state_char_arms.push(quote!(
-                        #or_pat_tokens => {
-                            self.current_match_end += char.len_utf8();
-                            let _ = self.iter.next();
-                            self.state = #next_state;
-                        }
-                    ));
-                } else {
-                    state_char_arms.push(quote!(
-                        #or_pat_tokens => self.state = #next_state
-                    ));
-                }
-            }
-
-            // Add range transitions. Same as above, use chain of "or"s for ranges with same transition.
-            let mut state_ranges: FxHashMap<StateIdx, Vec<(char, char)>> = Default::default();
-            for (range, state_idx) in range_transitions {
-                state_ranges.entry(*state_idx).or_default().push(*range);
-            }
-
-            for (StateIdx(next_state), mut ranges) in state_ranges.into_iter() {
-                let x = if accepting.is_some() {
-                    quote!(*x)
-                } else {
-                    quote!(x)
-                };
-                let guard = if ranges.len() == 1 {
-                    let (range_begin, range_end) = ranges.pop().unwrap();
-                    quote!(#x >= #range_begin && #x <= #range_end)
-                } else {
-                    let (range_begin, range_end) = ranges.pop().unwrap();
-                    let mut guard = quote!(#x >= #range_begin && #x <= #range_end);
-                    while let Some((range_begin, range_end)) = ranges.pop() {
-                        guard = quote!((#x >= #range_begin && #x <= #range_end) || #guard);
-                    }
-                    guard
-                };
-
-                if accepting.is_some() {
-                    state_char_arms.push(quote!(
-                        x if #guard => {
-                            self.current_match_end += x.len_utf8();
-                            let _ = self.iter.next();
-                            self.state = #next_state;
-                        }
-                    ));
-                } else {
-                    state_char_arms.push(quote!(
-                        x if #guard => {
-                            self.state = #next_state;
-                        }
-                    ));
-                }
-            }
-
-            // Add default case
-            state_char_arms.push(quote!(_ => #pop_match));
-
-            let state_code: TokenStream = if state_idx == 0 {
-                // Initial state. Difference from other states is we return `None` when the
-                // iterator ends. In non-initial states EOF returns the last (longest) match, or
-                // fails (error).
-                quote!(
-                    match self.iter.next() {
-                        None if self.match_stack.is_empty() => return None,
-                        None => #pop_match,
-                        Some((char_idx, char)) => {
-                            self.current_match_start = char_idx;
-                            self.current_match_end = char_idx + char.len_utf8();
-                            match char {
-                                #(#state_char_arms,)*
-                            }
-                        }
-                    }
-                )
-            } else if let Some(rhs) = accepting {
-                // Non-initial, accepting state
-                let token = match rhs {
-                    None => quote!(None),
-                    Some(rhs) => {
-                        quote!(Some((self.current_match_start, (#rhs)(str), self.current_match_end)))
-                    }
-                };
-                quote!({
-                    let str = &self.input[self.current_match_start..self.current_match_end];
-                    self.match_stack.push(#token);
-                    match self.iter.peek() {
-                        None => #pop_match,
-                        Some((char_idx, char)) => {
-                            match char {
-                                #(#state_char_arms,)*
-                            }
-                        }
-                    }
-                })
-            } else {
-                // Non-initial, non-accepting state. In a non-accepting state we want to consume a
-                // character anyway so we can use `next` instead of `peek`.
-                quote!(match self.iter.next() {
+        let state_code: TokenStream = if state_idx == 0 {
+            // Initial state. Difference from other states is we return `None` when the
+            // iterator ends. In non-initial states EOF returns the last (longest) match, or
+            // fails (error).
+            quote!(
+                match self.iter.next() {
+                    None if self.match_stack.is_empty() => return None,
                     None => #pop_match,
                     Some((char_idx, char)) => {
-                        self.current_match_end += char.len_utf8();
+                        self.current_match_start = char_idx;
+                        self.current_match_end = char_idx + char.len_utf8();
                         match char {
                             #(#state_char_arms,)*
                         }
                     }
-                })
+                }
+            )
+        } else if let Some(rhs) = accepting {
+            // Non-initial, accepting state
+            let token = match rhs {
+                None => quote!(None),
+                Some(rhs) => {
+                    quote!(Some((self.current_match_start, (#rhs)(str), self.current_match_end)))
+                }
             };
+            quote!({
+                let str = &self.input[self.current_match_start..self.current_match_end];
+                self.match_stack.push(#token);
+                match self.iter.peek() {
+                    None => #pop_match,
+                    Some((char_idx, char)) => {
+                        match char {
+                            #(#state_char_arms,)*
+                        }
+                    }
+                }
+            })
+        } else {
+            // Non-initial, non-accepting state. In a non-accepting state we want to consume a
+            // character anyway so we can use `next` instead of `peek`.
+            quote!(match self.iter.next() {
+                None => #pop_match,
+                Some((char_idx, char)) => {
+                    self.current_match_end += char.len_utf8();
+                    match char {
+                        #(#state_char_arms,)*
+                    }
+                }
+            })
+        };
 
-            match_arms.push(quote!(
-                    #state_idx => #state_code
-            ));
+        match_arms.push(quote!(
+                #state_idx => #state_code
+        ));
+    }
+
+    match_arms.push(quote!(_ => unreachable!()));
+
+    match_arms
+}
+
+/// Generate arms on `match self.iter.next() { ... }` or `match self.iter.peek() { ... }` of DFA state.
+fn generate_state_char_arms(
+    accepting: &FxHashMap<StateIdx, Option<syn::Expr>>,
+    state_idx: usize,
+    char_transitions: &FxHashMap<char, StateIdx>,
+    range_transitions: &FxHashMap<(char, char), StateIdx>,
+    pop_match: &TokenStream,
+) -> Vec<TokenStream> {
+    // Arms of the `match` for the current character
+    let mut state_char_arms: Vec<TokenStream> = vec![];
+    let accepting = accepting.get(&StateIdx(state_idx));
+
+    // Add char transitions. Collect characters for next states, to be able to use or
+    // patterns in arms and reduce code size
+    let mut state_chars: FxHashMap<StateIdx, Vec<char>> = Default::default();
+    for (char, state_idx) in char_transitions {
+        state_chars.entry(*state_idx).or_default().push(*char);
+    }
+
+    for (StateIdx(next_state), chars) in state_chars.iter() {
+        let mut or_pat_cases: syn::punctuated::Punctuated<syn::Pat, syn::token::Or> =
+            syn::punctuated::Punctuated::new();
+
+        for char in chars {
+            or_pat_cases.push(syn::Pat::Lit(syn::PatLit {
+                attrs: vec![],
+                expr: Box::new(syn::Expr::Lit(syn::ExprLit {
+                    attrs: vec![],
+                    lit: syn::Lit::Char(syn::LitChar::new(*char, proc_macro2::Span::call_site())),
+                })),
+            }));
         }
 
-        match_arms.push(quote!(_ => unreachable!()));
+        let or_pat = syn::PatOr {
+            attrs: vec![],
+            leading_vert: None,
+            cases: or_pat_cases,
+        };
 
-        quote!(
-            struct #type_name<'input> {
-                state: usize,
-                input: &'input str,
-                iter: std::iter::Peekable<std::str::CharIndices<'input>>,
-                match_stack: Vec<Option<(usize, #token_type, usize)>>,
-                current_match_start: usize,
-                current_match_end: usize,
-            }
+        let or_pat_tokens = syn::Pat::Or(or_pat).into_token_stream();
 
-            #[derive(Debug, PartialEq, Eq)]
-            struct LexerError {
-                char_idx: usize,
-            }
-
-            impl<'input> #type_name<'input> {
-                fn new(input: &'input str) -> Self {
-                    #type_name {
-                        state: 0,
-                        input,
-                        iter: input.char_indices().peekable(),
-                        match_stack: vec![],
-                        current_match_start: 0,
-                        current_match_end: 0,
-                    }
+        if accepting.is_some() {
+            // In an accepting state we only consume the next character if we're making a
+            // transition. See `state_code` below for where we use `peek` instead of `next`
+            // in accepting states.
+            state_char_arms.push(quote!(
+                #or_pat_tokens => {
+                    self.current_match_end += char.len_utf8();
+                    let _ = self.iter.next();
+                    self.state = #next_state;
                 }
-
-                fn pop_match_or_fail(&mut self) -> Result<Option<(usize, #token_type, usize)>, LexerError> {
-                    match self.match_stack.pop() {
-                        Some(None) => {
-                            self.match_stack.clear();
-                            self.state = 0;
-                            Ok(None)
-                        }
-                        Some(Some(tok)) => {
-                            self.match_stack.clear();
-                            self.state = 0;
-                            Ok(Some(tok))
-                        }
-                        None => Err(LexerError {
-                            char_idx: self.current_match_start,
-                        }),
-                    }
-                }
-            }
-
-            impl<'input> Iterator for #type_name<'input> {
-                type Item = Result<(usize, #token_type, usize), LexerError>;
-
-                fn next(&mut self) -> Option<Self::Item> {
-                    loop {
-                        match self.state {
-                            #(#match_arms,)*
-                        }
-                    }
-                }
-            }
-        )
+            ));
+        } else {
+            state_char_arms.push(quote!(
+                #or_pat_tokens => self.state = #next_state
+            ));
+        }
     }
+
+    // Add range transitions. Same as above, use chain of "or"s for ranges with same transition.
+    let mut state_ranges: FxHashMap<StateIdx, Vec<(char, char)>> = Default::default();
+    for (range, state_idx) in range_transitions {
+        state_ranges.entry(*state_idx).or_default().push(*range);
+    }
+
+    for (StateIdx(next_state), mut ranges) in state_ranges.into_iter() {
+        let x = if accepting.is_some() {
+            quote!(*x)
+        } else {
+            quote!(x)
+        };
+        let guard = if ranges.len() == 1 {
+            let (range_begin, range_end) = ranges.pop().unwrap();
+            quote!(#x >= #range_begin && #x <= #range_end)
+        } else {
+            let (range_begin, range_end) = ranges.pop().unwrap();
+            let mut guard = quote!(#x >= #range_begin && #x <= #range_end);
+            while let Some((range_begin, range_end)) = ranges.pop() {
+                guard = quote!((#x >= #range_begin && #x <= #range_end) || #guard);
+            }
+            guard
+        };
+
+        if accepting.is_some() {
+            state_char_arms.push(quote!(
+                x if #guard => {
+                    self.current_match_end += x.len_utf8();
+                    let _ = self.iter.next();
+                    self.state = #next_state;
+                }
+            ));
+        } else {
+            state_char_arms.push(quote!(
+                x if #guard => {
+                    self.state = #next_state;
+                }
+            ));
+        }
+    }
+
+    // Add default case
+    state_char_arms.push(quote!(_ => #pop_match));
+
+    state_char_arms
 }

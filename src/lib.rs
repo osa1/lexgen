@@ -36,7 +36,7 @@ pub fn lexer_gen(input: TokenStream) -> TokenStream {
     }
 
     let dfa = nfa_to_dfa::nfa_to_dfa(&nfa);
-    dfa.reify(type_name, token_type).into()
+    dfa::reify(&dfa, type_name, token_type).into()
 }
 
 #[cfg(test)]
