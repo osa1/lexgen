@@ -238,9 +238,8 @@ pub fn reify(
         struct #type_name<'input> {
             // Current state
             state: usize,
-            // State stack for switching to initial state of the current rule set on successful
-            // match. Initially empty: when empty, return to state 0.
-            state_stack: Vec<usize>,
+            // Which state to switch to on successful match
+            initial_state: usize,
             input: &'input str,
             iter: std::iter::Peekable<std::str::CharIndices<'input>>,
             match_stack: Vec<Option<(usize, #token_type, usize)>>,
@@ -257,8 +256,8 @@ pub fn reify(
             fn new(input: &'input str) -> Self {
                 #type_name {
                     state: 0,
+                    initial_state: 0,
                     input,
-                    state_stack: vec![],
                     iter: input.char_indices().peekable(),
                     match_stack: vec![],
                     current_match_start: 0,
@@ -272,12 +271,12 @@ pub fn reify(
                 match self.match_stack.pop() {
                     Some(None) => {
                         self.match_stack.clear();
-                        self.state = self.state_stack.pop().unwrap_or(0);
+                        self.state = self.initial_state;
                         Ok(None)
                     }
                     Some(Some(tok)) => {
                         self.match_stack.clear();
-                        self.state = self.state_stack.pop().unwrap_or(0);
+                        self.state = self.initial_state;
                         Ok(Some(tok))
                     }
                     None => Err(LexerError {
@@ -292,6 +291,7 @@ pub fn reify(
 
             fn next(&mut self) -> Option<Self::Item> {
                 loop {
+                    println!("state={}, initial_state={}, current_match_start={}, match_stack={:?}", self.state, self.initial_state, self.current_match_start, self.match_stack);
                     match self.state {
                         #(#match_arms,)*
                     }
@@ -322,7 +322,7 @@ fn generate_switch(
                     self.state = 0,
                 #(#arms,)*
             }
-            self.state_stack.push(self.state);
+            self.initial_state = self.state;
         }
     )
 }
