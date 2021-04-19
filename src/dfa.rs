@@ -149,7 +149,7 @@ impl<A> Display for DFA<A> {
 }
 
 use proc_macro2::TokenStream;
-use quote::{quote, ToTokens};
+use quote::quote;
 
 pub fn reify(
     dfa: &DFA<Option<syn::Expr>>,
@@ -329,33 +329,14 @@ fn generate_state_char_arms(
     }
 
     for (StateIdx(next_state), chars) in state_chars.iter() {
-        let mut or_pat_cases: syn::punctuated::Punctuated<syn::Pat, syn::token::Or> =
-            syn::punctuated::Punctuated::new();
-
-        for char in chars {
-            or_pat_cases.push(syn::Pat::Lit(syn::PatLit {
-                attrs: vec![],
-                expr: Box::new(syn::Expr::Lit(syn::ExprLit {
-                    attrs: vec![],
-                    lit: syn::Lit::Char(syn::LitChar::new(*char, proc_macro2::Span::call_site())),
-                })),
-            }));
-        }
-
-        let or_pat = syn::PatOr {
-            attrs: vec![],
-            leading_vert: None,
-            cases: or_pat_cases,
-        };
-
-        let or_pat_tokens = syn::Pat::Or(or_pat).into_token_stream();
+        let pat = quote!(#(#chars)|*);
 
         if accepting.is_some() {
             // In an accepting state we only consume the next character if we're making a
             // transition. See `state_code` below for where we use `peek` instead of `next`
             // in accepting states.
             state_char_arms.push(quote!(
-                #or_pat_tokens => {
+                #pat => {
                     self.current_match_end += char.len_utf8();
                     let _ = self.iter.next();
                     self.state = #next_state;
@@ -363,7 +344,7 @@ fn generate_state_char_arms(
             ));
         } else {
             state_char_arms.push(quote!(
-                #or_pat_tokens => self.state = #next_state
+                #pat => self.state = #next_state
             ));
         }
     }
