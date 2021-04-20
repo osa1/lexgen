@@ -16,7 +16,7 @@ fn simple() {
         rule Init {
             [' ' '\t' '\n']+,
             $init $subseq* =>
-                |handle: LexerHandle<'_, '_>| {
+                |handle: LexerHandle| {
                     let token = Token::Id(handle.match_().to_owned());
                     handle.return_(token)
                 },
@@ -54,7 +54,7 @@ fn switch_user_state() {
             $whitespace,
 
             "/*" =>
-                |mut handle: LexerHandle<'_, '_>| {
+                |mut handle: LexerHandle| {
                     *handle.state() = 1;
                     handle.switch(LexerRules::Comment)
                 },
@@ -62,14 +62,14 @@ fn switch_user_state() {
 
         rule Comment {
             "/*" =>
-                |mut handle: LexerHandle<'_, '_>| {
+                |mut handle: LexerHandle| {
                     let state = handle.state();
                     *state = *state + 1;
                     handle.continue_()
                 },
 
             "*/" =>
-                |mut handle: LexerHandle<'_, '_>| {
+                |mut handle: LexerHandle| {
                     let state = handle.state();
                     if *state == 1 {
                         handle.switch_and_return(LexerRules::Init, Token::Comment)
@@ -80,7 +80,7 @@ fn switch_user_state() {
                 },
 
             _ =>
-                |handle: LexerHandle<'_, '_>|
+                |handle: LexerHandle|
                     handle.continue_(),
         }
     }
