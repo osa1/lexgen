@@ -61,7 +61,6 @@ fn switch_user_state() {
         }
 
         rule Comment {
-            $whitespace,
             "/*" =>
                 |mut handle: LexerHandle<'_, '_>| {
                     let state = handle.state();
