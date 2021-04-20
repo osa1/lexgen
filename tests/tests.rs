@@ -15,11 +15,15 @@ fn simple() {
 
         rule Init {
             [' ' '\t' '\n']+,
-            $init $subseq* => |str: &str| LexerAction::Return(Token::Id(str.to_owned())),
+            $init $subseq* =>
+                |handle: LexerHandle<'_, '_>| {
+                    let token = Token::Id(handle.match_().to_owned());
+                    handle.return_(token)
+                },
         }
     }
 
-    let mut lexer = Lexer::new(" abc123Q-t  z9_9");
+    let mut lexer = Lexer::new(" abc123Q-t  z9_9", ());
     assert_eq!(
         lexer.next(),
         Some(Ok((1, Token::Id("abc123Q-t".to_owned()), 10)))
@@ -31,32 +35,59 @@ fn simple() {
     assert_eq!(lexer.next(), None);
 }
 
+// Tests user state and named rules
 #[test]
-fn switch() {
+fn switch_user_state() {
     #[derive(Debug, PartialEq, Eq)]
     enum Token {
         Comment,
     }
 
+    type CommentDepth = usize;
+
     lexer_gen! {
-        Lexer -> Token;
+        Lexer(CommentDepth) -> Token;
 
         let whitespace = [' ' '\t' '\n']+;
 
         rule Init {
             $whitespace,
-            "/*" => |_: &str| LexerAction::Switch(LexerRules::Comment),
+
+            "/*" =>
+                |mut handle: LexerHandle<'_, '_>| {
+                    *handle.state() = 1;
+                    handle.switch(LexerRules::Comment)
+                },
         }
 
         rule Comment {
             $whitespace,
-            "*/" => |_: &str| LexerAction::ReturnAndSwitch(Token::Comment, LexerRules::Init),
-            _ => |_: &str| LexerAction::Continue,
+            "/*" =>
+                |mut handle: LexerHandle<'_, '_>| {
+                    let state = handle.state();
+                    *state = *state + 1;
+                    handle.continue_()
+                },
+
+            "*/" =>
+                |mut handle: LexerHandle<'_, '_>| {
+                    let state = handle.state();
+                    if *state == 1 {
+                        handle.switch_and_return(LexerRules::Init, Token::Comment)
+                    } else {
+                        *state = *state - 1;
+                        handle.continue_()
+                    }
+                },
+
+            _ =>
+                |handle: LexerHandle<'_, '_>|
+                    handle.continue_(),
         }
     }
 
-    let mut lexer = Lexer::new("  /* blah blah  */  /**/");
-    assert_eq!(lexer.next(), Some(Ok((2, Token::Comment, 18))));
-    assert_eq!(lexer.next(), Some(Ok((20, Token::Comment, 24))));
+    let mut lexer = Lexer::new("  /* test  */  /* /* nested comments!! */ */", 0);
+    assert_eq!(lexer.next(), Some(Ok((2, Token::Comment, 13))));
+    assert_eq!(lexer.next(), Some(Ok((15, Token::Comment, 44))));
     assert_eq!(lexer.next(), None);
 }

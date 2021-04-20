@@ -77,7 +77,7 @@ pub fn lexer_gen(input: TokenStream) -> TokenStream {
         );
     }
 
-    dfa::reify(&dfa.unwrap(), &dfas, type_name, token_type).into()
+    dfa::reify(&dfa.unwrap(), user_state_type, &dfas, type_name, token_type).into()
 }
 
 #[cfg(test)]

@@ -210,10 +210,11 @@ impl<A> Display for DFA<A> {
 }
 
 use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{quote, ToTokens};
 
 pub fn reify(
     dfa: &DFA<Option<syn::Expr>>,
+    user_state_type: Option<syn::Type>,
     rule_states: &FxHashMap<String, StateIdx>,
     type_name: syn::Ident,
     token_type: syn::Type,
@@ -224,9 +225,15 @@ pub fn reify(
         Err(err) => return Some(Err(err)),
     });
 
+    let user_state_type = user_state_type
+        .map(|ty| ty.into_token_stream())
+        .unwrap_or(quote!(()));
+
     let action_enum_name = syn::Ident::new(&(type_name.to_string() + "Action"), type_name.span());
 
-    let match_arms = generate_state_arms(dfa, &pop_match, &action_enum_name);
+    let handle_type_name = syn::Ident::new(&(type_name.to_string() + "Handle"), type_name.span());
+
+    let match_arms = generate_state_arms(dfa, &handle_type_name, &pop_match, &action_enum_name);
 
     let rule_name_enum_name = syn::Ident::new(&(type_name.to_string() + "Rules"), type_name.span());
     let rule_name_idents: Vec<syn::Ident> = rule_states
@@ -245,9 +252,9 @@ pub fn reify(
             Return(#token_type),
             // User action requested switching to the given rule set
             Switch(#rule_name_enum_name),
-            // Combination or `Return` and `Switch`: add token to the match stack, switch to the
+            // Combination or `Switch` and `Return`: add token to the match stack, switch to the
             // given rule set
-            ReturnAndSwitch(#token_type, #rule_name_enum_name),
+            SwitchAndReturn(#token_type, #rule_name_enum_name),
         }
 
         // An enum for the rule sets in the DFA. `Init` is the initial, unnamed rule set.
@@ -256,12 +263,20 @@ pub fn reify(
             #(#rule_name_idents,)*
         }
 
+        // The "handle" type passed to user actions. Allows getting the current match, modifying
+        // user state, returning tokens, and switching to a different lexer state.
+        struct #handle_type_name<'lexer, 'input> {
+            match_: &'input str,
+            user_state: &'lexer mut #user_state_type,
+        }
+
         // The lexer type
         struct #type_name<'input> {
-            // Current state
+            // Current lexer state
             state: usize,
-            // Which state to switch to on successful match
+            // Which lexer state to switch to on successful match
             initial_state: usize,
+            user_state: #user_state_type,
             input: &'input str,
             iter: std::iter::Peekable<std::str::CharIndices<'input>>,
             match_stack: Vec<Option<(usize, #token_type, usize)>>,
@@ -274,11 +289,38 @@ pub fn reify(
             char_idx: usize,
         }
 
+        impl<'lexer, 'input> #handle_type_name<'lexer, 'input> {
+            fn switch_and_return(self, rule: #rule_name_enum_name, token: #token_type) -> #action_enum_name {
+                #action_enum_name::SwitchAndReturn(token, rule)
+            }
+
+            fn return_(self, token: #token_type) -> #action_enum_name {
+                #action_enum_name::Return(token)
+            }
+
+            fn switch(self, rule: #rule_name_enum_name) -> #action_enum_name {
+                #action_enum_name::Switch(rule)
+            }
+
+            fn continue_(self) -> #action_enum_name {
+                #action_enum_name::Continue
+            }
+
+            fn state(&mut self) -> &mut #user_state_type {
+                self.user_state
+            }
+
+            fn match_(&self) -> &'input str {
+                self.match_
+            }
+        }
+
         impl<'input> #type_name<'input> {
-            fn new(input: &'input str) -> Self {
+            fn new(input: &'input str, user_state: #user_state_type) -> Self {
                 #type_name {
                     state: 0,
                     initial_state: 0,
+                    user_state,
                     input,
                     iter: input.char_indices().peekable(),
                     match_stack: vec![],
@@ -313,7 +355,10 @@ pub fn reify(
 
             fn next(&mut self) -> Option<Self::Item> {
                 loop {
-                    println!("state={}, initial_state={}, current_match_start={}, match_stack={:?}", self.state, self.initial_state, self.current_match_start, self.match_stack);
+                    println!(
+                        "state={}, initial_state={}, current_match_start={}, match_stack={:?}",
+                        self.state, self.initial_state, self.current_match_start, self.match_stack
+                    );
                     match self.state {
                         #(#match_arms,)*
                     }
@@ -352,6 +397,7 @@ fn generate_switch(
 /// Generate arms of `match self.state { ... }` of a DFA.
 fn generate_state_arms(
     dfa: &DFA<Option<syn::Expr>>,
+    handle_type_name: &syn::Ident,
     pop_match: &TokenStream,
     action_enum_name: &syn::Ident,
 ) -> Vec<TokenStream> {
@@ -401,7 +447,7 @@ fn generate_state_arms(
             let push = match rhs {
                 None => quote!(self.match_stack.push(None)),
                 Some(rhs) => quote!(
-                    match (#rhs)(str) {
+                    match (#rhs)(handle) {
                         #action_enum_name::Continue =>
                             self.match_stack.push(None),
                         #action_enum_name::Return(tok) =>
@@ -410,7 +456,7 @@ fn generate_state_arms(
                             self.switch(rule_set);
                             continue;
                         }
-                        #action_enum_name::ReturnAndSwitch(tok, rule_set) => {
+                        #action_enum_name::SwitchAndReturn(tok, rule_set) => {
                             self.match_stack.clear();
                             self.switch(rule_set);
                             return Some(Ok((self.current_match_start, tok, self.current_match_end)));
@@ -420,6 +466,10 @@ fn generate_state_arms(
             };
             quote!({
                 let str = &self.input[self.current_match_start..self.current_match_end];
+                let handle = #handle_type_name {
+                    match_: str,
+                    user_state: &mut self.user_state,
+                };
                 #push;
                 match self.iter.peek() {
                     None => #pop_match,
