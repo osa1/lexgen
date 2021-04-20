@@ -43,7 +43,12 @@ impl<A> DFA<A> {
     }
 
     pub fn add_accepting_state(&mut self, state: StateIdx, value: A) {
-        self.accepting.insert(state, value);
+        let old = self.accepting.insert(state, value);
+        assert!(
+            old.is_none(),
+            "add_accepting_state overriding action in state={:?}",
+            state,
+        );
     }
 
     pub fn new_state(&mut self) -> StateIdx {
