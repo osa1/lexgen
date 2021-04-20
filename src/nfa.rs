@@ -44,6 +44,10 @@ impl<A: Clone> NFA<A> {
         StateIdx(0)
     }
 
+    pub fn is_accepting_state(&self, state: StateIdx) -> bool {
+        self.accepting.contains_key(&state)
+    }
+
     pub fn get_accepting_state(&self, state: StateIdx) -> Option<A> {
         self.accepting.get(&state).cloned()
     }

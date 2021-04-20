@@ -72,15 +72,18 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
                     .extend(next_states.iter().copied());
             }
 
-            // Collect wildcard transitions. For every char or range transition in the current DFA
-            // state, also add the wildcard targets to the target set.
+            // Collect wildcard transitions
             for wild_next in nfa.wildcard_transitions(nfa_state) {
                 wildcard_transitions.insert(*wild_next);
-                for (_char, next) in char_transitions.iter_mut() {
-                    next.insert(*wild_next);
+                for (_char, nexts) in char_transitions.iter_mut() {
+                    if !nexts.iter().any(|next| nfa.is_accepting_state(*next)) {
+                        nexts.insert(*wild_next);
+                    }
                 }
-                for (_range, next) in range_transitions.iter_mut() {
-                    next.insert(*wild_next);
+                for (_range, nexts) in range_transitions.iter_mut() {
+                    if !nexts.iter().any(|next| nfa.is_accepting_state(*next)) {
+                        nexts.insert(*wild_next);
+                    }
                 }
             }
         }

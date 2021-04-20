@@ -131,7 +131,7 @@ fn counting() {
 
 #[test]
 fn lua_long_strings() {
-    #[derive(Default)]
+    #[derive(Default, Clone, Copy)]
     struct StringBracketSize {
         left_size: usize,
         right_size: usize,
@@ -183,9 +183,9 @@ fn lua_long_strings() {
 
             ']' =>
                 |mut handle: LuaLongStringLexerHandle| {
-                    let state = handle.state();
+                    let state = *handle.state();
                     if state.left_size == state.right_size {
-                        let match_ = handle.match_.to_owned();
+                        let match_ = handle.match_[state.left_size+2..handle.match_.len() - state.right_size - 2].to_owned();
                         handle.switch_and_return(LuaLongStringLexerRules::Init, match_)
                     } else {
                         handle.switch(LuaLongStringLexerRules::String)
@@ -198,6 +198,8 @@ fn lua_long_strings() {
         }
     }
 
-    let mut lexer = LuaLongStringLexer::new("[[]]", Default::default());
-    assert_eq!(lexer.next(), Some(Ok((0, "".to_owned(), 4))));
+    let mut lexer = LuaLongStringLexer::new("[[ ]] [=[test]=] [=[ ]]", Default::default());
+    assert_eq!(lexer.next(), Some(Ok((0, " ".to_owned(), 5))));
+    assert_eq!(lexer.next(), Some(Ok((6, "test".to_owned(), 16))));
+    assert!(matches!(lexer.next(), Some(Err(_))));
 }

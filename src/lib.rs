@@ -103,6 +103,12 @@ mod tests {
 
         let dfa = nfa_to_dfa(nfa);
 
+        println!("NFA");
+        println!("{}", nfa);
+
+        println!("DFA");
+        println!("{}", dfa);
+
         for (str, expected) in &test_cases {
             assert_eq!(
                 dfa.simulate(&mut str.chars()),
@@ -337,6 +343,48 @@ mod tests {
             &nfa,
             vec![("a", Some(())), ("aA", Some(())), ("aA123-a", Some(()))],
         );
+    }
+
+    #[test]
+    fn zero_or_more_concat_confusion_1() {
+        let mut nfa: NFA<()> = NFA::new();
+
+        let re = Regex::Concat(
+            Box::new(Regex::ZeroOrMore(Box::new(Regex::Char('a')))),
+            Box::new(Regex::Char('a')),
+        );
+
+        nfa.add_regex(&Default::default(), &re, ());
+
+        test_simulate(&nfa, vec![("a", Some(())), ("aa", Some(()))]);
+    }
+
+    #[test]
+    fn zero_or_more_concat_confusion_2() {
+        let mut nfa: NFA<()> = NFA::new();
+
+        let re = Regex::Concat(
+            Box::new(Regex::ZeroOrMore(Box::new(Regex::Char('a')))),
+            Box::new(Regex::String("ab".to_owned())),
+        );
+
+        nfa.add_regex(&Default::default(), &re, ());
+
+        test_simulate(&nfa, vec![("ab", Some(())), ("aab", Some(()))]);
+    }
+
+    #[test]
+    fn zero_or_more_wildcard_confusion_1() {
+        let mut nfa: NFA<()> = NFA::new();
+
+        let re = Regex::Concat(
+            Box::new(Regex::ZeroOrMore(Box::new(Regex::Wildcard))),
+            Box::new(Regex::String("aa".to_owned())),
+        );
+
+        nfa.add_regex(&Default::default(), &re, ());
+
+        test_simulate(&nfa, vec![("aa", Some(()))]);
     }
 
     #[test]
