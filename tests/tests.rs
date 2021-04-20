@@ -90,3 +90,41 @@ fn switch_user_state() {
     assert_eq!(lexer.next(), Some(Ok((15, Token::Comment, 44))));
     assert_eq!(lexer.next(), None);
 }
+
+#[test]
+fn counting() {
+    lexer_gen! {
+        Lexer(usize) -> usize;
+
+        rule Init {
+            ' ',
+
+            '[' =>
+                |mut handle: LexerHandle| {
+                    *handle.state() = 0;
+                    handle.switch(LexerRules::Count)
+                },
+        },
+
+        rule Count {
+            '=' =>
+                |mut handle: LexerHandle| {
+                    let n = *handle.state();
+                    *handle.state() = n + 1;
+                    handle.continue_()
+                },
+
+            '[' =>
+                |mut handle: LexerHandle| {
+                    let n = *handle.state();
+                    handle.switch_and_return(LexerRules::Init, n)
+                },
+        },
+    }
+
+    let mut lexer = Lexer::new("[[ [=[ [==[", 0);
+    assert_eq!(lexer.next(), Some(Ok((0, 0, 2))));
+    assert_eq!(lexer.next(), Some(Ok((3, 1, 6))));
+    assert_eq!(lexer.next(), Some(Ok((7, 2, 11))));
+    assert_eq!(lexer.next(), None);
+}
