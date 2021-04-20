@@ -93,13 +93,23 @@ mod tests {
         test_cases: Vec<(&str, Option<A>)>,
     ) {
         for (str, expected) in &test_cases {
-            assert_eq!(nfa.simulate(&mut str.chars()), expected.as_ref());
+            assert_eq!(
+                nfa.simulate(&mut str.chars()),
+                expected.as_ref(),
+                "NFA simulation failed for string: {:?}",
+                str
+            );
         }
 
         let dfa = nfa_to_dfa(nfa);
 
         for (str, expected) in &test_cases {
-            assert_eq!(dfa.simulate(&mut str.chars()), expected.as_ref());
+            assert_eq!(
+                dfa.simulate(&mut str.chars()),
+                expected.as_ref(),
+                "DFA simulation failed for string: {:?}",
+                str
+            );
         }
     }
 
@@ -238,7 +248,7 @@ mod tests {
     }
 
     #[test]
-    fn or_one_or_more_char() {
+    fn simulate_or_one_or_more_char() {
         let re = Regex::Or(
             Box::new(Regex::OneOrMore(Box::new(Regex::Char('a')))),
             Box::new(Regex::Char('b')),
@@ -257,7 +267,7 @@ mod tests {
     }
 
     #[test]
-    fn multiple_accepting_states_1() {
+    fn simulate_multiple_accepting_states_1() {
         let re1 = Regex::String("aaaa".to_owned());
         let re2 = Regex::String("aaab".to_owned());
         let mut nfa: NFA<usize> = NFA::new();
@@ -299,7 +309,7 @@ mod tests {
     }
 
     #[test]
-    fn variables() {
+    fn simulate_variables() {
         let mut bindings: FxHashMap<Var, Regex> = Default::default();
         bindings.insert(
             Var("initial".to_owned()),
@@ -326,6 +336,36 @@ mod tests {
         test_simulate(
             &nfa,
             vec![("a", Some(())), ("aA", Some(())), ("aA123-a", Some(()))],
+        );
+    }
+
+    #[test]
+    fn simulate_wildcards() {
+        let mut nfa: NFA<()> = NFA::new();
+
+        let re = Regex::Concat(
+            Box::new(Regex::String("/*".to_owned())),
+            Box::new(Regex::Concat(
+                Box::new(Regex::ZeroOrMore(Box::new(Regex::Wildcard))),
+                Box::new(Regex::String("*/".to_owned())),
+            )),
+        );
+
+        nfa.add_regex(&Default::default(), &re, ());
+
+        test_simulate(
+            &nfa,
+            vec![
+                ("/**/", Some(())),
+                ("/* */", Some(())),
+                ("/***/", Some(())),
+                ("/* test */", Some(())),
+                ("/**test**/", Some(())),
+                ("/*/", None),
+                ("/**", None),
+                ("/** /", None),
+                ("/ **/", None),
+            ],
         );
     }
 }

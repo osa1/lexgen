@@ -143,6 +143,11 @@ impl<A> DFA<A> {
                 }
             }
 
+            if let Some(next) = self.states[state.0].wildcard_transition {
+                state = next;
+                continue;
+            }
+
             return None;
         }
 
@@ -355,10 +360,6 @@ pub fn reify(
 
             fn next(&mut self) -> Option<Self::Item> {
                 loop {
-                    println!(
-                        "state={}, initial_state={}, current_match_start={}, match_stack={:?}",
-                        self.state, self.initial_state, self.current_match_start, self.match_stack
-                    );
                     match self.state {
                         #(#match_arms,)*
                     }

@@ -145,7 +145,9 @@ impl<A: Clone> NFA<A> {
         let state = &self.states[state.0];
         &state.empty_transitions
     }
+}
 
+impl<A: Clone + std::fmt::Debug> NFA<A> {
     #[cfg(test)]
     pub fn simulate(&self, chars: &mut dyn Iterator<Item = char>) -> Option<&A> {
         let mut states: FxHashSet<StateIdx> = Default::default();
@@ -158,13 +160,19 @@ impl<A: Clone> NFA<A> {
 
             let mut next_states: FxHashSet<StateIdx> = Default::default();
             for state in states.iter() {
+                let mut matched = false;
                 if let Some(nexts) = self.states[state.0].char_transitions.get(&char) {
                     next_states.extend(nexts.into_iter());
+                    matched = true;
                 }
                 for ((range_begin, range_end), nexts) in &self.states[state.0].range_transitions {
                     if char >= *range_begin && char <= *range_end {
                         next_states.extend(nexts.into_iter());
+                        matched = true;
                     }
+                }
+                if !matched {
+                    next_states.extend(self.states[state.0].wildcard_transitions.iter().copied());
                 }
             }
 
