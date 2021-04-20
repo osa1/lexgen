@@ -17,6 +17,7 @@ pub struct StateIdx(usize);
 struct State {
     char_transitions: FxHashMap<char, FxHashSet<StateIdx>>,
     range_transitions: FxHashMap<(char, char), FxHashSet<StateIdx>>,
+    wildcard_transitions: FxHashSet<StateIdx>,
     empty_transitions: FxHashSet<StateIdx>,
 }
 
@@ -25,6 +26,7 @@ impl State {
         State {
             char_transitions: Default::default(),
             range_transitions: Default::default(),
+            wildcard_transitions: Default::default(),
             empty_transitions: Default::default(),
         }
     }
@@ -58,6 +60,10 @@ impl<A: Clone> NFA<A> {
         state: StateIdx,
     ) -> impl Iterator<Item = (&(char, char), &FxHashSet<StateIdx>)> {
         self.states[state.0].range_transitions.iter()
+    }
+
+    pub fn wildcard_transitions(&self, state: StateIdx) -> impl Iterator<Item = &StateIdx> {
+        self.states[state.0].wildcard_transitions.iter()
     }
 
     pub fn new_state(&mut self) -> StateIdx {
@@ -108,6 +114,12 @@ impl<A: Clone> NFA<A> {
         let not_exists = self.states[state.0].empty_transitions.insert(next);
 
         assert!(not_exists, "add_empty_transition");
+    }
+
+    pub fn add_wildcard_transition(&mut self, state: StateIdx, next: StateIdx) {
+        let not_exists = self.states[state.0].wildcard_transitions.insert(next);
+
+        assert!(not_exists, "add_wildcard_transition");
     }
 
     pub fn make_accepting(&mut self, state: StateIdx, value: A) {
@@ -190,6 +202,7 @@ impl<A: Clone> Display for NFA<A> {
             let State {
                 char_transitions,
                 range_transitions,
+                wildcard_transitions,
                 empty_transitions,
             } = state;
 
@@ -203,6 +216,16 @@ impl<A: Clone> Display for NFA<A> {
                 }
 
                 writeln!(f, "e -> {}", StateSetDisplay(empty_transitions))?;
+            }
+
+            if !wildcard_transitions.is_empty() {
+                if !first {
+                    write!(f, "     ")?;
+                } else {
+                    first = false;
+                }
+
+                writeln!(f, "_ -> {}", StateSetDisplay(wildcard_transitions))?;
             }
 
             for (char, next) in char_transitions.iter() {
@@ -234,6 +257,7 @@ impl<A: Clone> Display for NFA<A> {
             if empty_transitions.is_empty()
                 && char_transitions.is_empty()
                 && range_transitions.is_empty()
+                && wildcard_transitions.is_empty()
             {
                 writeln!(f)?;
             }

@@ -77,6 +77,7 @@ pub enum Regex {
     ZeroOrOne(Box<Regex>),
     Concat(Box<Regex>, Box<Regex>),
     Or(Box<Regex>, Box<Regex>),
+    Wildcard,
     // Diff(Box<Regex>, Box<Regex>),
 }
 
@@ -137,6 +138,9 @@ fn parse_regex_1(input: ParseStream) -> syn::Result<Regex> {
     } else if input.peek(syn::LitStr) {
         let str = input.parse::<syn::LitStr>()?;
         Ok(Regex::String(str.value()))
+    } else if input.peek(syn::token::Underscore) {
+        let _ = input.parse::<syn::token::Underscore>()?;
+        Ok(Regex::Wildcard)
     } else if input.peek(syn::token::Bracket) {
         let bracketed;
         syn::bracketed!(bracketed in input);

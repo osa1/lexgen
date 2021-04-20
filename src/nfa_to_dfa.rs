@@ -49,6 +49,7 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
         let mut char_transitions: FxHashMap<char, FxHashSet<NfaStateIdx>> = Default::default();
         let mut range_transitions: FxHashMap<(char, char), FxHashSet<NfaStateIdx>> =
             Default::default();
+        let mut wildcard_transitions: FxHashSet<NfaStateIdx> = Default::default();
 
         for nfa_state in current_nfa_states.iter().copied() {
             if let Some(value) = nfa.get_accepting_state(nfa_state) {
@@ -70,6 +71,11 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
                     .or_default()
                     .extend(next_states.iter().copied());
             }
+
+            // Collect wildcard transitions
+            for next_state in nfa.wildcard_transitions(nfa_state) {
+                wildcard_transitions.insert(*next_state);
+            }
         }
 
         // Compute closures of transition targets and add transitions to DFA
@@ -87,6 +93,17 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
                 nfa.compute_state_closure(&states).into_iter().collect();
             let dfa_state = dfa_state_of_nfa_states(&mut dfa, &mut state_map, closure.clone());
             dfa.add_range_transition(current_dfa_state, range_begin, range_end, dfa_state);
+
+            work_list.push(closure);
+        }
+
+        if !wildcard_transitions.is_empty() {
+            let closure: BTreeSet<NfaStateIdx> = nfa
+                .compute_state_closure(&wildcard_transitions)
+                .into_iter()
+                .collect();
+            let dfa_state = dfa_state_of_nfa_states(&mut dfa, &mut state_map, closure.clone());
+            dfa.add_wildcard_transition(current_dfa_state, dfa_state);
 
             work_list.push(closure);
         }
