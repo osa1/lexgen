@@ -5,7 +5,8 @@ mod nfa;
 mod nfa_to_dfa;
 mod regex_to_nfa;
 
-use ast::{Lexer, Regex, Rule, SingleRule, Var};
+use ast::{Lexer, Regex, Rule, Var};
+use dfa::DFA;
 use nfa::NFA;
 use nfa_to_dfa::nfa_to_dfa;
 
@@ -20,15 +21,13 @@ pub fn lexer_gen(input: TokenStream) -> TokenStream {
         rules,
     } = syn::parse_macro_input!(input as Lexer);
 
-    // Maps named DFAs to their initial states
-    let mut named_dfas: FxHashMap<String, dfa::StateIdx> = Default::default();
+    // Maps DFA names to their initial states in the final DFA
+    let mut dfas: FxHashMap<String, dfa::StateIdx> = Default::default();
 
-    // First pass to collect default rules and build the NFA for the initial state. Default rules
-    // are added to named rules.
-    // TODO: Add the default NFA to the NFAs for named rules instead
-    let mut default_nfa: NFA<Option<syn::Expr>> = NFA::new();
-    let mut default_rules: Vec<&SingleRule> = vec![];
     let mut bindings: FxHashMap<Var, Regex> = Default::default();
+
+    let mut dfa: Option<DFA<Option<syn::Expr>>> = None;
+
     for rule in &rules {
         match rule {
             Rule::Binding { var, re } => {
@@ -36,35 +35,48 @@ pub fn lexer_gen(input: TokenStream) -> TokenStream {
                     panic!("Variable {:?} is defined multiple times", var.0);
                 }
             }
-            Rule::DefaultRule(single_rule) => {
-                default_nfa.add_regex(&bindings, &single_rule.lhs, single_rule.rhs.clone());
-                default_rules.push(single_rule);
+            Rule::RuleSet { name, rules } => {
+                if name.to_string() == "Init" {
+                    if dfa.is_some() {
+                        panic!("\"Init\" rule set can only be defined once");
+                    }
+                    let mut nfa: NFA<Option<syn::Expr>> = NFA::new();
+                    for rule in rules {
+                        nfa.add_regex(&bindings, &rule.lhs, rule.rhs.clone());
+                    }
+                    let dfa_ = nfa_to_dfa(&nfa);
+                    let initial_state = dfa_.initial_state();
+                    dfa = Some(dfa_);
+                    if let Some(_) = dfas.insert(name.to_string(), initial_state) {
+                        panic!("Rule set {:?} is defined multiple times", name.to_string());
+                    }
+                } else {
+                    let dfa = match dfa.as_mut() {
+                        None => panic!("First rule set should be named \"Init\""),
+                        Some(dfa) => dfa,
+                    };
+                    let mut nfa: NFA<Option<syn::Expr>> = NFA::new();
+                    for rule in rules {
+                        nfa.add_regex(&bindings, &rule.lhs, rule.rhs.clone());
+                    }
+                    let dfa_idx = dfa.add_dfa(&nfa_to_dfa(&nfa));
+                    if let Some(_) = dfas.insert(name.to_string(), dfa_idx) {
+                        panic!("Rule set {:?} is defined multiple times", name.to_string());
+                    }
+                }
             }
-            Rule::NamedRules { .. } => {}
         }
     }
 
-    let mut dfa = nfa_to_dfa(&default_nfa);
-
-    for rule in &rules {
-        match rule {
-            Rule::Binding { .. } => {}
-            Rule::DefaultRule(_) => {}
-            Rule::NamedRules { name, rules } => {
-                let mut nfa: NFA<Option<syn::Expr>> = NFA::new();
-                for default_rule in &default_rules {
-                    nfa.add_regex(&bindings, &default_rule.lhs, default_rule.rhs.clone());
-                }
-                for rule in rules {
-                    nfa.add_regex(&bindings, &rule.lhs, rule.rhs.clone());
-                }
-                let dfa_idx = dfa.add_dfa(&nfa_to_dfa(&nfa));
-                named_dfas.insert(name.to_string(), dfa_idx);
-            }
-        }
+    // There should be a rule with name "Init"
+    if let None = dfas.get("Init") {
+        panic!(
+            "There should be a rule set named \"Init\". Current rules: {:?}",
+            dfas.keys().collect::<Vec<&String>>()
+        );
     }
 
-    dfa::reify(&dfa, &named_dfas, type_name, token_type).into()
+    dfa::reify(&dfa.unwrap(), &dfas, type_name, token_type).into()
 }
 
 #[cfg(test)]

@@ -36,6 +36,10 @@ impl<A> DFA<A> {
         )
     }
 
+    pub fn initial_state(&self) -> StateIdx {
+        StateIdx(0)
+    }
+
     pub fn add_accepting_state(&mut self, state: StateIdx, value: A) {
         self.accepting.insert(state, value);
     }
@@ -230,7 +234,6 @@ pub fn reify(
         // An enum for the rule sets in the DFA. `Init` is the initial, unnamed rule set.
         #[derive(Clone, Copy)]
         enum #rule_name_enum_name {
-            Init,
             #(#rule_name_idents,)*
         }
 

@@ -17,11 +17,8 @@ pub enum Rule {
     /// `let <ident> = <regex>;`
     Binding { var: Var, re: Regex },
 
-    /// A `<regex> => <action>,` at the top level
-    DefaultRule(SingleRule),
-
     /// A list of named rules at the top level: `rule <Ident> { <rules> },`
-    NamedRules {
+    RuleSet {
         name: syn::Ident,
         rules: Vec<SingleRule>,
     },
@@ -51,9 +48,8 @@ impl fmt::Debug for Rule {
                 .field("var", var)
                 .field("re", re)
                 .finish(),
-            Rule::DefaultRule(rule) => rule.fmt(f),
-            Rule::NamedRules { name, rules } => f
-                .debug_struct("Rule::NamedRules")
+            Rule::RuleSet { name, rules } => f
+                .debug_struct("Rule::RuleSet")
                 .field("name", &name.to_string())
                 .field("rules", rules)
                 .finish(),
@@ -209,7 +205,7 @@ impl Parse for Rule {
                 var: Var(var.to_string()),
                 re,
             })
-        } else if input.peek(syn::Ident) {
+        } else {
             // Name rules
             let ident = input.parse::<syn::Ident>()?;
             if ident.to_string() != "rule" {
@@ -227,13 +223,10 @@ impl Parse for Rule {
             }
             // Consume trailing comma
             let _ = input.parse::<syn::token::Comma>();
-            Ok(Rule::NamedRules {
+            Ok(Rule::RuleSet {
                 name: rule_name,
                 rules: single_rules,
             })
-        } else {
-            // Regex
-            Ok(Rule::DefaultRule(SingleRule::parse(input)?))
         }
     }
 }

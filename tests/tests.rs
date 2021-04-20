@@ -13,10 +13,10 @@ fn simple() {
         let init = ['a'-'z'];
         let subseq = $init | ['A'-'Z' '0'-'9' '-' '_'];
 
-        // Whitespace
-        [' ' '\t' '\n']+,
-
-        $init $subseq* => |str: &str| LexerAction::Return(Token::Id(str.to_owned())),
+        rule Init {
+            [' ' '\t' '\n']+,
+            $init $subseq* => |str: &str| LexerAction::Return(Token::Id(str.to_owned())),
+        }
     }
 
     let mut lexer = Lexer::new(" abc123Q-t  z9_9");
@@ -41,12 +41,13 @@ fn switch() {
     lexer_gen! {
         Lexer -> Token;
 
-        // Whitespace
-        [' ' '\t' '\n']+,
-
-        "/*" => |_: &str| LexerAction::Switch(LexerRules::Comment),
+        rule Init {
+            [' ' '\t' '\n']+,
+            "/*" => |_: &str| LexerAction::Switch(LexerRules::Comment),
+        }
 
         rule Comment {
+            [' ' '\t' '\n']+,
             "*/" => |_: &str| LexerAction::ReturnAndSwitch(Token::Comment, LexerRules::Init),
         }
     }
