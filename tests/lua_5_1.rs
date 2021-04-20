@@ -58,12 +58,29 @@ enum Keyword {
     While,
 }
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone)]
 struct LexerState {
     /// Number of opening `=`s seen when parsing a long string
     lon_string_opening_eqs: usize,
     /// Number of closing `=`s seen when parsing a long string
     long_string_closing_eqs: usize,
+    /// When parsing a short string, whether it's started with a double or single quote
+    short_string_delim: Quote,
+    /// Buffer for strings
+    string_buf: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Quote {
+    Single,
+    Double,
+}
+
+impl Default for Quote {
+    fn default() -> Self {
+        // arbitrary
+        Quote::Single
+    }
 }
 
 lexer_gen! {
@@ -121,11 +138,96 @@ lexer_gen! {
         "true" => |handle: LexerHandle| handle.return_(Token::Keyword(Keyword::True)),
         "until" => |handle: LexerHandle| handle.return_(Token::Keyword(Keyword::Until)),
         "while" => |handle: LexerHandle| handle.return_(Token::Keyword(Keyword::While)),
-    },
-}
 
-fn next(lexer: &mut Lexer) -> Option<Result<Token, LexerError>> {
-    lexer.next().map(|r| r.map(|(_, t, _)| t))
+        '"' => |mut handle: LexerHandle| {
+            handle.state().short_string_delim = Quote::Double;
+            handle.state().string_buf.clear();
+            handle.switch(LexerRules::String)
+        },
+
+        '\'' => |mut handle: LexerHandle| {
+            handle.state().short_string_delim = Quote::Single;
+            handle.state().string_buf.clear();
+            handle.switch(LexerRules::String)
+        },
+    },
+
+    rule String {
+        '"' => |mut handle: LexerHandle| {
+            if handle.state().short_string_delim == Quote::Double {
+                let str = handle.state().string_buf.clone();
+                handle.switch_and_return(LexerRules::Init, Token::String(str))
+            } else {
+                handle.state().string_buf.push('"');
+                handle.continue_()
+            }
+        },
+
+        "'" => |mut handle: LexerHandle| {
+            if handle.state().short_string_delim == Quote::Single {
+                let str = handle.state().string_buf.clone();
+                handle.switch_and_return(LexerRules::Init, Token::String(str))
+            } else {
+                handle.state().string_buf.push('\"');
+                handle.continue_()
+            }
+        },
+
+        "\\a" => |mut handle: LexerHandle| {
+            handle.state().string_buf.push('\u{7}');
+            handle.continue_()
+        },
+
+        "\\b" => |mut handle: LexerHandle| {
+            handle.state().string_buf.push('\u{8}');
+            handle.continue_()
+        },
+
+        "\\f" => |mut handle: LexerHandle| {
+            handle.state().string_buf.push('\u{c}');
+            handle.continue_()
+        },
+
+        "\\n" => |mut handle: LexerHandle| {
+            handle.state().string_buf.push('\n');
+            handle.continue_()
+        },
+
+        "\\r" => |mut handle: LexerHandle| {
+            handle.state().string_buf.push('\r');
+            handle.continue_()
+        },
+
+        "\\t" => |mut handle: LexerHandle| {
+            handle.state().string_buf.push('\t');
+            handle.continue_()
+        },
+
+        "\\v" => |mut handle: LexerHandle| {
+            handle.state().string_buf.push('\u{b}');
+            handle.continue_()
+        },
+
+        "\\\\" => |mut handle: LexerHandle| {
+            handle.state().string_buf.push('\\');
+            handle.continue_()
+        },
+
+        "\\\"" => |mut handle: LexerHandle| {
+            handle.state().string_buf.push('"');
+            handle.continue_()
+        },
+
+        "\\'" => |mut handle: LexerHandle| {
+            handle.state().string_buf.push('\'');
+            handle.continue_()
+        },
+
+        "\\\n" => |mut handle: LexerHandle| {
+            handle.state().string_buf.push('\n');
+            handle.continue_()
+        },
+    },
 }
 
 #[test]
