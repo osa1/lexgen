@@ -128,3 +128,76 @@ fn counting() {
     assert_eq!(lexer.next(), Some(Ok((7, 2, 11))));
     assert_eq!(lexer.next(), None);
 }
+
+#[test]
+fn lua_long_strings() {
+    #[derive(Default)]
+    struct StringBracketSize {
+        left_size: usize,
+        right_size: usize,
+    }
+
+    lexer_gen! {
+        LuaLongStringLexer(StringBracketSize) -> String;
+
+        rule Init {
+            ' ',
+
+            '[' =>
+                |mut handle: LuaLongStringLexerHandle| {
+                    *handle.state() = Default::default();
+                    handle.switch(LuaLongStringLexerRules::LeftBracket)
+                },
+        },
+
+        rule LeftBracket {
+            '=' =>
+                |mut handle: LuaLongStringLexerHandle| {
+                    handle.state().left_size += 1;
+                    handle.continue_()
+                },
+
+            '[' =>
+                |handle: LuaLongStringLexerHandle|
+                    handle.switch(LuaLongStringLexerRules::String),
+        },
+
+        rule String {
+            ']' =>
+                |mut handle: LuaLongStringLexerHandle| {
+                    handle.state().right_size = 0;
+                    handle.switch(LuaLongStringLexerRules::RightBracket)
+                },
+
+            _ =>
+                |handle: LuaLongStringLexerHandle|
+                    handle.continue_(),
+        },
+
+        rule RightBracket {
+            '=' =>
+                |mut handle: LuaLongStringLexerHandle| {
+                    handle.state().right_size += 1;
+                    handle.continue_()
+                },
+
+            ']' =>
+                |mut handle: LuaLongStringLexerHandle| {
+                    let state = handle.state();
+                    if state.left_size == state.right_size {
+                        let match_ = handle.match_.to_owned();
+                        handle.switch_and_return(LuaLongStringLexerRules::Init, match_)
+                    } else {
+                        handle.switch(LuaLongStringLexerRules::String)
+                    }
+                },
+
+            _ =>
+                |handle: LuaLongStringLexerHandle|
+                    handle.switch(LuaLongStringLexerRules::String),
+        }
+    }
+
+    let mut lexer = LuaLongStringLexer::new("[[]]", Default::default());
+    assert_eq!(lexer.next(), Some(Ok((0, "".to_owned(), 4))));
+}
