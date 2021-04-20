@@ -9,6 +9,7 @@ pub struct Var(pub String);
 
 pub struct Lexer {
     pub type_name: syn::Ident,
+    pub user_state_type: Option<syn::Type>,
     pub token_type: syn::Type,
     pub rules: Vec<Rule>,
 }
@@ -238,6 +239,15 @@ impl Parse for Rule {
 impl Parse for Lexer {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let type_name = input.parse::<syn::Ident>()?;
+
+        let user_state_type = if input.peek(syn::token::Paren) {
+            let parenthesized;
+            syn::parenthesized!(parenthesized in input);
+            Some(parenthesized.parse::<syn::Type>()?)
+        } else {
+            None
+        };
+
         input.parse::<syn::token::RArrow>()?;
         let token_type = input.parse::<syn::Type>()?;
         input.parse::<syn::token::Semi>()?;
@@ -249,6 +259,7 @@ impl Parse for Lexer {
 
         Ok(Lexer {
             type_name,
+            user_state_type,
             token_type,
             rules,
         })

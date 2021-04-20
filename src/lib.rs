@@ -17,6 +17,7 @@ use proc_macro::TokenStream;
 pub fn lexer_gen(input: TokenStream) -> TokenStream {
     let Lexer {
         type_name,
+        user_state_type,
         token_type,
         rules,
     } = syn::parse_macro_input!(input as Lexer);
