@@ -41,13 +41,15 @@ fn switch() {
     lexer_gen! {
         Lexer -> Token;
 
+        let whitespace = [' ' '\t' '\n']+;
+
         rule Init {
-            [' ' '\t' '\n']+,
+            $whitespace,
             "/*" => |_: &str| LexerAction::Switch(LexerRules::Comment),
         }
 
         rule Comment {
-            [' ' '\t' '\n']+,
+            $whitespace,
             "*/" => |_: &str| LexerAction::ReturnAndSwitch(Token::Comment, LexerRules::Init),
         }
     }
