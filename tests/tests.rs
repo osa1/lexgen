@@ -55,7 +55,8 @@ fn switch() {
         }
     }
 
-    let mut lexer = Lexer::new("  /* blah blah  */  ");
+    let mut lexer = Lexer::new("  /* blah blah  */  /**/");
     assert_eq!(lexer.next(), Some(Ok((2, Token::Comment, 18))));
+    assert_eq!(lexer.next(), Some(Ok((20, Token::Comment, 24))));
     assert_eq!(lexer.next(), None);
 }
