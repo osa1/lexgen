@@ -79,9 +79,21 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
         }
 
         // Compute closures of transition targets and add transitions to DFA
-        for (char, states) in char_transitions.into_iter() {
-            let closure: BTreeSet<NfaStateIdx> =
-                nfa.compute_state_closure(&states).into_iter().collect();
+        for (char, mut char_states) in char_transitions.into_iter() {
+            // For ranges that also cover the char we need to add the range transitions to the char
+            // transition
+            for (range, range_states) in range_transitions.iter() {
+                if char >= range.0 && char <= range.1 {
+                    for range_state in range_states {
+                        char_states.insert(*range_state);
+                    }
+                }
+            }
+
+            let closure: BTreeSet<NfaStateIdx> = nfa
+                .compute_state_closure(&char_states)
+                .into_iter()
+                .collect();
             let dfa_state = dfa_state_of_nfa_states(&mut dfa, &mut state_map, closure.clone());
             dfa.add_char_transition(current_dfa_state, char, dfa_state);
 

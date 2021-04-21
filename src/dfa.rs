@@ -43,12 +43,16 @@ impl<A> DFA<A> {
     }
 
     pub fn add_accepting_state(&mut self, state: StateIdx, value: A) {
-        let old = self.accepting.insert(state, value);
-        assert!(
-            old.is_none(),
-            "add_accepting_state overriding action in state={:?}",
-            state,
-        );
+        // TODO: Insertion order is going to be a problem
+        self.accepting.entry(state).or_insert(value);
+        // Old code that doesn't work when a char transitions overlaps with a range transition:
+        //
+        // let old = self.accepting.insert(state, value);
+        // assert!(
+        //     old.is_none(),
+        //     "add_accepting_state overriding action in state={:?}",
+        //     state,
+        // );
     }
 
     pub fn new_state(&mut self) -> StateIdx {

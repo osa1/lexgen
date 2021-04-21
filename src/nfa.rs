@@ -155,14 +155,19 @@ impl<A: Clone + std::fmt::Debug> NFA<A> {
         states = self.compute_state_closure(&states);
 
         for char in chars {
+            println!("states before = {:?}", states);
             println!("char = {}", char);
-            println!("states = {:?}", states);
 
             let mut next_states: FxHashSet<StateIdx> = Default::default();
 
             for state in &states {
-                if let Some(nexts) = self.states[state.0].char_transitions.get(&char) {
-                    next_states.extend(nexts.into_iter());
+                if let Some(char_nexts) = self.states[state.0].char_transitions.get(&char) {
+                    next_states.extend(char_nexts.into_iter());
+                    for (range, range_nexts) in &self.states[state.0].range_transitions {
+                        if char >= range.0 && char <= range.1 {
+                            next_states.extend(range_nexts.into_iter());
+                        }
+                    }
                 }
                 for ((range_begin, range_end), nexts) in &self.states[state.0].range_transitions {
                     if char >= *range_begin && char <= *range_end {
@@ -178,14 +183,13 @@ impl<A: Clone + std::fmt::Debug> NFA<A> {
             }
 
             states = self.compute_state_closure(&mut next_states);
+            println!("states after = {:?}", states);
         }
 
         let mut accepting_state_values: Vec<&A> = states
             .iter()
             .filter_map(|state| self.accepting.get(state))
             .collect();
-
-        assert!(accepting_state_values.len() <= 1);
 
         accepting_state_values.pop()
     }

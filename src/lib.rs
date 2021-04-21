@@ -92,6 +92,8 @@ mod tests {
         nfa: &NFA<A>,
         test_cases: Vec<(&str, Option<A>)>,
     ) {
+        println!("NFA=\n{}", nfa);
+
         for (str, expected) in &test_cases {
             assert_eq!(
                 nfa.simulate(&mut str.chars()),
@@ -102,6 +104,8 @@ mod tests {
         }
 
         let dfa = nfa_to_dfa(nfa);
+
+        println!("DFA=\n{}", dfa);
 
         for (str, expected) in &test_cases {
             assert_eq!(
@@ -419,5 +423,21 @@ mod tests {
         nfa.add_regex(&Default::default(), &Regex::Fail, 2);
 
         test_simulate(&nfa, vec![("a", None), ("ab", Some(1))]);
+    }
+
+    #[test]
+    fn range_and_char_confusion() {
+        let mut nfa: NFA<usize> = NFA::new();
+
+        nfa.add_regex(&Default::default(), &Regex::String("ab".to_owned()), 1);
+        nfa.add_regex(
+            &Default::default(),
+            &Regex::OneOrMore(Box::new(Regex::CharSet(CharSet(vec![CharOrRange::Range(
+                'a', 'z',
+            )])))),
+            2,
+        );
+
+        test_simulate(&nfa, vec![("ab", Some(1)), ("ac", Some(2))]);
     }
 }
