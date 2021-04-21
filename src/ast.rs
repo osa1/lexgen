@@ -99,7 +99,8 @@ impl Parse for Regex {
 
         while !(input.peek(syn::token::FatArrow)
             || input.peek(syn::token::Comma)
-            || input.peek(syn::token::Semi))
+            || input.peek(syn::token::Semi)
+            || input.is_empty())
         {
             if input.peek(syn::token::Star) {
                 let _ = input.parse::<syn::token::Star>()?;
