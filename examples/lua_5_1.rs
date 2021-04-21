@@ -1,9 +1,50 @@
+//! Lexes a given Lua 5.1 file and prints the tokens. Runs some tests when run without an argument.
+
 // TODOs:
 //
 // - Exclude newlines in strings
 // - Locale-dependant alphabetic chars in variables (???)
 
 use lexer_gen::lexer_gen;
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+
+    if args.len() == 1 {
+        run_tests();
+    } else {
+        let files = &args[1..];
+        for file in files {
+            let contents = std::fs::read_to_string(file).unwrap();
+            let lexer = Lexer::new(&contents, Default::default());
+            let mut tokens: Vec<Token> = vec![];
+            for token in lexer {
+                match token {
+                    Err(err) => {
+                        eprintln!("Unable to lex {:?}: {:?}", file, err);
+                        std::process::exit(1);
+                    }
+                    Ok((_, tok, _)) => {
+                        tokens.push(tok);
+                    }
+                }
+            }
+            println!("{:?}: {:?}", file, tokens);
+        }
+    }
+}
+
+fn run_tests() {
+    lex_lua_simple();
+    lex_lua_var();
+    lex_lua_string();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//                      Lexer definition and tests                            //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 enum Token {
@@ -257,8 +298,7 @@ fn ignore_pos<A, E>(ret: Option<Result<(usize, A, usize), E>>) -> Option<Result<
     ret.map(|res| res.map(|(_, a, _)| a))
 }
 
-#[test]
-fn parse_lua_string() {
+fn lex_lua_string() {
     let str = "
             \"test\"
             \"\\
@@ -276,8 +316,7 @@ test'\\\"\"
     );
 }
 
-#[test]
-fn parse_lua_var() {
+fn lex_lua_var() {
     let str = "ab ab1 ab_1_2 Aab";
     let mut lexer = Lexer::new(str, Default::default());
 
@@ -299,8 +338,7 @@ fn parse_lua_var() {
     );
 }
 
-#[test]
-fn parse_lua_simple() {
+fn lex_lua_simple() {
     let lexer = Lexer::new(
         "+ - * / % ^ # == ~= <= >= < > = ( ) { } [ ] \
          ; : , . .. ... and break do else elseif end \
