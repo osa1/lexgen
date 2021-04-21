@@ -91,8 +91,8 @@ pub fn add_re<A: Clone>(
             nfa.add_empty_transition(current, re2_init);
         }
 
-        Regex::Wildcard => {
-            nfa.add_wildcard_transition(current, cont);
+        Regex::Fail => {
+            nfa.add_fail_transition(current, cont);
         }
     }
 }

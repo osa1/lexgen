@@ -152,6 +152,7 @@ lexer_gen! {
         },
     },
 
+    // TODO: We should exclude newlines
     rule String {
         '"' => |mut handle: LexerHandle| {
             if handle.state().short_string_delim == Quote::Double {
@@ -168,7 +169,7 @@ lexer_gen! {
                 let str = handle.state().string_buf.clone();
                 handle.switch_and_return(LexerRules::Init, Token::String(str))
             } else {
-                handle.state().string_buf.push('\"');
+                handle.state().string_buf.push('\'');
                 handle.continue_()
             }
         },
@@ -227,11 +228,40 @@ lexer_gen! {
             handle.state().string_buf.push('\n');
             handle.continue_()
         },
+
+        _ => |mut handle: LexerHandle| {
+            let char = handle.match_().chars().next_back().unwrap();
+            handle.state().string_buf.push(char);
+            handle.continue_()
+        },
     },
 }
 
+fn ignore_pos<A, E>(ret: Option<Result<(usize, A, usize), E>>) -> Option<Result<A, E>> {
+    ret.map(|res| res.map(|(_, a, _)| a))
+}
+
 #[test]
-fn parse_lua() {
+fn parse_lua_string() {
+    let str = "
+            \"test\"
+            \"\\
+test'\\\"\"
+        ";
+    let mut lexer = Lexer::new(str, Default::default());
+
+    assert_eq!(
+        ignore_pos(lexer.next()),
+        Some(Ok(Token::String("test".to_owned())))
+    );
+    assert_eq!(
+        ignore_pos(lexer.next()),
+        Some(Ok(Token::String("\ntest'\"".to_owned())))
+    );
+}
+
+#[test]
+fn parse_lua_simple() {
     let lexer = Lexer::new(
         "+ - * / % ^ # == ~= <= >= < > = ( ) { } [ ] \
          ; : , . .. ... and break do else elseif end \

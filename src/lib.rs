@@ -103,12 +103,6 @@ mod tests {
 
         let dfa = nfa_to_dfa(nfa);
 
-        println!("NFA");
-        println!("{}", nfa);
-
-        println!("DFA");
-        println!("{}", dfa);
-
         for (str, expected) in &test_cases {
             assert_eq!(
                 dfa.simulate(&mut str.chars()),
@@ -373,47 +367,57 @@ mod tests {
         test_simulate(&nfa, vec![("ab", Some(())), ("aab", Some(()))]);
     }
 
+    // #[test]
+    // fn zero_or_more_wildcard_confusion_1() {
+    //     let mut nfa: NFA<()> = NFA::new();
+
+    //     let re = Regex::Concat(
+    //         Box::new(Regex::ZeroOrMore(Box::new(Regex::Wildcard))),
+    //         Box::new(Regex::String("aa".to_owned())),
+    //     );
+
+    //     nfa.add_regex(&Default::default(), &re, ());
+
+    //     test_simulate(&nfa, vec![("aa", Some(()))]);
+    // }
+
+    // #[test]
+    // fn simulate_wildcards() {
+    //     let mut nfa: NFA<()> = NFA::new();
+
+    //     let re = Regex::Concat(
+    //         Box::new(Regex::String("/*".to_owned())),
+    //         Box::new(Regex::Concat(
+    //             Box::new(Regex::ZeroOrMore(Box::new(Regex::Wildcard))),
+    //             Box::new(Regex::String("*/".to_owned())),
+    //         )),
+    //     );
+
+    //     nfa.add_regex(&Default::default(), &re, ());
+
+    //     test_simulate(
+    //         &nfa,
+    //         vec![
+    //             ("/**/", Some(())),
+    //             ("/* */", Some(())),
+    //             ("/***/", Some(())),
+    //             ("/* test */", Some(())),
+    //             ("/**test**/", Some(())),
+    //             ("/*/", None),
+    //             ("/**", None),
+    //             ("/** /", None),
+    //             ("/ **/", None),
+    //         ],
+    //     );
+    // }
+
     #[test]
-    fn zero_or_more_wildcard_confusion_1() {
-        let mut nfa: NFA<()> = NFA::new();
+    fn simulate_fail() {
+        let mut nfa: NFA<usize> = NFA::new();
 
-        let re = Regex::Concat(
-            Box::new(Regex::ZeroOrMore(Box::new(Regex::Wildcard))),
-            Box::new(Regex::String("aa".to_owned())),
-        );
+        nfa.add_regex(&Default::default(), &Regex::String("ab".to_owned()), 1);
+        nfa.add_regex(&Default::default(), &Regex::Fail, 2);
 
-        nfa.add_regex(&Default::default(), &re, ());
-
-        test_simulate(&nfa, vec![("aa", Some(()))]);
-    }
-
-    #[test]
-    fn simulate_wildcards() {
-        let mut nfa: NFA<()> = NFA::new();
-
-        let re = Regex::Concat(
-            Box::new(Regex::String("/*".to_owned())),
-            Box::new(Regex::Concat(
-                Box::new(Regex::ZeroOrMore(Box::new(Regex::Wildcard))),
-                Box::new(Regex::String("*/".to_owned())),
-            )),
-        );
-
-        nfa.add_regex(&Default::default(), &re, ());
-
-        test_simulate(
-            &nfa,
-            vec![
-                ("/**/", Some(())),
-                ("/* */", Some(())),
-                ("/***/", Some(())),
-                ("/* test */", Some(())),
-                ("/**test**/", Some(())),
-                ("/*/", None),
-                ("/**", None),
-                ("/** /", None),
-                ("/ **/", None),
-            ],
-        );
+        test_simulate(&nfa, vec![("a", None), ("ab", Some(1))]);
     }
 }

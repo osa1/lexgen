@@ -14,7 +14,7 @@ pub struct StateIdx(usize);
 struct State {
     char_transitions: FxHashMap<char, StateIdx>,
     range_transitions: FxHashMap<(char, char), StateIdx>,
-    wildcard_transition: Option<StateIdx>,
+    fail_transition: Option<StateIdx>,
 }
 
 impl State {
@@ -22,7 +22,7 @@ impl State {
         State {
             char_transitions: Default::default(),
             range_transitions: Default::default(),
-            wildcard_transition: None,
+            fail_transition: None,
         }
     }
 }
@@ -82,9 +82,9 @@ impl<A> DFA<A> {
         assert!(old.is_none());
     }
 
-    pub fn add_wildcard_transition(&mut self, state: StateIdx, next: StateIdx) {
-        assert!(self.states[state.0].wildcard_transition.is_none());
-        self.states[state.0].wildcard_transition = Some(next);
+    pub fn add_fail_transition(&mut self, state: StateIdx, next: StateIdx) {
+        assert!(self.states[state.0].fail_transition.is_none());
+        self.states[state.0].fail_transition = Some(next);
     }
 }
 
@@ -100,7 +100,7 @@ impl<A: Clone> DFA<A> {
         for state in &other.states {
             let mut char_transitions: FxHashMap<char, StateIdx> = Default::default();
             let mut range_transitions: FxHashMap<(char, char), StateIdx> = Default::default();
-            let mut wildcard_transition: Option<StateIdx> = None;
+            let mut fail_transition: Option<StateIdx> = None;
 
             for (char, next) in &state.char_transitions {
                 char_transitions.insert(*char, StateIdx(next.0 + n_current_states));
@@ -110,14 +110,14 @@ impl<A: Clone> DFA<A> {
                 range_transitions.insert(*range, StateIdx(next.0 + n_current_states));
             }
 
-            if let Some(next) = &state.wildcard_transition {
-                wildcard_transition = Some(StateIdx(next.0 + n_current_states));
+            if let Some(next) = &state.fail_transition {
+                fail_transition = Some(StateIdx(next.0 + n_current_states));
             }
 
             self.states.push(State {
                 char_transitions,
                 range_transitions,
-                wildcard_transition,
+                fail_transition,
             });
         }
 
@@ -148,7 +148,7 @@ impl<A> DFA<A> {
                 }
             }
 
-            if let Some(next) = self.states[state.0].wildcard_transition {
+            if let Some(next) = self.states[state.0].fail_transition {
                 state = next;
                 continue;
             }
@@ -180,12 +180,12 @@ impl<A> Display for DFA<A> {
             let State {
                 char_transitions,
                 range_transitions,
-                wildcard_transition,
+                fail_transition,
             } = state;
 
             let mut first = true;
 
-            if let Some(next) = wildcard_transition {
+            if let Some(next) = fail_transition {
                 writeln!(f, "_ -> {}", next)?;
                 first = false;
             }
@@ -365,6 +365,7 @@ pub fn reify(
 
             fn next(&mut self) -> Option<Self::Item> {
                 loop {
+                    println!("state = {:?}, next char = {:?}", self.state, self.iter.peek());
                     match self.state {
                         #(#match_arms,)*
                     }
@@ -416,7 +417,7 @@ fn generate_state_arms(
         State {
             char_transitions,
             range_transitions,
-            wildcard_transition,
+            fail_transition,
         },
     ) in states.iter().enumerate()
     {
@@ -425,7 +426,7 @@ fn generate_state_arms(
             state_idx,
             char_transitions,
             range_transitions,
-            wildcard_transition,
+            fail_transition,
             pop_match,
         );
 
@@ -516,7 +517,7 @@ fn generate_state_char_arms(
     state_idx: usize,
     char_transitions: &FxHashMap<char, StateIdx>,
     range_transitions: &FxHashMap<(char, char), StateIdx>,
-    wildcard_transition: &Option<StateIdx>,
+    fail_transition: &Option<StateIdx>,
     pop_match: &TokenStream,
 ) -> Vec<TokenStream> {
     // Arms of the `match` for the current character
@@ -593,7 +594,7 @@ fn generate_state_char_arms(
     }
 
     // Add default case
-    match wildcard_transition {
+    match fail_transition {
         None => state_char_arms.push(quote!(_ => #pop_match)),
         Some(StateIdx(next_state)) => {
             state_char_arms.push(quote!(_ => { self.state = #next_state; }))

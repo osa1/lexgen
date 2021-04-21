@@ -49,7 +49,7 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
         let mut char_transitions: FxHashMap<char, FxHashSet<NfaStateIdx>> = Default::default();
         let mut range_transitions: FxHashMap<(char, char), FxHashSet<NfaStateIdx>> =
             Default::default();
-        let mut wildcard_transitions: FxHashSet<NfaStateIdx> = Default::default();
+        let mut fail_transitions: FxHashSet<NfaStateIdx> = Default::default();
 
         for nfa_state in current_nfa_states.iter().copied() {
             if let Some(value) = nfa.get_accepting_state(nfa_state) {
@@ -72,19 +72,9 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
                     .extend(next_states.iter().copied());
             }
 
-            // Collect wildcard transitions
-            for wild_next in nfa.wildcard_transitions(nfa_state) {
-                wildcard_transitions.insert(*wild_next);
-                for (_char, nexts) in char_transitions.iter_mut() {
-                    if !nexts.iter().any(|next| nfa.is_accepting_state(*next)) {
-                        nexts.insert(*wild_next);
-                    }
-                }
-                for (_range, nexts) in range_transitions.iter_mut() {
-                    if !nexts.iter().any(|next| nfa.is_accepting_state(*next)) {
-                        nexts.insert(*wild_next);
-                    }
-                }
+            // Collect failure transitions
+            for fail_next in nfa.fail_transitions(nfa_state) {
+                fail_transitions.insert(*fail_next);
             }
         }
 
@@ -107,13 +97,13 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
             work_list.push(closure);
         }
 
-        if !wildcard_transitions.is_empty() {
+        if !fail_transitions.is_empty() {
             let closure: BTreeSet<NfaStateIdx> = nfa
-                .compute_state_closure(&wildcard_transitions)
+                .compute_state_closure(&fail_transitions)
                 .into_iter()
                 .collect();
             let dfa_state = dfa_state_of_nfa_states(&mut dfa, &mut state_map, closure.clone());
-            dfa.add_wildcard_transition(current_dfa_state, dfa_state);
+            dfa.add_fail_transition(current_dfa_state, dfa_state);
 
             work_list.push(closure);
         }
