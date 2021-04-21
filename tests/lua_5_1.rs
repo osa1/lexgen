@@ -1,3 +1,8 @@
+// TODOs:
+//
+// - Exclude newlines in strings
+// - Locale-dependant alphabetic chars in variables (???)
+
 use lexer_gen::lexer_gen;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -88,6 +93,13 @@ lexer_gen! {
 
     let whitespace = [' ' '\t' '\n'];
 
+    // > Names (also called identifiers) in Lua can be any string of letters, digits, and
+    // > underscores, not beginning with a digit. This coincides with the definition of names in
+    // > most languages. (The definition of letter depends on the current locale: any character
+    // > considered alphabetic by the current locale can be used in an identifier.)
+    let var_init = ['a'-'z' 'A'-'Z' '_'];
+    let var_subseq = $var_init | ['0'-'9'];
+
     rule Init {
         $whitespace,
 
@@ -150,9 +162,13 @@ lexer_gen! {
             handle.state().string_buf.clear();
             handle.switch(LexerRules::String)
         },
+
+        $var_init $var_subseq+ => |handle: LexerHandle| {
+            let match_ = handle.match_().to_owned();
+            handle.return_(Token::Var(match_))
+        },
     },
 
-    // TODO: We should exclude newlines
     rule String {
         '"' => |mut handle: LexerHandle| {
             if handle.state().short_string_delim == Quote::Double {
@@ -257,6 +273,29 @@ test'\\\"\"
     assert_eq!(
         ignore_pos(lexer.next()),
         Some(Ok(Token::String("\ntest'\"".to_owned())))
+    );
+}
+
+#[test]
+fn parse_lua_var() {
+    let str = "ab ab1 ab_1_2 Aab";
+    let mut lexer = Lexer::new(str, Default::default());
+
+    assert_eq!(
+        ignore_pos(lexer.next()),
+        Some(Ok(Token::Var("ab".to_owned())))
+    );
+    assert_eq!(
+        ignore_pos(lexer.next()),
+        Some(Ok(Token::Var("ab1".to_owned())))
+    );
+    assert_eq!(
+        ignore_pos(lexer.next()),
+        Some(Ok(Token::Var("ab_1_2".to_owned())))
+    );
+    assert_eq!(
+        ignore_pos(lexer.next()),
+        Some(Ok(Token::Var("Aab".to_owned())))
     );
 }
 
