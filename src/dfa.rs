@@ -280,6 +280,7 @@ pub fn reify(
         // The "handle" type passed to user actions. Allows getting the current match, modifying
         // user state, returning tokens, and switching to a different lexer state.
         struct #handle_type_name<'lexer, 'input> {
+            iter: &'lexer mut std::iter::Peekable<std::str::CharIndices<'input>>,
             match_: &'input str,
             user_state: &'lexer mut #user_state_type,
         }
@@ -326,6 +327,10 @@ pub fn reify(
 
             fn match_(&self) -> &'input str {
                 self.match_
+            }
+
+            fn peek(&mut self) -> Option<char> {
+                self.iter.peek().map(|(_, char)| *char)
             }
         }
 
@@ -478,6 +483,7 @@ fn generate_state_arms(
             quote!({
                 let str = &self.input[self.current_match_start..self.current_match_end];
                 let handle = #handle_type_name {
+                    iter: &mut self.iter,
                     match_: str,
                     user_state: &mut self.user_state,
                 };
