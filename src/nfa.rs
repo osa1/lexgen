@@ -5,7 +5,7 @@ use fxhash::{FxHashMap, FxHashSet};
 
 /// Non-deterministic finite automate, parameterized on values of accepting states.
 #[derive(Debug)]
-pub struct NFA<A: Clone> {
+pub struct NFA<A> {
     states: Vec<State>,
     accepting: FxHashMap<StateIdx, A>,
 }
@@ -44,8 +44,8 @@ impl<A: Clone> NFA<A> {
         StateIdx(0)
     }
 
-    pub fn get_accepting_state(&self, state: StateIdx) -> Option<A> {
-        self.accepting.get(&state).cloned()
+    pub fn get_accepting_state(&self, state: StateIdx) -> Option<&A> {
+        self.accepting.get(&state)
     }
 
     pub fn char_transitions(

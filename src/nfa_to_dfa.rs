@@ -53,7 +53,7 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
 
         for nfa_state in current_nfa_states.iter().copied() {
             if let Some(value) = nfa.get_accepting_state(nfa_state) {
-                dfa.add_accepting_state(current_dfa_state, value);
+                dfa.add_accepting_state(current_dfa_state, value.clone());
             }
 
             // Collect char transitions
