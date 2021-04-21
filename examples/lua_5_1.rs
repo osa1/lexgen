@@ -38,6 +38,7 @@ fn run_tests() {
     lex_lua_simple();
     lex_lua_var();
     lex_lua_string();
+    lex_lua_long_string();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -107,7 +108,7 @@ enum Keyword {
 #[derive(Debug, Default, Clone)]
 struct LexerState {
     /// Number of opening `=`s seen when parsing a long string
-    lon_string_opening_eqs: usize,
+    long_string_opening_eqs: usize,
     /// Number of closing `=`s seen when parsing a long string
     long_string_closing_eqs: usize,
     /// When parsing a short string, whether it's started with a double or single quote
@@ -162,7 +163,6 @@ lexer_gen! {
         ")" => |handle: LexerHandle| handle.return_(Token::RParen),
         "{" => |handle: LexerHandle| handle.return_(Token::LBrace),
         "}" => |handle: LexerHandle| handle.return_(Token::RBrace),
-        "[" => |handle: LexerHandle| handle.return_(Token::LBracket),
         "]" => |handle: LexerHandle| handle.return_(Token::RBracket),
         ";" => |handle: LexerHandle| handle.return_(Token::Semicolon),
         ":" => |handle: LexerHandle| handle.return_(Token::Colon),
@@ -204,11 +204,70 @@ lexer_gen! {
             handle.switch(LexerRules::String)
         },
 
+        "[" => |mut handle: LexerHandle| {
+            match handle.peek() {
+                Some('[') | Some('=') => {
+                    handle.state().long_string_opening_eqs = 0;
+                    handle.switch(LexerRules::LongStringBracketLeft)
+                }
+                _ => handle.return_(Token::LBracket),
+            }
+        },
+
         $var_init $var_subseq+ => |handle: LexerHandle| {
             let match_ = handle.match_().to_owned();
             handle.return_(Token::Var(match_))
         },
     },
+
+    rule LongStringBracketLeft {
+        '=' =>
+            |mut handle: LexerHandle| {
+                handle.state().long_string_opening_eqs += 1;
+                handle.continue_()
+            },
+
+        '[' =>
+            |handle: LexerHandle|
+                handle.switch(LexerRules::LongString),
+    },
+
+    rule LongString {
+        ']' =>
+            |mut handle: LexerHandle| {
+                handle.state().long_string_closing_eqs = 0;
+                handle.switch(LexerRules::LongStringBracketRight)
+            },
+
+        _ =>
+            |handle: LexerHandle|
+                handle.continue_(),
+    },
+
+    rule LongStringBracketRight {
+        '=' =>
+            |mut handle: LexerHandle| {
+                handle.state().long_string_closing_eqs += 1;
+                handle.continue_()
+            },
+
+        ']' =>
+            |mut handle: LexerHandle| {
+                let state = handle.state();
+                let left_eqs = state.long_string_opening_eqs;
+                let right_eqs = state.long_string_closing_eqs;
+                if left_eqs == right_eqs {
+                    let match_ = handle.match_[left_eqs + 2..handle.match_.len() - right_eqs - 2].to_owned();
+                    handle.switch_and_return(LexerRules::Init, Token::String(match_))
+                } else {
+                    handle.switch(LexerRules::String)
+                }
+            },
+
+        _ =>
+            |handle: LexerHandle|
+                handle.switch(LexerRules::String),
+    }
 
     rule String {
         '"' => |mut handle: LexerHandle| {
@@ -314,6 +373,19 @@ test'\\\"\"
         ignore_pos(lexer.next()),
         Some(Ok(Token::String("\ntest'\"".to_owned())))
     );
+}
+
+fn lex_lua_long_string() {
+    let mut lexer = Lexer::new("[[ ]] [=[test]=] [=[ ]]", Default::default());
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((0, Token::String(" ".to_owned()), 5)))
+    );
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((6, Token::String("test".to_owned()), 16)))
+    );
+    assert!(matches!(lexer.next(), Some(Err(_))));
 }
 
 fn lex_lua_var() {
