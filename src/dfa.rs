@@ -233,12 +233,6 @@ pub fn reify(
     type_name: syn::Ident,
     token_type: syn::Type,
 ) -> TokenStream {
-    let pop_match: TokenStream = quote!(match self.pop_match_or_fail() {
-        Ok(None) => continue,
-        Ok(Some(tok)) => return Some(Ok(tok)),
-        Err(err) => return Some(Err(err)),
-    });
-
     let user_state_type = user_state_type
         .map(|ty| ty.into_token_stream())
         .unwrap_or(quote!(()));
@@ -247,7 +241,7 @@ pub fn reify(
 
     let handle_type_name = syn::Ident::new(&(type_name.to_string() + "Handle"), type_name.span());
 
-    let match_arms = generate_state_arms(dfa, &handle_type_name, &pop_match, &action_enum_name);
+    let match_arms = generate_state_arms(dfa, &handle_type_name, &action_enum_name);
 
     let rule_name_enum_name = syn::Ident::new(&(type_name.to_string() + "Rules"), type_name.span());
     let rule_name_idents: Vec<syn::Ident> = rule_states
@@ -294,7 +288,6 @@ pub fn reify(
             user_state: #user_state_type,
             input: &'input str,
             iter: std::iter::Peekable<std::str::CharIndices<'input>>,
-            match_stack: Vec<Option<(usize, #token_type, usize)>>,
             current_match_start: usize,
             current_match_end: usize,
         }
@@ -346,31 +339,12 @@ pub fn reify(
                     user_state: Default::default(),
                     input,
                     iter: input.char_indices().peekable(),
-                    match_stack: vec![],
                     current_match_start: 0,
                     current_match_end: 0,
                 }
             }
 
             #switch_method
-
-            fn pop_match_or_fail(&mut self) -> Result<Option<(usize, #token_type, usize)>, LexerError> {
-                match self.match_stack.pop() {
-                    Some(None) => {
-                        self.match_stack.clear();
-                        self.state = self.initial_state;
-                        Ok(None)
-                    }
-                    Some(Some(tok)) => {
-                        self.match_stack.clear();
-                        self.state = self.initial_state;
-                        Ok(Some(tok))
-                    }
-                    None => Err(LexerError {
-                        char_idx: self.current_match_start,
-                    }),
-                }
-            }
         }
 
         impl<'input> Iterator for #type_name<'input> {
@@ -378,7 +352,7 @@ pub fn reify(
 
             fn next(&mut self) -> Option<Self::Item> {
                 loop {
-                    // println!("state = {:?}, next char = {:?}", self.state, self.iter.peek());
+                    // println!("state = {:?}, next char = {:?}, #matches = {}", self.state, self.iter.peek());
                     match self.state {
                         #(#match_arms,)*
                     }
@@ -418,7 +392,6 @@ fn generate_switch(
 fn generate_state_arms(
     dfa: &DFA<Option<syn::Expr>>,
     handle_type_name: &syn::Ident,
-    pop_match: &TokenStream,
     action_enum_name: &syn::Ident,
 ) -> Vec<TokenStream> {
     let DFA { states, accepting } = dfa;
@@ -434,21 +407,26 @@ fn generate_state_arms(
         },
     ) in states.iter().enumerate()
     {
-        let state_char_arms = generate_state_char_arms(
-            accepting,
-            state_idx,
-            char_transitions,
-            range_transitions,
-            fail_transition,
-            pop_match,
-        );
-
         let accepting = accepting.get(&StateIdx(state_idx));
 
         let state_code: TokenStream = if state_idx == 0 {
             // Initial state. Difference from other states is we return `None` when the
             // iterator ends. In non-initial states EOF returns the last (longest) match, or
             // fails (error).
+            let action = quote!({
+                return Some(Err(LexerError {
+                    char_idx: self.current_match_start,
+                }));
+            });
+
+            let state_char_arms = generate_state_char_arms(
+                false,
+                char_transitions,
+                range_transitions,
+                fail_transition,
+                &action,
+            );
+
             quote!(
                 match self.iter.next() {
                     None => return None,
@@ -463,9 +441,12 @@ fn generate_state_arms(
             )
         } else if let Some(rhs) = accepting {
             // Non-initial, accepting state
-            let push = match rhs {
-                None => quote!(self.match_stack.push(None)),
-                Some(rhs) => quote!(
+            let action = match rhs {
+                None => quote!({
+                    self.state = self.initial_state;
+                    continue;
+                }),
+                Some(rhs) => quote!({
                     let rhs: fn(#handle_type_name) -> #action_enum_name = #rhs;
 
                     let str = &self.input[self.current_match_start..self.current_match_end];
@@ -476,39 +457,72 @@ fn generate_state_arms(
                     };
 
                     match rhs(handle) {
-                        #action_enum_name::Continue =>
-                            self.match_stack.push(None),
-                        #action_enum_name::Return(tok) =>
-                            self.match_stack.push(Some((self.current_match_start, tok, self.current_match_end))),
+                        #action_enum_name::Continue => {
+                            self.state = self.initial_state;
+                            continue;
+                        }
+                        #action_enum_name::Return(tok) => {
+                            self.state = self.initial_state;
+                            return Some(Ok((self.current_match_start, tok, self.current_match_end)));
+                        }
                         #action_enum_name::Switch(rule_set) => {
                             self.switch(rule_set);
                             continue;
                         }
                         #action_enum_name::SwitchAndReturn(tok, rule_set) => {
-                            self.match_stack.clear();
                             self.switch(rule_set);
                             return Some(Ok((self.current_match_start, tok, self.current_match_end)));
                         }
                     }
-                ),
+                }),
             };
-            quote!({
-                #push;
 
-                match self.iter.peek() {
-                    None => #pop_match,
-                    Some((char_idx, char)) => {
-                        match char {
-                            #(#state_char_arms,)*
+            let state_char_arms = generate_state_char_arms(
+                true,
+                char_transitions,
+                range_transitions,
+                fail_transition,
+                &action,
+            );
+
+            if char_transitions.is_empty()
+                && range_transitions.is_empty()
+                && fail_transition.is_none()
+            {
+                action
+            } else {
+                quote!({
+                    match self.iter.peek() {
+                        None => {
+                            #action
+                        }
+                        Some((char_idx, char)) => {
+                            match char {
+                                #(#state_char_arms,)*
+                            }
                         }
                     }
-                }
-            })
+                })
+            }
         } else {
             // Non-initial, non-accepting state. In a non-accepting state we want to consume a
             // character anyway so we can use `next` instead of `peek`.
+            let action = quote!({
+                return Some(Err(LexerError {
+                    char_idx: self.current_match_start,
+                }));
+            });
+
+            let state_char_arms = generate_state_char_arms(
+                false,
+                char_transitions,
+                range_transitions,
+                fail_transition,
+                &action,
+            );
+
             quote!(match self.iter.next() {
-                None => #pop_match,
+                None => return Some(Err(LexerError { char_idx: self.current_match_start })),
                 Some((char_idx, char)) => {
                     self.current_match_end += char.len_utf8();
                     match char {
@@ -519,7 +533,7 @@ fn generate_state_arms(
         };
 
         match_arms.push(quote!(
-                #state_idx => #state_code
+            #state_idx => #state_code
         ));
     }
 
@@ -528,18 +542,17 @@ fn generate_state_arms(
     match_arms
 }
 
-/// Generate arms on `match self.iter.next() { ... }` or `match self.iter.peek() { ... }` of DFA state.
+/// Generate arms on `match self.iter.next() { ... }` (for non-matching states) or `match
+/// self.iter.peek() { ... }` (for matching states) of DFA state.
 fn generate_state_char_arms(
-    accepting: &FxHashMap<StateIdx, Option<syn::Expr>>,
-    state_idx: usize,
+    accepting: bool,
     char_transitions: &FxHashMap<char, StateIdx>,
     range_transitions: &FxHashMap<(char, char), StateIdx>,
     fail_transition: &Option<StateIdx>,
-    pop_match: &TokenStream,
+    action: &TokenStream,
 ) -> Vec<TokenStream> {
     // Arms of the `match` for the current character
     let mut state_char_arms: Vec<TokenStream> = vec![];
-    let accepting = accepting.get(&StateIdx(state_idx));
 
     // Add char transitions. Collect characters for next states, to be able to use or
     // patterns in arms and reduce code size
@@ -551,7 +564,7 @@ fn generate_state_char_arms(
     for (StateIdx(next_state), chars) in state_chars.iter() {
         let pat = quote!(#(#chars)|*);
 
-        if accepting.is_some() {
+        if accepting {
             // In an accepting state we only consume the next character if we're making a
             // transition. See `state_code` below for where we use `peek` instead of `next`
             // in accepting states.
@@ -576,11 +589,7 @@ fn generate_state_char_arms(
     }
 
     for (StateIdx(next_state), mut ranges) in state_ranges.into_iter() {
-        let x = if accepting.is_some() {
-            quote!(*x)
-        } else {
-            quote!(x)
-        };
+        let x = if accepting { quote!(*x) } else { quote!(x) };
         let guard = if ranges.len() == 1 {
             let (range_begin, range_end) = ranges.pop().unwrap();
             quote!(#x >= #range_begin && #x <= #range_end)
@@ -593,7 +602,7 @@ fn generate_state_char_arms(
             guard
         };
 
-        if accepting.is_some() {
+        if accepting {
             state_char_arms.push(quote!(
                 x if #guard => {
                     self.current_match_end += x.len_utf8();
@@ -612,7 +621,7 @@ fn generate_state_char_arms(
 
     // Add default case
     match fail_transition {
-        None => state_char_arms.push(quote!(_ => #pop_match)),
+        None => state_char_arms.push(quote!(_ => #action)),
         Some(StateIdx(next_state)) => {
             state_char_arms.push(quote!(_ => { self.state = #next_state; }))
         }

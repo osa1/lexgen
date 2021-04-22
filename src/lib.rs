@@ -45,8 +45,14 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                     for rule in rules {
                         nfa.add_regex(&bindings, &rule.lhs, rule.rhs.clone());
                     }
+
+                    // println!("NFA=\n{}", nfa);
+
                     let dfa_ = nfa_to_dfa(&nfa);
                     let initial_state = dfa_.initial_state();
+
+                    // println!("DFA=\n{}", dfa_);
+
                     dfa = Some(dfa_);
                     if let Some(_) = dfas.insert(name.to_string(), initial_state) {
                         panic!("Rule set {:?} is defined multiple times", name.to_string());
@@ -369,6 +375,23 @@ mod tests {
         nfa.add_regex(&Default::default(), &re, ());
 
         test_simulate(&nfa, vec![("ab", Some(())), ("aab", Some(()))]);
+    }
+
+    #[test]
+    fn zero_or_more_concat_confusion_3() {
+        let mut nfa: NFA<()> = NFA::new();
+
+        let re = Regex::Concat(
+            Box::new(Regex::Concat(
+                Box::new(Regex::Char('a')),
+                Box::new(Regex::ZeroOrMore(Box::new(Regex::Char('a')))),
+            )),
+            Box::new(Regex::Char('a')),
+        );
+
+        nfa.add_regex(&Default::default(), &re, ());
+
+        test_simulate(&nfa, vec![("a", None), ("aa", Some(())), ("aaa", Some(()))]);
     }
 
     // #[test]
