@@ -243,7 +243,7 @@ lexer_gen! {
             let match_ = handle.match_().to_owned();
             handle.return_(Token::Number(match_))
         },
-    },
+    }
 
     rule LongStringBracketLeft {
         '=' =>
@@ -255,7 +255,7 @@ lexer_gen! {
         '[' =>
             |handle: LexerHandle|
                 handle.switch(LexerRules::LongString),
-    },
+    }
 
     rule LongString {
         ']' =>
@@ -267,7 +267,7 @@ lexer_gen! {
         _ =>
             |handle: LexerHandle|
                 handle.continue_(),
-    },
+    }
 
     rule LongStringBracketRight {
         '=' =>
@@ -380,7 +380,7 @@ lexer_gen! {
             handle.state().string_buf.push(char);
             handle.continue_()
         },
-    },
+    }
 
     rule EnterComment {
         '[' => |mut handle: LexerHandle| {
@@ -397,7 +397,7 @@ lexer_gen! {
 
         _ => |handle: LexerHandle|
             handle.switch(LexerRules::Comment),
-    },
+    }
 
     rule Comment {
         '\n' => |handle: LexerHandle|
@@ -405,7 +405,7 @@ lexer_gen! {
 
         _ => |handle: LexerHandle|
             handle.continue_(),
-    },
+    }
 }
 
 fn ignore_pos<A, E>(ret: Option<Result<(usize, A, usize), E>>) -> Option<Result<A, E>> {

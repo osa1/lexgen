@@ -104,7 +104,7 @@ fn counting() {
                     *handle.state() = 0;
                     handle.switch(LexerRules::Count)
                 },
-        },
+        }
 
         rule Count {
             '=' =>
@@ -119,7 +119,7 @@ fn counting() {
                     let n = *handle.state();
                     handle.switch_and_return(LexerRules::Init, n)
                 },
-        },
+        }
     }
 
     let mut lexer = Lexer::new("[[ [=[ [==[", 0);
@@ -148,7 +148,7 @@ fn lua_long_strings() {
                     *handle.state() = Default::default();
                     handle.switch(LuaLongStringLexerRules::LeftBracket)
                 },
-        },
+        }
 
         rule LeftBracket {
             '=' =>
@@ -160,7 +160,7 @@ fn lua_long_strings() {
             '[' =>
                 |handle: LuaLongStringLexerHandle|
                     handle.switch(LuaLongStringLexerRules::String),
-        },
+        }
 
         rule String {
             ']' =>
@@ -172,7 +172,7 @@ fn lua_long_strings() {
             _ =>
                 |handle: LuaLongStringLexerHandle|
                     handle.continue_(),
-        },
+        }
 
         rule RightBracket {
             '=' =>

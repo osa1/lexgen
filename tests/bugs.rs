@@ -36,7 +36,7 @@ fn wildcard_confusion() {
                 handle.state().buf.push(char);
                 handle.continue_()
             },
-        },
+        }
     }
 
     let mut lexer = Lexer::new("test\"", Default::default());

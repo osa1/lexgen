@@ -227,7 +227,7 @@ impl Parse for Rule {
             while !braced.is_empty() {
                 single_rules.push(SingleRule::parse(&braced)?);
             }
-            // Consume trailing comma
+            // Consume optional trailing comma
             let _ = input.parse::<syn::token::Comma>();
             Ok(Rule::RuleSet {
                 name: rule_name,
