@@ -1,3 +1,7 @@
+//! Please see the [project README][1] for usage.
+//!
+//! [1]: https://github.com/osa1/lexgen
+
 mod ast;
 mod dfa;
 mod display;
