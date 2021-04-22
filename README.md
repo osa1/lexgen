@@ -62,12 +62,12 @@ require a pre-processing step when building.
 My goal with lexgen is to have a feature-complete and easy to use lexer
 generator.
 
-# Usage
+## Usage
 
 lexgen doesn't require a build step. Just add it as a dependency in your
 `Cargo.toml`.
 
-# lexgen syntax
+## Lexer syntax
 
 lexgen lexers start with type of the generated lexer struct, optional user state
 part, and the token type (type of values returned by user actions). For example:
@@ -184,6 +184,53 @@ specified by the user. If the lexer name is `Lexer`, then these types are:
     example below.
   - `fn switch_and_return(self, rule: LexerRule, token: <user token type>)`:
     switches to the given lexer state and returns the given token.
+
+## Stateful lexer example
+
+Here's an example lexer that counts number of `=`s appear between two `[`s:
+
+```rust
+lexer! {
+    Lexer(usize) -> usize;
+
+    rule Init {
+        ' ',
+
+        '[' =>
+            |mut lexer| {
+                *lexer.state() = 0; // line 9
+                lexer.switch(LexerRule::Count) // line 10
+            },
+    }
+
+    rule Count {
+        '=' =>
+            |mut lexer| {
+                let n = *lexer.state();
+                *lexer.state() = n + 1; // line 18
+                lexer.continue_() // line 19
+            },
+
+        '[' =>
+            |mut lexer| {
+                let n = *lexer.state();
+                lexer.switch_and_return(LexerRule::Init, n) // line 25
+            },
+    }
+}
+
+let mut lexer = Lexer::new("[[ [=[ [==[");
+assert_eq!(lexer.next(), Some(Ok((0, 0, 2))));
+assert_eq!(lexer.next(), Some(Ok((3, 1, 6))));
+assert_eq!(lexer.next(), Some(Ok((7, 2, 11))));
+assert_eq!(lexer.next(), None);
+```
+
+Initially (the `Init` rule set) we skip spaces. When we see a `[` we initialize
+the user state (line 9) and switch to the `Count` state (line 10). In `Count`,
+each `=` increments the user state by one (line 18) and just skips the match
+(line 19). A `[` in the `Count` states returns the current number and switches
+to the `Init` state (line 25).
 
 [1]: https://github.com/osa1/lexgen/blob/main/tests/tests.rs
 [2]: https://github.com/osa1/lexgen/blob/main/examples/lua_5_1.rs
