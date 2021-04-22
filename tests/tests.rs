@@ -1,4 +1,4 @@
-use lexer_gen::lexer_gen;
+use lexer_gen::lexer;
 
 #[test]
 fn simple() {
@@ -7,7 +7,7 @@ fn simple() {
         Id(String),
     }
 
-    lexer_gen! {
+    lexer! {
         Lexer -> Token;
 
         let init = ['a'-'z'];
@@ -45,7 +45,7 @@ fn switch_user_state() {
 
     type CommentDepth = usize;
 
-    lexer_gen! {
+    lexer! {
         Lexer(CommentDepth) -> Token;
 
         let whitespace = [' ' '\t' '\n']+;
@@ -93,7 +93,7 @@ fn switch_user_state() {
 
 #[test]
 fn counting() {
-    lexer_gen! {
+    lexer! {
         Lexer(usize) -> usize;
 
         rule Init {
@@ -137,7 +137,7 @@ fn lua_long_strings() {
         right_size: usize,
     }
 
-    lexer_gen! {
+    lexer! {
         LuaLongStringLexer(StringBracketSize) -> String;
 
         rule Init {

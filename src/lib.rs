@@ -14,7 +14,7 @@ use fxhash::FxHashMap;
 use proc_macro::TokenStream;
 
 #[proc_macro]
-pub fn lexer_gen(input: TokenStream) -> TokenStream {
+pub fn lexer(input: TokenStream) -> TokenStream {
     let Lexer {
         type_name,
         user_state_type,

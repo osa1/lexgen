@@ -1,4 +1,4 @@
-use lexer_gen::lexer_gen;
+use lexer_gen::lexer;
 
 #[test]
 fn wildcard_confusion() {
@@ -12,7 +12,7 @@ fn wildcard_confusion() {
         buf: String,
     }
 
-    lexer_gen! {
+    lexer! {
         Lexer(LexerState) -> String;
 
         let whitespace = [' ' '\t' '\n'];

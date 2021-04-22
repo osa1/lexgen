@@ -5,7 +5,7 @@
 // - Exclude newlines in strings
 // - Locale-dependant alphabetic chars in variables (???)
 
-use lexer_gen::lexer_gen;
+use lexer_gen::lexer;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -136,7 +136,7 @@ impl Default for Quote {
     }
 }
 
-lexer_gen! {
+lexer! {
     Lexer(LexerState) -> Token;
 
     let whitespace = [' ' '\t' '\n'];
