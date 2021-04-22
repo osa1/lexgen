@@ -198,8 +198,8 @@ lexer! {
 
         '[' =>
             |mut lexer| {
-                *lexer.state() = 0; // line 9
-                lexer.switch(LexerRule::Count) // line 10
+                *lexer.state() = 0;                     // line 9
+                lexer.switch(LexerRule::Count)          // line 10
             },
     }
 
@@ -207,8 +207,8 @@ lexer! {
         '=' =>
             |mut lexer| {
                 let n = *lexer.state();
-                *lexer.state() = n + 1; // line 18
-                lexer.continue_() // line 19
+                *lexer.state() = n + 1;                 // line 18
+                lexer.continue_()                       // line 19
             },
 
         '[' =>
@@ -231,6 +231,35 @@ the user state (line 9) and switch to the `Count` state (line 10). In `Count`,
 each `=` increments the user state by one (line 18) and just skips the match
 (line 19). A `[` in the `Count` states returns the current number and switches
 to the `Init` state (line 25).
+
+## Implementation details
+
+lexgen's implementation should be fairly standard. Each rule set is compiled to
+a separate NFA. NFAs are then compiled to DFAs. DFAs are added to the same `DFA`
+type but there are no transitions between nodes of different DFAs: transitions
+between DFAs are done by user action, using the `switch` method of lexer
+handles, as described above.
+
+Generated code for a DFA is basically a loop that iterates over characters of
+the input string:
+
+```
+loop {
+    match <lexer state> {
+        S1 => {
+            match <next character> {
+                C1 => ...                  // transition to next state
+
+                ...                        // other characters expected in this state
+
+                _ => ...                   // for an accepting state, run user
+                                           // action, for a non-accepting, fail
+            }
+        },
+        ...                                // same stuff for other DFA states
+    }
+}
+```
 
 [1]: https://github.com/osa1/lexgen/blob/main/tests/tests.rs
 [2]: https://github.com/osa1/lexgen/blob/main/examples/lua_5_1.rs
