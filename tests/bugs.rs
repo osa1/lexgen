@@ -39,11 +39,11 @@ fn wildcard_confusion() {
         }
     }
 
-    let mut lexer = Lexer::new("test\"", Default::default());
+    let mut lexer = Lexer::new("test\"");
     assert_eq!(ignore_pos(lexer.next()), Some(Ok("test".to_owned())));
     assert_eq!(ignore_pos(lexer.next()), None);
 
-    let mut lexer = Lexer::new("\\\"\"", Default::default());
+    let mut lexer = Lexer::new("\\\"\"");
     assert_eq!(ignore_pos(lexer.next()), Some(Ok("\"".to_owned())));
     assert_eq!(ignore_pos(lexer.next()), None);
 }

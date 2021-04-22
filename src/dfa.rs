@@ -335,11 +335,15 @@ pub fn reify(
         }
 
         impl<'input> #type_name<'input> {
-            fn new(input: &'input str, user_state: #user_state_type) -> Self {
+            fn new(input: &'input str) -> Self {
+                Self::new_with_state(input, Default::default())
+            }
+
+            fn new_with_state(input: &'input str, user_state: #user_state_type) -> Self {
                 #type_name {
                     state: 0,
                     initial_state: 0,
-                    user_state,
+                    user_state: Default::default(),
                     input,
                     iter: input.char_indices().peekable(),
                     match_stack: vec![],

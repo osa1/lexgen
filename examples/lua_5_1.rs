@@ -16,7 +16,7 @@ fn main() {
         let files = &args[1..];
         for file in files {
             let contents = std::fs::read_to_string(file).unwrap();
-            let lexer = Lexer::new(&contents, Default::default());
+            let lexer = Lexer::new(&contents);
             let mut tokens: Vec<Token> = vec![];
             for token in lexer {
                 match token {
@@ -413,10 +413,7 @@ fn ignore_pos<A, E>(ret: Option<Result<(usize, A, usize), E>>) -> Option<Result<
 }
 
 fn lex_lua_number() {
-    let mut lexer = Lexer::new(
-        "3 3.0 3.1416 314.16e-2 0.31416E1 0xff 0x56",
-        Default::default(),
-    );
+    let mut lexer = Lexer::new("3 3.0 3.1416 314.16e-2 0.31416E1 0xff 0x56");
 
     assert_eq!(
         ignore_pos(lexer.next()),
@@ -455,7 +452,7 @@ fn lex_lua_string() {
             \"\\
 test'\\\"\"
         ";
-    let mut lexer = Lexer::new(str, Default::default());
+    let mut lexer = Lexer::new(str);
 
     assert_eq!(
         ignore_pos(lexer.next()),
@@ -468,7 +465,7 @@ test'\\\"\"
 }
 
 fn lex_lua_long_string() {
-    let mut lexer = Lexer::new("[[ ]] [=[test]=] [=[ ]]", Default::default());
+    let mut lexer = Lexer::new("[[ ]] [=[test]=] [=[ ]]");
     assert_eq!(
         ignore_pos(lexer.next()),
         Some(Ok(Token::String(" ".to_owned())))
@@ -487,7 +484,6 @@ fn lex_lua_comment() {
          --[[test
          test]]+
         ",
-        Default::default(),
     );
     assert_eq!(ignore_pos(lexer.next()), Some(Ok(Token::Plus)));
     assert_eq!(ignore_pos(lexer.next()), Some(Ok(Token::Plus)));
@@ -496,7 +492,7 @@ fn lex_lua_comment() {
 
 fn lex_lua_var() {
     let str = "ab ab1 ab_1_2 Aab";
-    let mut lexer = Lexer::new(str, Default::default());
+    let mut lexer = Lexer::new(str);
 
     assert_eq!(
         ignore_pos(lexer.next()),
@@ -522,7 +518,6 @@ fn lex_lua_simple() {
          ; : , . .. ... and break do else elseif end \
          false for function if in local nil not or repeat \
          return then true until while n",
-        Default::default(),
     );
 
     let mut tokens: Vec<Token> = vec![];

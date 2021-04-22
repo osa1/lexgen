@@ -25,7 +25,7 @@ lexer! {
     }
 }
 
-let mut lexer = Lexer::new(" abc123Q-t  z9_9", ());
+let mut lexer = Lexer::new(" abc123Q-t  z9_9");
 assert_eq!(
     lexer.next(),
     Some(Ok((1, Token::Id("abc123Q-t".to_owned()), 10)))

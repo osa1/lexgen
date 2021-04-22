@@ -23,7 +23,7 @@ fn simple() {
         }
     }
 
-    let mut lexer = Lexer::new(" abc123Q-t  z9_9", ());
+    let mut lexer = Lexer::new(" abc123Q-t  z9_9");
     assert_eq!(
         lexer.next(),
         Some(Ok((1, Token::Id("abc123Q-t".to_owned()), 10)))
@@ -85,7 +85,7 @@ fn switch_user_state() {
         }
     }
 
-    let mut lexer = Lexer::new("  /* test  */  /* /* nested comments!! */ */", 0);
+    let mut lexer = Lexer::new("  /* test  */  /* /* nested comments!! */ */");
     assert_eq!(lexer.next(), Some(Ok((2, Token::Comment, 13))));
     assert_eq!(lexer.next(), Some(Ok((15, Token::Comment, 44))));
     assert_eq!(lexer.next(), None);
@@ -122,7 +122,7 @@ fn counting() {
         }
     }
 
-    let mut lexer = Lexer::new("[[ [=[ [==[", 0);
+    let mut lexer = Lexer::new("[[ [=[ [==[");
     assert_eq!(lexer.next(), Some(Ok((0, 0, 2))));
     assert_eq!(lexer.next(), Some(Ok((3, 1, 6))));
     assert_eq!(lexer.next(), Some(Ok((7, 2, 11))));
@@ -198,7 +198,7 @@ fn lua_long_strings() {
         }
     }
 
-    let mut lexer = LuaLongStringLexer::new("[[ ]] [=[test]=] [=[ ]]", Default::default());
+    let mut lexer = LuaLongStringLexer::new("[[ ]] [=[test]=] [=[ ]]");
     assert_eq!(lexer.next(), Some(Ok((0, " ".to_owned(), 5))));
     assert_eq!(lexer.next(), Some(Ok((6, "test".to_owned(), 16))));
     assert!(matches!(lexer.next(), Some(Err(_))));
