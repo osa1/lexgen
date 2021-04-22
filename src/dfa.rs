@@ -43,7 +43,6 @@ impl<A> DFA<A> {
     }
 
     pub fn add_accepting_state(&mut self, state: StateIdx, value: A) {
-        // TODO: Insertion order is going to be a problem
         self.accepting.entry(state).or_insert(value);
         // Old code that doesn't work when a char transitions overlaps with a range transition:
         //
