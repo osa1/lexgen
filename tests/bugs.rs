@@ -1,4 +1,4 @@
-use lexer_gen::lexer;
+use lexgen::lexer;
 
 #[test]
 fn wildcard_confusion() {

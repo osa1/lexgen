@@ -1,4 +1,4 @@
-# lexer_gen: A fully-featured lexer generator, implemented as a proc macro
+# lexgen: A fully-featured lexer generator, implemented as a proc macro
 
 Here's a simple lexer definition for lexing identifiers:
 
@@ -52,8 +52,8 @@ implementing a language. Lexer generators make this much easier, but in Rust
 existing lexer generators miss essential features for practical use, and/or
 require a pre-processing step when building.
 
-My goal with lexer_gen is to have a feature-complete lexer generator that is
+My goal with lexgen is to have a feature-complete lexer generator that is
 easy to use.
 
-[1]: https://github.com/osa1/lexer_gen/blob/main/tests/tests.rs
-[2]: https://github.com/osa1/lexer_gen/blob/main/examples/lua_5_1.rs
+[1]: https://github.com/osa1/lexgen/blob/main/tests/tests.rs
+[2]: https://github.com/osa1/lexgen/blob/main/examples/lua_5_1.rs

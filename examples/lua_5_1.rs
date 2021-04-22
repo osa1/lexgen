@@ -5,7 +5,7 @@
 // - Exclude newlines in strings
 // - Locale-dependant alphabetic chars in variables (???)
 
-use lexer_gen::lexer;
+use lexgen::lexer;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
