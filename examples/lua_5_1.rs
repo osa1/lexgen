@@ -39,6 +39,7 @@ fn run_tests() {
     lex_lua_var();
     lex_lua_string();
     lex_lua_long_string();
+    lex_lua_number();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -78,6 +79,7 @@ enum Token {
     Keyword(Keyword),
     String(String),
     Var(String),
+    Number(String), // uninterpreted
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -141,6 +143,9 @@ lexer_gen! {
     // > considered alphabetic by the current locale can be used in an identifier.)
     let var_init = ['a'-'z' 'A'-'Z' '_'];
     let var_subseq = $var_init | ['0'-'9'];
+
+    let digit = ['0'-'9'];
+    let hex_digit = ['a'-'f' 'A'-'F' '0'-'9'];
 
     rule Init {
         $whitespace,
@@ -217,6 +222,17 @@ lexer_gen! {
         $var_init $var_subseq+ => |handle: LexerHandle| {
             let match_ = handle.match_().to_owned();
             handle.return_(Token::Var(match_))
+        },
+
+        $digit+ ('.'? $digit+ (('e' | 'E') ('+'|'-')? $digit+)?)? =>
+            |handle: LexerHandle| {
+                let match_ = handle.match_().to_owned();
+                handle.return_(Token::Number(match_))
+            },
+
+        "0x" $hex_digit+ => |handle: LexerHandle| {
+            let match_ = handle.match_().to_owned();
+            handle.return_(Token::Number(match_))
         },
     },
 
@@ -355,6 +371,43 @@ lexer_gen! {
 
 fn ignore_pos<A, E>(ret: Option<Result<(usize, A, usize), E>>) -> Option<Result<A, E>> {
     ret.map(|res| res.map(|(_, a, _)| a))
+}
+
+fn lex_lua_number() {
+    let mut lexer = Lexer::new(
+        "3 3.0 3.1416 314.16e-2 0.31416E1 0xff 0x56",
+        Default::default(),
+    );
+
+    assert_eq!(
+        ignore_pos(lexer.next()),
+        Some(Ok(Token::Number("3".to_owned())))
+    );
+    assert_eq!(
+        ignore_pos(lexer.next()),
+        Some(Ok(Token::Number("3.0".to_owned())))
+    );
+    assert_eq!(
+        ignore_pos(lexer.next()),
+        Some(Ok(Token::Number("3.1416".to_owned())))
+    );
+    assert_eq!(
+        ignore_pos(lexer.next()),
+        Some(Ok(Token::Number("314.16e-2".to_owned())))
+    );
+    assert_eq!(
+        ignore_pos(lexer.next()),
+        Some(Ok(Token::Number("0.31416E1".to_owned())))
+    );
+    assert_eq!(
+        ignore_pos(lexer.next()),
+        Some(Ok(Token::Number("0xff".to_owned())))
+    );
+
+    assert_eq!(
+        ignore_pos(lexer.next()),
+        Some(Ok(Token::Number("0x56".to_owned())))
+    );
 }
 
 fn lex_lua_string() {
