@@ -242,7 +242,7 @@ pub fn reify(
 
     let match_arms = generate_state_arms(dfa, &handle_type_name, &action_enum_name);
 
-    let rule_name_enum_name = syn::Ident::new(&(type_name.to_string() + "Rules"), type_name.span());
+    let rule_name_enum_name = syn::Ident::new(&(type_name.to_string() + "Rule"), type_name.span());
     let rule_name_idents: Vec<syn::Ident> = rule_states
         .keys()
         .map(|rule_name| syn::Ident::new(rule_name, proc_macro2::Span::call_site()))

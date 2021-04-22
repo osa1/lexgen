@@ -164,7 +164,7 @@ specified by the user. If the lexer name is `Lexer`, then these types are:
   worry about the detail of this type as the handle type has methods for
   generating `LexerAction`s.
 
-- `LexerRules`: see the `LexerHandle::switch` method below.
+- `LexerRule`: see the `LexerHandle::switch` method below.
 
 - `LexerHandle`: this type is the argument type of user actions. It provides
   methods for manipulating user and lexer states, and getting the current match.
@@ -178,11 +178,11 @@ specified by the user. If the lexer name is `Lexer`, then these types are:
     passed token as a match.
   - `fn continue_(self)`: ignores the current match and continues lexing in the
     same lexer state. Useful for skipping whitespace and comments.
-  - `fn switch(self, rule: LexerRules) -> LexerAction`: used for switching
-    between lexer states. The `LexerRules` is an enum with a variant for each
-    rule set name, for example, `LexerRules::Init`. See the stateful lexer
+  - `fn switch(self, rule: LexerRule) -> LexerAction`: used for switching
+    between lexer states. The `LexerRule` is an enum with a variant for each
+    rule set name, for example, `LexerRule::Init`. See the stateful lexer
     example below.
-  - `fn switch_and_return(self, rule: LexerRules, token: <user token type>)`:
+  - `fn switch_and_return(self, rule: LexerRule, token: <user token type>)`:
     switches to the given lexer state and returns the given token.
 
 [1]: https://github.com/osa1/lexgen/blob/main/tests/tests.rs

@@ -204,13 +204,13 @@ lexer! {
         '"' => |mut lexer| {
             lexer.state().short_string_delim = Quote::Double;
             lexer.state().string_buf.clear();
-            lexer.switch(LexerRules::String)
+            lexer.switch(LexerRule::String)
         },
 
         '\'' => |mut lexer| {
             lexer.state().short_string_delim = Quote::Single;
             lexer.state().string_buf.clear();
-            lexer.switch(LexerRules::String)
+            lexer.switch(LexerRule::String)
         },
 
         "[" => |mut lexer| {
@@ -218,14 +218,14 @@ lexer! {
                 Some('[') | Some('=') => {
                     lexer.state().long_string_opening_eqs = 0;
                     lexer.state().in_comment = false;
-                    lexer.switch(LexerRules::LongStringBracketLeft)
+                    lexer.switch(LexerRule::LongStringBracketLeft)
                 }
                 _ => lexer.return_(Token::LBracket),
             }
         },
 
         "--" => |lexer| {
-            lexer.switch(LexerRules::EnterComment)
+            lexer.switch(LexerRule::EnterComment)
         },
 
         $var_init $var_subseq* => |lexer| {
@@ -254,14 +254,14 @@ lexer! {
 
         '[' =>
             |lexer|
-                lexer.switch(LexerRules::LongString),
+                lexer.switch(LexerRule::LongString),
     }
 
     rule LongString {
         ']' =>
             |mut lexer| {
                 lexer.state().long_string_closing_eqs = 0;
-                lexer.switch(LexerRules::LongStringBracketRight)
+                lexer.switch(LexerRule::LongStringBracketRight)
             },
 
         _ =>
@@ -284,26 +284,26 @@ lexer! {
                 let right_eqs = state.long_string_closing_eqs;
                 if left_eqs == right_eqs {
                     if in_comment {
-                        lexer.switch(LexerRules::Init)
+                        lexer.switch(LexerRule::Init)
                     } else {
                         let match_ = lexer.match_[left_eqs + 2..lexer.match_.len() - right_eqs - 2].to_owned();
-                        lexer.switch_and_return(LexerRules::Init, Token::String(match_))
+                        lexer.switch_and_return(LexerRule::Init, Token::String(match_))
                     }
                 } else {
-                    lexer.switch(LexerRules::String)
+                    lexer.switch(LexerRule::String)
                 }
             },
 
         _ =>
             |lexer|
-                lexer.switch(LexerRules::String),
+                lexer.switch(LexerRule::String),
     }
 
     rule String {
         '"' => |mut lexer| {
             if lexer.state().short_string_delim == Quote::Double {
                 let str = lexer.state().string_buf.clone();
-                lexer.switch_and_return(LexerRules::Init, Token::String(str))
+                lexer.switch_and_return(LexerRule::Init, Token::String(str))
             } else {
                 lexer.state().string_buf.push('"');
                 lexer.continue_()
@@ -313,7 +313,7 @@ lexer! {
         "'" => |mut lexer| {
             if lexer.state().short_string_delim == Quote::Single {
                 let str = lexer.state().string_buf.clone();
-                lexer.switch_and_return(LexerRules::Init, Token::String(str))
+                lexer.switch_and_return(LexerRule::Init, Token::String(str))
             } else {
                 lexer.state().string_buf.push('\'');
                 lexer.continue_()
@@ -388,20 +388,20 @@ lexer! {
                 Some('[') | Some('=') => {
                     lexer.state().long_string_opening_eqs = 0;
                     lexer.state().in_comment = true;
-                    lexer.switch(LexerRules::LongStringBracketLeft)
+                    lexer.switch(LexerRule::LongStringBracketLeft)
                 }
                 _ =>
-                    lexer.switch(LexerRules::Comment),
+                    lexer.switch(LexerRule::Comment),
             }
         },
 
         _ => |lexer|
-            lexer.switch(LexerRules::Comment),
+            lexer.switch(LexerRule::Comment),
     }
 
     rule Comment {
         '\n' => |lexer|
-            lexer.switch(LexerRules::Init),
+            lexer.switch(LexerRule::Init),
 
         _ => |lexer|
             lexer.continue_(),
