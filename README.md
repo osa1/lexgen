@@ -38,7 +38,7 @@ let mut lexer = Lexer::new(" abc123Q-t  z9_9");
 // Lexers implement `Iterator<Item=Result<(usize, T, usize), LexerError>>`,
 // where `T` is the token type specified in the lexer definition (`Token` in
 // this case), and `usize`s indicate byte indices of beginning and end of the
-// returned tokens.
+// lexemes.
 assert_eq!(
     lexer.next(),
     Some(Ok((1, Token::Id("abc123Q-t".to_owned()), 10)))
@@ -70,7 +70,7 @@ lexgen doesn't require a build step. Just add it as a dependency in your
 ## Lexer syntax
 
 lexgen lexers start with type of the generated lexer struct, optional user state
-part, and the token type (type of values returned by user actions). For example:
+part, and the token type (type of values returned by user actions). Example:
 
 ```rust
 lexer! {
@@ -127,12 +127,15 @@ In summary:
 Regex syntax can be used in right-hand side of let bindings and left-hand side
 of rules. The syntax is:
 
-- `$var` for variables. Variables need to be defined before used.
+- `$var` for variables defined in the let binding section. Variables need to be
+  defined before used.
 - Rust character syntax for characters, e.g. `'a'`.
 - Rust string syntax for strings, e.g. `"abc"`.
-- `[...]` for character sets. Inside the brackets you have have one or more of:
+- `[...]` for character sets. Inside the brackets you can have one or more of:
+
   - Characters
   - Character ranges: e.g. `'a'-'z'`
+
   Here's an example character set for ASCII alphanumerics: `['a'-'z' 'A'-'Z'
   '0'-'9']`
 - `<regex>*` for zero or more repetitions of `<regex>`
@@ -176,14 +179,14 @@ specified by the user. If the lexer name is `Lexer`, then these types are:
     to the user state
   - `fn return_(self, token: <user token type>) -> LexerAction`: returns the
     passed token as a match.
-  - `fn continue_(self)`: ignores the current match and continues lexing in the
-    same lexer state. Useful for skipping whitespace and comments.
+  - `fn continue_(self) -> LexerAction`: ignores the current match and continues
+    lexing in the same lexer state. Useful for skipping whitespace and comments.
   - `fn switch(self, rule: LexerRule) -> LexerAction`: used for switching
     between lexer states. The `LexerRule` is an enum with a variant for each
     rule set name, for example, `LexerRule::Init`. See the stateful lexer
     example below.
-  - `fn switch_and_return(self, rule: LexerRule, token: <user token type>)`:
-    switches to the given lexer state and returns the given token.
+  - `fn switch_and_return(self, rule: LexerRule, token: <user token type>) ->
+    LexerAction`: switches to the given lexer state and returns the given token.
 
 ## Stateful lexer example
 
@@ -228,9 +231,9 @@ assert_eq!(lexer.next(), None);
 
 Initially (the `Init` rule set) we skip spaces. When we see a `[` we initialize
 the user state (line 9) and switch to the `Count` state (line 10). In `Count`,
-each `=` increments the user state by one (line 18) and just skips the match
-(line 19). A `[` in the `Count` states returns the current number and switches
-to the `Init` state (line 25).
+each `=` increments the user state by one (line 18) and skips the match (line
+19). A `[` in the `Count` state returns the current number and switches to the
+`Init` state (line 25).
 
 ## Implementation details
 
