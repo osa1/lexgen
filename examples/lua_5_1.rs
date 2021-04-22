@@ -40,6 +40,7 @@ fn run_tests() {
     lex_lua_string();
     lex_lua_long_string();
     lex_lua_number();
+    lex_lua_comment();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -117,6 +118,9 @@ struct LexerState {
     short_string_delim: Quote,
     /// Buffer for strings
     string_buf: String,
+    /// When parsing a long string, whether we're inside a comment or not. When inside a comment we
+    /// don't return a token. Otherwise we return a string.
+    in_comment: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -213,13 +217,18 @@ lexer_gen! {
             match handle.peek() {
                 Some('[') | Some('=') => {
                     handle.state().long_string_opening_eqs = 0;
+                    handle.state().in_comment = false;
                     handle.switch(LexerRules::LongStringBracketLeft)
                 }
                 _ => handle.return_(Token::LBracket),
             }
         },
 
-        $var_init $var_subseq+ => |handle: LexerHandle| {
+        "--" => |handle: LexerHandle| {
+            handle.switch(LexerRules::EnterComment)
+        },
+
+        $var_init $var_subseq* => |handle: LexerHandle| {
             let match_ = handle.match_().to_owned();
             handle.return_(Token::Var(match_))
         },
@@ -270,11 +279,16 @@ lexer_gen! {
         ']' =>
             |mut handle: LexerHandle| {
                 let state = handle.state();
+                let in_comment = state.in_comment;
                 let left_eqs = state.long_string_opening_eqs;
                 let right_eqs = state.long_string_closing_eqs;
                 if left_eqs == right_eqs {
-                    let match_ = handle.match_[left_eqs + 2..handle.match_.len() - right_eqs - 2].to_owned();
-                    handle.switch_and_return(LexerRules::Init, Token::String(match_))
+                    if in_comment {
+                        handle.switch(LexerRules::Init)
+                    } else {
+                        let match_ = handle.match_[left_eqs + 2..handle.match_.len() - right_eqs - 2].to_owned();
+                        handle.switch_and_return(LexerRules::Init, Token::String(match_))
+                    }
                 } else {
                     handle.switch(LexerRules::String)
                 }
@@ -367,6 +381,31 @@ lexer_gen! {
             handle.continue_()
         },
     },
+
+    rule EnterComment {
+        '[' => |mut handle: LexerHandle| {
+            match handle.peek() {
+                Some('[') | Some('=') => {
+                    handle.state().long_string_opening_eqs = 0;
+                    handle.state().in_comment = true;
+                    handle.switch(LexerRules::LongStringBracketLeft)
+                }
+                _ =>
+                    handle.switch(LexerRules::Comment),
+            }
+        },
+
+        _ => |handle: LexerHandle|
+            handle.switch(LexerRules::Comment),
+    },
+
+    rule Comment {
+        '\n' => |handle: LexerHandle|
+            handle.switch(LexerRules::Init),
+
+        _ => |handle: LexerHandle|
+            handle.continue_(),
+    },
 }
 
 fn ignore_pos<A, E>(ret: Option<Result<(usize, A, usize), E>>) -> Option<Result<A, E>> {
@@ -431,14 +470,28 @@ test'\\\"\"
 fn lex_lua_long_string() {
     let mut lexer = Lexer::new("[[ ]] [=[test]=] [=[ ]]", Default::default());
     assert_eq!(
-        lexer.next(),
-        Some(Ok((0, Token::String(" ".to_owned()), 5)))
+        ignore_pos(lexer.next()),
+        Some(Ok(Token::String(" ".to_owned())))
     );
     assert_eq!(
-        lexer.next(),
-        Some(Ok((6, Token::String("test".to_owned()), 16)))
+        ignore_pos(lexer.next()),
+        Some(Ok(Token::String("test".to_owned()))),
     );
     assert!(matches!(lexer.next(), Some(Err(_))));
+}
+
+fn lex_lua_comment() {
+    let mut lexer = Lexer::new(
+        "-- test
+         +
+         --[[test
+         test]]+
+        ",
+        Default::default(),
+    );
+    assert_eq!(ignore_pos(lexer.next()), Some(Ok(Token::Plus)));
+    assert_eq!(ignore_pos(lexer.next()), Some(Ok(Token::Plus)));
+    assert_eq!(ignore_pos(lexer.next()), None);
 }
 
 fn lex_lua_var() {
@@ -468,7 +521,7 @@ fn lex_lua_simple() {
         "+ - * / % ^ # == ~= <= >= < > = ( ) { } [ ] \
          ; : , . .. ... and break do else elseif end \
          false for function if in local nil not or repeat \
-         return then true until while",
+         return then true until while n",
         Default::default(),
     );
 
@@ -527,6 +580,7 @@ fn lex_lua_simple() {
             Token::Keyword(Keyword::True),
             Token::Keyword(Keyword::Until),
             Token::Keyword(Keyword::While),
+            Token::Var("n".to_owned()),
         ]
     );
 }
