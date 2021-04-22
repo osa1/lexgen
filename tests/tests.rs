@@ -16,7 +16,7 @@ fn simple() {
         rule Init {
             [' ' '\t' '\n']+,
             $init $subseq* =>
-                |handle: LexerHandle| {
+                |handle| {
                     let token = Token::Id(handle.match_().to_owned());
                     handle.return_(token)
                 },
@@ -54,7 +54,7 @@ fn switch_user_state() {
             $whitespace,
 
             "/*" =>
-                |mut handle: LexerHandle| {
+                |mut handle| {
                     *handle.state() = 1;
                     handle.switch(LexerRules::Comment)
                 },
@@ -62,14 +62,14 @@ fn switch_user_state() {
 
         rule Comment {
             "/*" =>
-                |mut handle: LexerHandle| {
+                |mut handle| {
                     let state = handle.state();
                     *state = *state + 1;
                     handle.continue_()
                 },
 
             "*/" =>
-                |mut handle: LexerHandle| {
+                |mut handle| {
                     let state = handle.state();
                     if *state == 1 {
                         handle.switch_and_return(LexerRules::Init, Token::Comment)
@@ -80,7 +80,7 @@ fn switch_user_state() {
                 },
 
             _ =>
-                |handle: LexerHandle|
+                |handle|
                     handle.continue_(),
         }
     }
@@ -100,7 +100,7 @@ fn counting() {
             ' ',
 
             '[' =>
-                |mut handle: LexerHandle| {
+                |mut handle| {
                     *handle.state() = 0;
                     handle.switch(LexerRules::Count)
                 },
@@ -108,14 +108,14 @@ fn counting() {
 
         rule Count {
             '=' =>
-                |mut handle: LexerHandle| {
+                |mut handle| {
                     let n = *handle.state();
                     *handle.state() = n + 1;
                     handle.continue_()
                 },
 
             '[' =>
-                |mut handle: LexerHandle| {
+                |mut handle| {
                     let n = *handle.state();
                     handle.switch_and_return(LexerRules::Init, n)
                 },

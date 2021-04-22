@@ -463,7 +463,8 @@ fn generate_state_arms(
             let push = match rhs {
                 None => quote!(self.match_stack.push(None)),
                 Some(rhs) => quote!(
-                    match (#rhs)(handle) {
+                    let rhs: fn(#handle_type_name) -> #action_enum_name = #rhs;
+                    match rhs(handle) {
                         #action_enum_name::Continue =>
                             self.match_stack.push(None),
                         #action_enum_name::Return(tok) =>
