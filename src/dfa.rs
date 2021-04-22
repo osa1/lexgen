@@ -451,8 +451,7 @@ fn generate_state_arms(
             // fails (error).
             quote!(
                 match self.iter.next() {
-                    None if self.match_stack.is_empty() => return None,
-                    None => #pop_match,
+                    None => return None,
                     Some((char_idx, char)) => {
                         self.current_match_start = char_idx;
                         self.current_match_end = char_idx + char.len_utf8();
@@ -468,6 +467,14 @@ fn generate_state_arms(
                 None => quote!(self.match_stack.push(None)),
                 Some(rhs) => quote!(
                     let rhs: fn(#handle_type_name) -> #action_enum_name = #rhs;
+
+                    let str = &self.input[self.current_match_start..self.current_match_end];
+                    let handle = #handle_type_name {
+                        iter: &mut self.iter,
+                        match_: str,
+                        user_state: &mut self.user_state,
+                    };
+
                     match rhs(handle) {
                         #action_enum_name::Continue =>
                             self.match_stack.push(None),
@@ -486,13 +493,8 @@ fn generate_state_arms(
                 ),
             };
             quote!({
-                let str = &self.input[self.current_match_start..self.current_match_end];
-                let handle = #handle_type_name {
-                    iter: &mut self.iter,
-                    match_: str,
-                    user_state: &mut self.user_state,
-                };
                 #push;
+
                 match self.iter.peek() {
                     None => #pop_match,
                     Some((char_idx, char)) => {
