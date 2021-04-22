@@ -16,9 +16,9 @@ fn simple() {
         rule Init {
             [' ' '\t' '\n']+,
             $init $subseq* =>
-                |handle| {
-                    let token = Token::Id(handle.match_().to_owned());
-                    handle.return_(token)
+                |lexer| {
+                    let token = Token::Id(lexer.match_().to_owned());
+                    lexer.return_(token)
                 },
         }
     }
@@ -54,34 +54,34 @@ fn switch_user_state() {
             $whitespace,
 
             "/*" =>
-                |mut handle| {
-                    *handle.state() = 1;
-                    handle.switch(LexerRules::Comment)
+                |mut lexer| {
+                    *lexer.state() = 1;
+                    lexer.switch(LexerRules::Comment)
                 },
         }
 
         rule Comment {
             "/*" =>
-                |mut handle| {
-                    let state = handle.state();
+                |mut lexer| {
+                    let state = lexer.state();
                     *state = *state + 1;
-                    handle.continue_()
+                    lexer.continue_()
                 },
 
             "*/" =>
-                |mut handle| {
-                    let state = handle.state();
+                |mut lexer| {
+                    let state = lexer.state();
                     if *state == 1 {
-                        handle.switch_and_return(LexerRules::Init, Token::Comment)
+                        lexer.switch_and_return(LexerRules::Init, Token::Comment)
                     } else {
                         *state = *state - 1;
-                        handle.continue_()
+                        lexer.continue_()
                     }
                 },
 
             _ =>
-                |handle|
-                    handle.continue_(),
+                |lexer|
+                    lexer.continue_(),
         }
     }
 
@@ -100,24 +100,24 @@ fn counting() {
             ' ',
 
             '[' =>
-                |mut handle| {
-                    *handle.state() = 0;
-                    handle.switch(LexerRules::Count)
+                |mut lexer| {
+                    *lexer.state() = 0;
+                    lexer.switch(LexerRules::Count)
                 },
         }
 
         rule Count {
             '=' =>
-                |mut handle| {
-                    let n = *handle.state();
-                    *handle.state() = n + 1;
-                    handle.continue_()
+                |mut lexer| {
+                    let n = *lexer.state();
+                    *lexer.state() = n + 1;
+                    lexer.continue_()
                 },
 
             '[' =>
-                |mut handle| {
-                    let n = *handle.state();
-                    handle.switch_and_return(LexerRules::Init, n)
+                |mut lexer| {
+                    let n = *lexer.state();
+                    lexer.switch_and_return(LexerRules::Init, n)
                 },
         }
     }
@@ -144,57 +144,57 @@ fn lua_long_strings() {
             ' ',
 
             '[' =>
-                |mut handle: LuaLongStringLexerHandle| {
-                    *handle.state() = Default::default();
-                    handle.switch(LuaLongStringLexerRules::LeftBracket)
+                |mut lexer: LuaLongStringLexerHandle| {
+                    *lexer.state() = Default::default();
+                    lexer.switch(LuaLongStringLexerRules::LeftBracket)
                 },
         }
 
         rule LeftBracket {
             '=' =>
-                |mut handle: LuaLongStringLexerHandle| {
-                    handle.state().left_size += 1;
-                    handle.continue_()
+                |mut lexer: LuaLongStringLexerHandle| {
+                    lexer.state().left_size += 1;
+                    lexer.continue_()
                 },
 
             '[' =>
-                |handle: LuaLongStringLexerHandle|
-                    handle.switch(LuaLongStringLexerRules::String),
+                |lexer: LuaLongStringLexerHandle|
+                    lexer.switch(LuaLongStringLexerRules::String),
         }
 
         rule String {
             ']' =>
-                |mut handle: LuaLongStringLexerHandle| {
-                    handle.state().right_size = 0;
-                    handle.switch(LuaLongStringLexerRules::RightBracket)
+                |mut lexer: LuaLongStringLexerHandle| {
+                    lexer.state().right_size = 0;
+                    lexer.switch(LuaLongStringLexerRules::RightBracket)
                 },
 
             _ =>
-                |handle: LuaLongStringLexerHandle|
-                    handle.continue_(),
+                |lexer: LuaLongStringLexerHandle|
+                    lexer.continue_(),
         }
 
         rule RightBracket {
             '=' =>
-                |mut handle: LuaLongStringLexerHandle| {
-                    handle.state().right_size += 1;
-                    handle.continue_()
+                |mut lexer: LuaLongStringLexerHandle| {
+                    lexer.state().right_size += 1;
+                    lexer.continue_()
                 },
 
             ']' =>
-                |mut handle: LuaLongStringLexerHandle| {
-                    let state = *handle.state();
+                |mut lexer: LuaLongStringLexerHandle| {
+                    let state = *lexer.state();
                     if state.left_size == state.right_size {
-                        let match_ = handle.match_[state.left_size+2..handle.match_.len() - state.right_size - 2].to_owned();
-                        handle.switch_and_return(LuaLongStringLexerRules::Init, match_)
+                        let match_ = lexer.match_[state.left_size+2..lexer.match_.len() - state.right_size - 2].to_owned();
+                        lexer.switch_and_return(LuaLongStringLexerRules::Init, match_)
                     } else {
-                        handle.switch(LuaLongStringLexerRules::String)
+                        lexer.switch(LuaLongStringLexerRules::String)
                     }
                 },
 
             _ =>
-                |handle: LuaLongStringLexerHandle|
-                    handle.switch(LuaLongStringLexerRules::String),
+                |lexer: LuaLongStringLexerHandle|
+                    lexer.switch(LuaLongStringLexerRules::String),
         }
     }
 
