@@ -25,7 +25,13 @@ lexer! {
     }
 }
 
+// Generated lexers are initialized with a `&str` for the input
 let mut lexer = Lexer::new(" abc123Q-t  z9_9");
+
+// Lexers implement `Iterator<Item=Result<(usize, T, usize), LexerError>>`,
+// where `T` is the token type specified in the lexer definition (`Token` in
+// this case), and `usize`s indicate byte indices of beginning and end of the
+// returned tokens.
 assert_eq!(
     lexer.next(),
     Some(Ok((1, Token::Id("abc123Q-t".to_owned()), 10)))
