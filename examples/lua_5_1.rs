@@ -41,6 +41,7 @@ fn run_tests() {
     lex_lua_long_string();
     lex_lua_number();
     lex_lua_comment();
+    lex_lua_windows_line_ending();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -139,7 +140,7 @@ impl Default for Quote {
 lexer! {
     Lexer(LexerState) -> Token;
 
-    let whitespace = [' ' '\t' '\n'];
+    let whitespace = [' ' '\t' '\n'] | "\r\n";
 
     // > Names (also called identifiers) in Lua can be any string of letters, digits, and
     // > underscores, not beginning with a digit. This coincides with the definition of names in
@@ -578,4 +579,11 @@ fn lex_lua_simple() {
             Token::Var("n".to_owned()),
         ]
     );
+}
+
+fn lex_lua_windows_line_ending() {
+    let mut lexer = Lexer::new("+\r\n+");
+    assert_eq!(ignore_pos(lexer.next()), Some(Ok(Token::Plus)));
+    assert_eq!(ignore_pos(lexer.next()), Some(Ok(Token::Plus)));
+    assert_eq!(ignore_pos(lexer.next()), None);
 }
