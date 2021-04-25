@@ -33,7 +33,7 @@ impl State {
     }
 }
 
-impl<A: Clone> NFA<A> {
+impl<A> NFA<A> {
     pub fn new() -> NFA<A> {
         NFA {
             states: vec![State::new()],
@@ -148,7 +148,7 @@ impl<A: Clone> NFA<A> {
     }
 }
 
-impl<A: Clone + std::fmt::Debug> NFA<A> {
+impl<A: std::fmt::Debug> NFA<A> {
     #[cfg(test)]
     pub fn simulate(&self, chars: &mut dyn Iterator<Item = char>) -> Option<&A> {
         let mut states: FxHashSet<StateIdx> = Default::default();
@@ -204,7 +204,7 @@ impl Display for StateIdx {
     }
 }
 
-impl<A: Clone> Display for NFA<A> {
+impl<A> Display for NFA<A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         for (state_idx, state) in self.states.iter().enumerate() {
             if self.accepting.contains_key(&StateIdx(state_idx)) {

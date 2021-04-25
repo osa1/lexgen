@@ -91,13 +91,13 @@ impl<A> DFA<A> {
     }
 }
 
-impl<A: Clone> DFA<A> {
+impl<A> DFA<A> {
     /// Extend the current DFA with another DFA. The extended DFA's states will be renumbered. This
     /// does not add any transitions from the original DFA states to the extension. Accepting
     /// states of the extension is preserved.
     ///
     /// Returns initial state for the extension in the new DFA.
-    pub fn add_dfa(&mut self, other: &DFA<A>) -> StateIdx {
+    pub fn add_dfa(&mut self, other: DFA<A>) -> StateIdx {
         let n_current_states = self.states.len();
 
         for state in &other.states {
@@ -124,9 +124,9 @@ impl<A: Clone> DFA<A> {
             });
         }
 
-        for (idx, action) in &other.accepting {
+        for (idx, action) in other.accepting {
             self.accepting
-                .insert(StateIdx(idx.0 + n_current_states), action.clone());
+                .insert(StateIdx(idx.0 + n_current_states), action);
         }
 
         StateIdx(n_current_states)

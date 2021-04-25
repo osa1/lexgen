@@ -3,7 +3,7 @@ use crate::nfa::{StateIdx, NFA};
 
 use fxhash::FxHashMap;
 
-pub fn add_re<A: Clone>(
+pub fn add_re<A>(
     nfa: &mut NFA<A>,
     bindings: &FxHashMap<Var, Regex>,
     re: &Regex,

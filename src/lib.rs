@@ -70,7 +70,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                     for rule in rules {
                         nfa.add_regex(&bindings, &rule.lhs, rule.rhs.clone());
                     }
-                    let dfa_idx = dfa.add_dfa(&nfa_to_dfa(&nfa));
+                    let dfa_idx = dfa.add_dfa(nfa_to_dfa(&nfa));
                     if let Some(_) = dfas.insert(name.to_string(), dfa_idx) {
                         panic!("Rule set {:?} is defined multiple times", name.to_string());
                     }
