@@ -1,4 +1,5 @@
 use crate::ast::{Regex, Var};
+use crate::display::HashSetDisplay;
 use crate::regex_to_nfa;
 
 use fxhash::{FxHashMap, FxHashSet};
@@ -228,7 +229,7 @@ impl<A: Clone> Display for NFA<A> {
                     first = false;
                 }
 
-                writeln!(f, "e -> {}", StateSetDisplay(empty_transitions))?;
+                writeln!(f, "e -> {}", HashSetDisplay(empty_transitions))?;
             }
 
             if !fail_transitions.is_empty() {
@@ -238,7 +239,7 @@ impl<A: Clone> Display for NFA<A> {
                     first = false;
                 }
 
-                writeln!(f, "_ -> {}", StateSetDisplay(fail_transitions))?;
+                writeln!(f, "_ -> {}", HashSetDisplay(fail_transitions))?;
             }
 
             for (char, next) in char_transitions.iter() {
@@ -248,7 +249,7 @@ impl<A: Clone> Display for NFA<A> {
                     first = false;
                 }
 
-                writeln!(f, "{:?} -> {}", char, StateSetDisplay(next))?;
+                writeln!(f, "{:?} -> {}", char, HashSetDisplay(next))?;
             }
 
             for ((range_begin, range_end), next) in range_transitions.iter() {
@@ -263,7 +264,7 @@ impl<A: Clone> Display for NFA<A> {
                     "{:?} - {:?} -> {}",
                     range_begin,
                     range_end,
-                    StateSetDisplay(next)
+                    HashSetDisplay(next)
                 )?;
             }
 
@@ -277,23 +278,5 @@ impl<A: Clone> Display for NFA<A> {
         }
 
         Ok(())
-    }
-}
-
-struct StateSetDisplay<'a>(&'a FxHashSet<StateIdx>);
-
-impl Display for StateSetDisplay<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{{")?;
-
-        let n_states = self.0.len();
-        for (state_idx, state) in self.0.iter().enumerate() {
-            write!(f, "{}", state.0)?;
-            if state_idx != n_states - 1 {
-                write!(f, ", ")?;
-            }
-        }
-
-        write!(f, "}}")
     }
 }
