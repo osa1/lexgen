@@ -203,3 +203,29 @@ fn lua_long_strings() {
     assert_eq!(lexer.next(), Some(Ok((6, "test".to_owned(), 16))));
     assert!(matches!(lexer.next(), Some(Err(_))));
 }
+
+#[test]
+fn simple_lifetime() {
+    #[derive(Debug, PartialEq, Eq)]
+    enum Token<'input> {
+        Id(&'input str),
+    }
+
+    lexer! {
+        Lexer -> Token<'input>;
+
+        rule Init {
+            ' ',
+
+            ['a'-'z']+ => |lexer| {
+                let match_ = lexer.match_();
+                lexer.return_(Token::Id(match_))
+            },
+        }
+    }
+
+    let mut lexer = Lexer::new("good times");
+    assert_eq!(lexer.next(), Some(Ok((0, Token::Id("good"), 4))));
+    assert_eq!(lexer.next(), Some(Ok((5, Token::Id("times"), 10))));
+    assert_eq!(lexer.next(), None);
+}

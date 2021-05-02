@@ -240,7 +240,7 @@ pub fn reify(
 
     let handle_type_name = syn::Ident::new(&(type_name.to_string() + "Handle"), type_name.span());
 
-    let match_arms = generate_state_arms(dfa, &handle_type_name, &action_enum_name);
+    let match_arms = generate_state_arms(dfa, &handle_type_name, &action_enum_name, &token_type);
 
     let rule_name_enum_name = syn::Ident::new(&(type_name.to_string() + "Rule"), type_name.span());
     let rule_name_idents: Vec<syn::Ident> = rule_states
@@ -252,16 +252,16 @@ pub fn reify(
 
     quote!(
         // Possible outcomes of a user action
-        enum #action_enum_name {
+        enum #action_enum_name<T> {
             // User action did not return a token, continue with lexing
             Continue,
             // User action returned a token, add it to the match stack
-            Return(#token_type),
+            Return(T),
             // User action requested switching to the given rule set
             Switch(#rule_name_enum_name),
             // Combination or `Switch` and `Return`: add token to the match stack, switch to the
             // given rule set
-            SwitchAndReturn(#token_type, #rule_name_enum_name),
+            SwitchAndReturn(T, #rule_name_enum_name),
         }
 
         // An enum for the rule sets in the DFA. `Init` is the initial, unnamed rule set.
@@ -297,19 +297,19 @@ pub fn reify(
         }
 
         impl<'lexer, 'input> #handle_type_name<'lexer, 'input> {
-            fn switch_and_return(self, rule: #rule_name_enum_name, token: #token_type) -> #action_enum_name {
+            fn switch_and_return(self, rule: #rule_name_enum_name, token: #token_type) -> #action_enum_name<#token_type> {
                 #action_enum_name::SwitchAndReturn(token, rule)
             }
 
-            fn return_(self, token: #token_type) -> #action_enum_name {
+            fn return_(self, token: #token_type) -> #action_enum_name<#token_type> {
                 #action_enum_name::Return(token)
             }
 
-            fn switch(self, rule: #rule_name_enum_name) -> #action_enum_name {
+            fn switch(self, rule: #rule_name_enum_name) -> #action_enum_name<#token_type> {
                 #action_enum_name::Switch(rule)
             }
 
-            fn continue_(self) -> #action_enum_name {
+            fn continue_(self) -> #action_enum_name<#token_type> {
                 #action_enum_name::Continue
             }
 
@@ -392,6 +392,7 @@ fn generate_state_arms(
     dfa: &DFA<Option<syn::Expr>>,
     handle_type_name: &syn::Ident,
     action_enum_name: &syn::Ident,
+    token_type: &syn::Type,
 ) -> Vec<TokenStream> {
     let DFA { states, accepting } = dfa;
 
@@ -446,7 +447,7 @@ fn generate_state_arms(
                     continue;
                 }),
                 Some(rhs) => quote!({
-                    let rhs: fn(#handle_type_name) -> #action_enum_name = #rhs;
+                    let rhs: fn(#handle_type_name<'_, 'input>) -> #action_enum_name<#token_type> = #rhs;
 
                     let str = &self.input[self.current_match_start..self.current_match_end];
                     let handle = #handle_type_name {
