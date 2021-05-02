@@ -23,7 +23,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
         type_name,
         user_state_type,
         token_type,
-        rules,
+        rules: top_level_rules,
     } = syn::parse_macro_input!(input as Lexer);
 
     // Maps DFA names to their initial states in the final DFA
@@ -33,7 +33,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
 
     let mut dfa: Option<DFA<Option<syn::Expr>>> = None;
 
-    for rule in &rules {
+    for rule in &top_level_rules {
         match rule {
             Rule::Binding { var, re } => {
                 if let Some(_) = bindings.insert(var.clone(), re.clone()) {
@@ -75,6 +75,31 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                         panic!("Rule set {:?} is defined multiple times", name.to_string());
                     }
                 }
+            }
+            Rule::UnnamedRules { rules } => {
+                let have_named_rules = top_level_rules
+                    .iter()
+                    .any(|rule| matches!(rule, Rule::RuleSet { .. }));
+
+                if dfa.is_some() || have_named_rules {
+                    panic!(
+                        "Unnamed rules cannot be mixed with named rules. Make sure to either \
+                        have all your rules in `rule ... {} ... {}` syntax, or remove `rule`s \
+                        entirely and have your rules at the top-level.",
+                        '{', '}',
+                    );
+                }
+
+                let mut nfa: NFA<Option<syn::Expr>> = NFA::new();
+                for rule in rules {
+                    nfa.add_regex(&bindings, &rule.lhs, rule.rhs.clone());
+                }
+
+                let dfa_ = nfa_to_dfa(&nfa);
+                let initial_state = dfa_.initial_state();
+
+                dfa = Some(dfa_);
+                dfas.insert("Init".to_owned(), initial_state);
             }
         }
     }

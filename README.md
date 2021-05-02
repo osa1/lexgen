@@ -112,6 +112,9 @@ below. User action is any Rust code with type `fn(LexerHandle) -> LexerAction`
 where `LexerHandle` and `LexerAction` are generated names derived from the lexer
 name (`Lexer`). More on these types below.
 
+You can omit the `rule Init { ... }` part and have all of your rules at the top
+level if you don't need rule sets.
+
 In summary:
 
 - First line is in form `<lexer name>(<user state type>) -> <token type name>`.

@@ -17,26 +17,24 @@ fn wildcard_confusion() {
 
         let whitespace = [' ' '\t' '\n'];
 
-        rule Init {
-            '"' => |mut lexer| {
-                println!("matched a double quote");
-                let str = std::mem::replace(&mut lexer.state().buf, String::new());
-                lexer.return_(str)
-            },
+        '"' => |mut lexer| {
+            println!("matched a double quote");
+            let str = std::mem::replace(&mut lexer.state().buf, String::new());
+            lexer.return_(str)
+        },
 
-            "\\\"" => |mut lexer| {
-                println!("matched an escaped double quote");
-                lexer.state().buf.push('"');
-                lexer.continue_()
-            },
+        "\\\"" => |mut lexer| {
+            println!("matched an escaped double quote");
+            lexer.state().buf.push('"');
+            lexer.continue_()
+        },
 
-            _ => |mut lexer| {
-                let char = lexer.match_().chars().next_back().unwrap();
-                println!("wildcard matched {:?}", char);
-                lexer.state().buf.push(char);
-                lexer.continue_()
-            },
-        }
+        _ => |mut lexer| {
+            let char = lexer.match_().chars().next_back().unwrap();
+            println!("wildcard matched {:?}", char);
+            lexer.state().buf.push(char);
+            lexer.continue_()
+        },
     }
 
     let mut lexer = Lexer::new("test\"");

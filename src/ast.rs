@@ -23,6 +23,9 @@ pub enum Rule {
         name: syn::Ident,
         rules: Vec<SingleRule>,
     },
+
+    /// Set of rules without a name
+    UnnamedRules { rules: Vec<SingleRule> },
 }
 
 /// `<regex> => <action>,`
@@ -52,6 +55,10 @@ impl fmt::Debug for Rule {
             Rule::RuleSet { name, rules } => f
                 .debug_struct("Rule::RuleSet")
                 .field("name", &name.to_string())
+                .field("rules", rules)
+                .finish(),
+            Rule::UnnamedRules { rules } => f
+                .debug_struct("Rule::UnnamedRules")
                 .field("rules", rules)
                 .finish(),
         }
@@ -211,7 +218,7 @@ impl Parse for Rule {
                 var: Var(var.to_string()),
                 re,
             })
-        } else {
+        } else if input.peek(syn::Ident) {
             // Name rules
             let ident = input.parse::<syn::Ident>()?;
             if ident.to_string() != "rule" {
@@ -231,6 +238,14 @@ impl Parse for Rule {
             let _ = input.parse::<syn::token::Comma>();
             Ok(Rule::RuleSet {
                 name: rule_name,
+                rules: single_rules,
+            })
+        } else {
+            let mut single_rules = vec![];
+            while !input.is_empty() {
+                single_rules.push(SingleRule::parse(input)?);
+            }
+            Ok(Rule::UnnamedRules {
                 rules: single_rules,
             })
         }

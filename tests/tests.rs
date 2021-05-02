@@ -13,14 +13,13 @@ fn simple() {
         let init = ['a'-'z'];
         let subseq = $init | ['A'-'Z' '0'-'9' '-' '_'];
 
-        rule Init {
-            [' ' '\t' '\n']+,
-            $init $subseq* =>
-                |lexer| {
-                    let token = Token::Id(lexer.match_().to_owned());
-                    lexer.return_(token)
-                },
-        }
+        [' ' '\t' '\n']+,
+
+        $init $subseq* =>
+            |lexer| {
+                let token = Token::Id(lexer.match_().to_owned());
+                lexer.return_(token)
+            },
     }
 
     let mut lexer = Lexer::new(" abc123Q-t  z9_9");
@@ -214,14 +213,12 @@ fn simple_lifetime() {
     lexer! {
         Lexer -> Token<'input>;
 
-        rule Init {
-            ' ',
+        ' ',
 
-            ['a'-'z']+ => |lexer| {
-                let match_ = lexer.match_();
-                lexer.return_(Token::Id(match_))
-            },
-        }
+        ['a'-'z']+ => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_(Token::Id(match_))
+        },
     }
 
     let mut lexer = Lexer::new("good times");
