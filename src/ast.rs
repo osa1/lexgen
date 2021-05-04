@@ -29,10 +29,26 @@ pub enum Rule {
     UnnamedRules { rules: Vec<SingleRule> },
 }
 
-/// `<regex> => <action>,`
 pub struct SingleRule {
     pub lhs: Regex,
-    pub rhs: Option<syn::Expr>,
+    pub rhs: Option<RuleRhs>,
+}
+
+#[derive(Clone)]
+pub struct RuleRhs {
+    pub expr: syn::Expr,
+    pub kind: RuleKind,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum RuleKind {
+    /// Defined with `=?`. RHS is passed a `LexerHandle`, returns `LexerAction<Result<Token,
+    /// Error>>`.
+    Fallible,
+    /// Defined with `=`. RHS is not passed a `LexerHandle`, returns `Token`.
+    Simple,
+    /// Defined with `=>`. RHS is passed a `LexerHandle`, returns `LexerAction<Token>`
+    Normal,
 }
 
 impl fmt::Debug for Lexer {
@@ -107,6 +123,7 @@ impl Parse for Regex {
         let mut re = parse_regex_1(input)?;
 
         while !(input.peek(syn::token::FatArrow)
+            || input.peek(syn::token::Eq)
             || input.peek(syn::token::Comma)
             || input.peek(syn::token::Semi)
             || input.is_empty())
@@ -191,18 +208,33 @@ impl Parse for CharOrRange {
 impl Parse for SingleRule {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let lhs = Regex::parse(input)?;
-        if input.peek(syn::token::Comma) {
-            input.parse::<syn::token::Comma>()?;
+        if input.parse::<syn::token::Comma>().is_ok() {
             Ok(SingleRule { lhs, rhs: None })
-        } else {
-            // Assume rule with RHS
-            input.parse::<syn::token::FatArrow>()?;
-            let rhs = input.parse::<syn::Expr>()?;
+        } else if input.parse::<syn::token::FatArrow>().is_ok() {
+            let expr = input.parse::<syn::Expr>()?;
             input.parse::<syn::token::Comma>()?;
             Ok(SingleRule {
                 lhs,
-                rhs: Some(rhs),
+                rhs: Some(RuleRhs {
+                    expr,
+                    kind: RuleKind::Normal,
+                }),
             })
+        } else if input.parse::<syn::token::Eq>().is_ok() {
+            let kind = if input.peek(syn::token::Question) {
+                let _ = input.parse::<syn::token::Question>();
+                RuleKind::Fallible
+            } else {
+                RuleKind::Simple
+            };
+            let expr = input.parse::<syn::Expr>()?;
+            input.parse::<syn::token::Comma>()?;
+            Ok(SingleRule {
+                lhs,
+                rhs: Some(RuleRhs { expr, kind }),
+            })
+        } else {
+            panic!("Expected one of `,`, `=>`, `=?`, or `=` after a regex");
         }
     }
 }

@@ -230,3 +230,26 @@ fn simple_lifetime() {
     assert_eq!(lexer.next(), Some(Ok((5, Token::Id("times"), 10))));
     assert_eq!(lexer.next(), None);
 }
+
+#[test]
+fn rule_kind_simple() {
+    #[derive(Debug, PartialEq, Eq)]
+    enum Token {
+        LParen,
+        RParen,
+    }
+
+    lexer! {
+        Lexer -> Token;
+
+        '(' = Token::LParen,
+        ')' = Token::RParen,
+    }
+
+    let mut lexer = Lexer::new("(())");
+    assert_eq!(lexer.next(), Some(Ok((0, Token::LParen, 1))));
+    assert_eq!(lexer.next(), Some(Ok((1, Token::LParen, 2))));
+    assert_eq!(lexer.next(), Some(Ok((2, Token::RParen, 3))));
+    assert_eq!(lexer.next(), Some(Ok((3, Token::RParen, 4))));
+    assert_eq!(lexer.next(), None);
+}

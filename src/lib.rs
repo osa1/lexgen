@@ -9,7 +9,7 @@ mod nfa;
 mod nfa_to_dfa;
 mod regex_to_nfa;
 
-use ast::{Lexer, Regex, Rule, Var};
+use ast::{Lexer, Regex, Rule, RuleRhs, Var};
 use dfa::DFA;
 use nfa::NFA;
 use nfa_to_dfa::nfa_to_dfa;
@@ -32,7 +32,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
 
     let mut bindings: FxHashMap<Var, Regex> = Default::default();
 
-    let mut dfa: Option<DFA<Option<syn::Expr>>> = None;
+    let mut dfa: Option<DFA<Option<RuleRhs>>> = None;
 
     for rule in &top_level_rules {
         match rule {
@@ -46,7 +46,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                     if dfa.is_some() {
                         panic!("\"Init\" rule set can only be defined once");
                     }
-                    let mut nfa: NFA<Option<syn::Expr>> = NFA::new();
+                    let mut nfa: NFA<Option<RuleRhs>> = NFA::new();
                     for rule in rules {
                         nfa.add_regex(&bindings, &rule.lhs, rule.rhs.clone());
                     }
@@ -67,7 +67,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                         None => panic!("First rule set should be named \"Init\""),
                         Some(dfa) => dfa,
                     };
-                    let mut nfa: NFA<Option<syn::Expr>> = NFA::new();
+                    let mut nfa: NFA<Option<RuleRhs>> = NFA::new();
                     for rule in rules {
                         nfa.add_regex(&bindings, &rule.lhs, rule.rhs.clone());
                     }
@@ -91,7 +91,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                     );
                 }
 
-                let mut nfa: NFA<Option<syn::Expr>> = NFA::new();
+                let mut nfa: NFA<Option<RuleRhs>> = NFA::new();
                 for rule in rules {
                     nfa.add_regex(&bindings, &rule.lhs, rule.rhs.clone());
                 }

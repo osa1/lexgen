@@ -1,3 +1,5 @@
+use crate::ast::{RuleKind, RuleRhs};
+
 use fxhash::FxHashMap;
 
 /// Deterministic finite automate, parameterized on values of accepting states.
@@ -226,7 +228,7 @@ use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
 
 pub fn reify(
-    dfa: &DFA<Option<syn::Expr>>,
+    dfa: &DFA<Option<RuleRhs>>,
     user_state_type: Option<syn::Type>,
     rule_states: &FxHashMap<String, StateIdx>,
     type_name: syn::Ident,
@@ -392,7 +394,7 @@ fn generate_switch(
 
 /// Generate arms of `match self.state { ... }` of a DFA.
 fn generate_state_arms(
-    dfa: &DFA<Option<syn::Expr>>,
+    dfa: &DFA<Option<RuleRhs>>,
     handle_type_name: &syn::Ident,
     action_enum_name: &syn::Ident,
     token_type: &syn::Type,
@@ -449,8 +451,11 @@ fn generate_state_arms(
                     self.state = self.initial_state;
                     continue;
                 }),
-                Some(rhs) => quote!({
-                    let rhs: fn(#handle_type_name<'_, 'input>) -> #action_enum_name<#token_type> = #rhs;
+                Some(RuleRhs {
+                    expr,
+                    kind: RuleKind::Normal,
+                }) => quote!({
+                    let rhs: fn(#handle_type_name<'_, 'input>) -> #action_enum_name<#token_type> = #expr;
 
                     let str = &self.input[self.current_match_start..self.current_match_end];
                     let handle = #handle_type_name {
@@ -477,6 +482,18 @@ fn generate_state_arms(
                             return Some(Ok((self.current_match_start, tok, self.current_match_end)));
                         }
                     }
+                }),
+                Some(RuleRhs {
+                    expr: _,
+                    kind: RuleKind::Fallible,
+                }) => todo!(),
+                Some(RuleRhs {
+                    expr,
+                    kind: RuleKind::Simple,
+                }) => quote!({
+                    let rhs: #token_type = #expr;
+                    self.state = self.initial_state;
+                    return Some(Ok((self.current_match_start, rhs, self.current_match_end)));
                 }),
             };
 
