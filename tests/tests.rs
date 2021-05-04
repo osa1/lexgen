@@ -2,25 +2,29 @@ use lexgen::lexer;
 
 #[test]
 fn simple() {
-    #[derive(Debug, PartialEq, Eq)]
-    enum Token {
-        Id(String),
+    mod lexer {
+        #[derive(Debug, PartialEq, Eq)]
+        pub enum Token {
+            Id(String),
+        }
+
+        lexgen::lexer! {
+            pub Lexer -> Token;
+
+            let init = ['a'-'z'];
+            let subseq = $init | ['A'-'Z' '0'-'9' '-' '_'];
+
+            [' ' '\t' '\n']+,
+
+            $init $subseq* =>
+                |lexer| {
+                    let token = Token::Id(lexer.match_().to_owned());
+                    lexer.return_(token)
+                },
+        }
     }
 
-    lexer! {
-        Lexer -> Token;
-
-        let init = ['a'-'z'];
-        let subseq = $init | ['A'-'Z' '0'-'9' '-' '_'];
-
-        [' ' '\t' '\n']+,
-
-        $init $subseq* =>
-            |lexer| {
-                let token = Token::Id(lexer.match_().to_owned());
-                lexer.return_(token)
-            },
-    }
+    use lexer::{Lexer, Token};
 
     let mut lexer = Lexer::new(" abc123Q-t  z9_9");
     assert_eq!(

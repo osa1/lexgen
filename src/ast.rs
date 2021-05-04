@@ -8,6 +8,7 @@ use std::fmt;
 pub struct Var(pub String);
 
 pub struct Lexer {
+    pub public: bool,
     pub type_name: syn::Ident,
     pub user_state_type: Option<syn::Type>,
     pub token_type: syn::Type,
@@ -37,6 +38,7 @@ pub struct SingleRule {
 impl fmt::Debug for Lexer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Lexer")
+            .field("public", &self.public)
             .field("type_name", &self.type_name.to_string())
             .field("token_type", &"...")
             .field("rules", &self.rules)
@@ -254,6 +256,7 @@ impl Parse for Rule {
 
 impl Parse for Lexer {
     fn parse(input: ParseStream) -> syn::Result<Self> {
+        let public = input.parse::<syn::token::Pub>().is_ok();
         let type_name = input.parse::<syn::Ident>()?;
 
         let user_state_type = if input.peek(syn::token::Paren) {
@@ -274,6 +277,7 @@ impl Parse for Lexer {
         }
 
         Ok(Lexer {
+            public,
             type_name,
             user_state_type,
             token_type,

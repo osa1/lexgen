@@ -231,6 +231,7 @@ pub fn reify(
     rule_states: &FxHashMap<String, StateIdx>,
     type_name: syn::Ident,
     token_type: syn::Type,
+    public: bool,
 ) -> TokenStream {
     let user_state_type = user_state_type
         .map(|ty| ty.into_token_stream())
@@ -249,6 +250,8 @@ pub fn reify(
         .collect();
 
     let switch_method = generate_switch(&rule_name_enum_name, rule_states);
+
+    let visibility = if public { quote!(pub) } else { quote!() };
 
     quote!(
         // Possible outcomes of a user action
@@ -279,7 +282,7 @@ pub fn reify(
         }
 
         // The lexer type
-        struct #type_name<'input> {
+        #visibility struct #type_name<'input> {
             // Current lexer state
             state: usize,
             // Which lexer state to switch to on successful match
@@ -292,7 +295,7 @@ pub fn reify(
         }
 
         #[derive(Debug, PartialEq, Eq)]
-        struct LexerError {
+        #visibility struct LexerError {
             char_idx: usize,
         }
 
@@ -327,11 +330,11 @@ pub fn reify(
         }
 
         impl<'input> #type_name<'input> {
-            fn new(input: &'input str) -> Self {
+            #visibility fn new(input: &'input str) -> Self {
                 Self::new_with_state(input, Default::default())
             }
 
-            fn new_with_state(input: &'input str, user_state: #user_state_type) -> Self {
+            #visibility fn new_with_state(input: &'input str, user_state: #user_state_type) -> Self {
                 #type_name {
                     state: 0,
                     initial_state: 0,

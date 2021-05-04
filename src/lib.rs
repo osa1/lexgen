@@ -20,6 +20,7 @@ use proc_macro::TokenStream;
 #[proc_macro]
 pub fn lexer(input: TokenStream) -> TokenStream {
     let Lexer {
+        public,
         type_name,
         user_state_type,
         token_type,
@@ -112,7 +113,15 @@ pub fn lexer(input: TokenStream) -> TokenStream {
         );
     }
 
-    dfa::reify(&dfa.unwrap(), user_state_type, &dfas, type_name, token_type).into()
+    dfa::reify(
+        &dfa.unwrap(),
+        user_state_type,
+        &dfas,
+        type_name,
+        token_type,
+        public,
+    )
+    .into()
 }
 
 #[cfg(test)]
