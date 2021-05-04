@@ -34,6 +34,9 @@ pub fn lexer(input: TokenStream) -> TokenStream {
 
     let mut dfa: Option<DFA<Option<RuleRhs>>> = None;
 
+    let mut user_error_type: Option<syn::Type> = None;
+    let mut user_error_lifetimes: Vec<syn::Lifetime> = vec![];
+
     for rule in &top_level_rules {
         match rule {
             Rule::Binding { var, re } => {
@@ -102,6 +105,13 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                 dfa = Some(dfa_);
                 dfas.insert("Init".to_owned(), initial_state);
             }
+            Rule::ErrorType { ty, lifetimes } => match user_error_type {
+                None => {
+                    user_error_type = Some(ty.clone());
+                    user_error_lifetimes = lifetimes.clone();
+                }
+                Some(_) => panic!("Error type defined multiple times"),
+            },
         }
     }
 
@@ -116,6 +126,8 @@ pub fn lexer(input: TokenStream) -> TokenStream {
     dfa::reify(
         &dfa.unwrap(),
         user_state_type,
+        user_error_type,
+        &user_error_lifetimes,
         &dfas,
         type_name,
         token_type,

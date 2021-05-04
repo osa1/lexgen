@@ -19,6 +19,11 @@ pub enum Rule {
     /// `let <ident> = <regex>;`
     Binding { var: Var, re: Regex },
 
+    ErrorType {
+        lifetimes: Vec<syn::Lifetime>,
+        ty: syn::Type,
+    },
+
     /// A list of named rules at the top level: `rule <Ident> { <rules> },`
     RuleSet {
         name: syn::Ident,
@@ -78,6 +83,11 @@ impl fmt::Debug for Rule {
             Rule::UnnamedRules { rules } => f
                 .debug_struct("Rule::UnnamedRules")
                 .field("rules", rules)
+                .finish(),
+            Rule::ErrorType { lifetimes, ty } => f
+                .debug_struct("Rule::ErrorType")
+                .field("lifetimes", lifetimes)
+                .field("ty", ty)
                 .finish(),
         }
     }
@@ -274,6 +284,22 @@ impl Parse for Rule {
                 name: rule_name,
                 rules: single_rules,
             })
+        } else if input.parse::<syn::token::Type>().is_ok() {
+            let ident = input.parse::<syn::Ident>()?;
+            if ident.to_string() != "Error" {
+                panic!("Error type syntax is: `type Error = ...;`");
+            }
+            let mut lifetimes: Vec<syn::Lifetime> = vec![];
+            if input.parse::<syn::token::Lt>().is_ok() {
+                while !input.peek(syn::token::Gt) {
+                    lifetimes.push(input.parse()?);
+                }
+                input.parse::<syn::token::Gt>()?;
+            }
+            input.parse::<syn::token::Eq>()?;
+            let ty = input.parse::<syn::Type>()?;
+            input.parse::<syn::token::Semi>()?;
+            Ok(Rule::ErrorType { ty, lifetimes })
         } else {
             let mut single_rules = vec![];
             while !input.is_empty() {

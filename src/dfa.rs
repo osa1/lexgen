@@ -230,6 +230,8 @@ use quote::{quote, ToTokens};
 pub fn reify(
     dfa: &DFA<Option<RuleRhs>>,
     user_state_type: Option<syn::Type>,
+    user_error_type: Option<syn::Type>,
+    user_error_type_lifetimes: &[syn::Lifetime],
     rule_states: &FxHashMap<String, StateIdx>,
     type_name: syn::Ident,
     token_type: syn::Type,
@@ -243,7 +245,14 @@ pub fn reify(
 
     let handle_type_name = syn::Ident::new(&(type_name.to_string() + "Handle"), type_name.span());
 
-    let match_arms = generate_state_arms(dfa, &handle_type_name, &action_enum_name, &token_type);
+    let match_arms = generate_state_arms(
+        dfa,
+        &handle_type_name,
+        &action_enum_name,
+        user_error_type.as_ref(),
+        user_error_type_lifetimes,
+        &token_type,
+    );
 
     let rule_name_enum_name = syn::Ident::new(&(type_name.to_string() + "Rule"), type_name.span());
     let rule_name_idents: Vec<syn::Ident> = rule_states
@@ -254,6 +263,22 @@ pub fn reify(
     let switch_method = generate_switch(&rule_name_enum_name, rule_states);
 
     let visibility = if public { quote!(pub) } else { quote!() };
+
+    let lexer_error_type = match user_error_type {
+        None => quote!(
+            #[derive(Debug, PartialEq, Eq)]
+            #visibility struct LexerError {
+                char_idx: usize,
+            }
+        ),
+        Some(user_error_type) => quote!(
+            #[derive(Debug, PartialEq, Eq)]
+            #visibility enum LexerError<#(#user_error_type_lifetimes),*> {
+                LexerError { char_idx: usize },
+                UserError(#user_error_type),
+            }
+        ),
+    };
 
     quote!(
         // Possible outcomes of a user action
@@ -296,10 +321,7 @@ pub fn reify(
             current_match_end: usize,
         }
 
-        #[derive(Debug, PartialEq, Eq)]
-        #visibility struct LexerError {
-            char_idx: usize,
-        }
+        #lexer_error_type
 
         impl<'lexer, 'input> #handle_type_name<'lexer, 'input> {
             fn switch_and_return(self, rule: #rule_name_enum_name, token: #token_type) -> #action_enum_name<#token_type> {
@@ -397,11 +419,20 @@ fn generate_state_arms(
     dfa: &DFA<Option<RuleRhs>>,
     handle_type_name: &syn::Ident,
     action_enum_name: &syn::Ident,
+    user_error_type: Option<&syn::Type>,
+    user_error_type_lifetimes: &[syn::Lifetime],
     token_type: &syn::Type,
 ) -> Vec<TokenStream> {
     let DFA { states, accepting } = dfa;
 
     let mut match_arms: Vec<TokenStream> = vec![];
+
+    let make_lexer_error = |arg: TokenStream| -> TokenStream {
+        match user_error_type {
+            None => quote!(LexerError { char_idx: #arg }),
+            Some(_) => quote!(LexerError::LexerError { char_idx: #arg }),
+        }
+    };
 
     for (
         state_idx,
@@ -418,10 +449,9 @@ fn generate_state_arms(
             // Initial state. Difference from other states is we return `None` when the
             // iterator ends. In non-initial states EOF returns the last (longest) match, or
             // fails (error).
+            let error = make_lexer_error(quote!(self.current_match_start));
             let action = quote!({
-                return Some(Err(LexerError {
-                    char_idx: self.current_match_start,
-                }));
+                return Some(Err(#error));
             });
 
             let state_char_arms = generate_state_char_arms(
@@ -445,6 +475,25 @@ fn generate_state_arms(
                 }
             )
         } else if let Some(rhs) = accepting {
+            let user_action_cases = quote!(
+                #action_enum_name::Continue => {
+                    self.state = self.initial_state;
+                    continue;
+                }
+                #action_enum_name::Return(tok) => {
+                    self.state = self.initial_state;
+                    return Some(Ok((self.current_match_start, tok, self.current_match_end)));
+                }
+                #action_enum_name::Switch(rule_set) => {
+                    self.switch(rule_set);
+                    continue;
+                }
+                #action_enum_name::SwitchAndReturn(tok, rule_set) => {
+                    self.switch(rule_set);
+                    return Some(Ok((self.current_match_start, tok, self.current_match_end)));
+                }
+            );
+
             // Non-initial, accepting state
             let action = match rhs {
                 None => quote!({
@@ -465,28 +514,43 @@ fn generate_state_arms(
                     };
 
                     match rhs(handle) {
-                        #action_enum_name::Continue => {
-                            self.state = self.initial_state;
-                            continue;
-                        }
-                        #action_enum_name::Return(tok) => {
-                            self.state = self.initial_state;
-                            return Some(Ok((self.current_match_start, tok, self.current_match_end)));
-                        }
-                        #action_enum_name::Switch(rule_set) => {
-                            self.switch(rule_set);
-                            continue;
-                        }
-                        #action_enum_name::SwitchAndReturn(tok, rule_set) => {
-                            self.switch(rule_set);
-                            return Some(Ok((self.current_match_start, tok, self.current_match_end)));
-                        }
+                        #user_action_cases
                     }
                 }),
                 Some(RuleRhs {
-                    expr: _,
+                    expr,
                     kind: RuleKind::Fallible,
-                }) => todo!(),
+                }) => {
+                    let user_error_type = match user_error_type {
+                        None => panic!(
+                            "Fallible rules can only be used with a user error type, \
+                            declared with `type Error = ...;` syntax"
+                        ),
+                        Some(user_error_type) => user_error_type,
+                    };
+                    quote!({
+                        let rhs: fn(#handle_type_name<'_, 'input>) -> Result<#action_enum_name<#token_type>, #user_error_type> = #expr;
+
+                        let str = &self.input[self.current_match_start..self.current_match_end];
+                        let handle = #handle_type_name {
+                            iter: &mut self.iter,
+                            match_: str,
+                            user_state: &mut self.user_state,
+                        };
+
+                        match rhs(handle) {
+                            Err(user_error) => {
+                                self.state = self.initial_state;
+                                return Some(Err(LexerError::UserError(user_error)));
+                            }
+                            Ok(action) => {
+                                match action {
+                                    #user_action_cases
+                                }
+                            }
+                        }
+                    })
+                }
                 Some(RuleRhs {
                     expr,
                     kind: RuleKind::Simple,
@@ -527,10 +591,9 @@ fn generate_state_arms(
         } else {
             // Non-initial, non-accepting state. In a non-accepting state we want to consume a
             // character anyway so we can use `next` instead of `peek`.
+            let error = make_lexer_error(quote!(self.current_match_start));
             let action = quote!({
-                return Some(Err(LexerError {
-                    char_idx: self.current_match_start,
-                }));
+                return Some(Err(#error));
             });
 
             let state_char_arms = generate_state_char_arms(
@@ -542,7 +605,7 @@ fn generate_state_arms(
             );
 
             quote!(match self.iter.next() {
-                None => return Some(Err(LexerError { char_idx: self.current_match_start })),
+                None => return Some(Err(#error)),
                 Some((char_idx, char)) => {
                     self.current_match_end += char.len_utf8();
                     match char {

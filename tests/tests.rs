@@ -253,3 +253,34 @@ fn rule_kind_simple() {
     assert_eq!(lexer.next(), Some(Ok((3, Token::RParen, 4))));
     assert_eq!(lexer.next(), None);
 }
+
+#[test]
+fn rule_kind_fallible_no_lifetimes() {
+    #[derive(Debug, PartialEq, Eq)]
+    enum Token {
+        Int(i64),
+    }
+
+    #[derive(Debug, PartialEq, Eq)]
+    struct UserError(String);
+
+    lexer! {
+        Lexer -> Token;
+
+        type Error = UserError;
+
+        [' ' '\t' '\n'],
+        ['a'-'z' '0'-'9']+ =? |lexer| {
+            let match_ = lexer.match_();
+            match str::parse(match_) {
+                Ok(i) => Ok(lexer.return_(Token::Int(i))),
+                Err(err) => Err(UserError(err.to_string())),
+            }
+        },
+    }
+
+    let mut lexer = Lexer::new("123 blah");
+    assert_eq!(lexer.next(), Some(Ok((0, Token::Int(123), 3))));
+    assert!(matches!(lexer.next(), Some(Err(LexerError::UserError(_)))));
+    assert_eq!(lexer.next(), None);
+}
