@@ -123,7 +123,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
         );
     }
 
-    dfa::reify(
+    dfa::codegen::reify(
         &dfa.unwrap(),
         user_state_type,
         user_error_type,
