@@ -90,9 +90,5 @@ pub fn add_re<A>(
             nfa.add_empty_transition(current, re1_init);
             nfa.add_empty_transition(current, re2_init);
         }
-
-        Regex::Fail => {
-            nfa.add_fail_transition(current, cont);
-        }
     }
 }

@@ -9,6 +9,11 @@ use fxhash::{FxHashMap, FxHashSet};
 pub struct NFA<A> {
     states: Vec<State>,
     accepting: FxHashMap<StateIdx, A>,
+
+    // Action for the "failure" state. In principle we could have many failure states and actions,
+    // but we only need one per NFA for lexing, so we have one action for the entire NFA. (NB. This
+    // is different in DFA)
+    fail: Option<A>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -18,7 +23,6 @@ pub struct StateIdx(usize);
 struct State {
     char_transitions: FxHashMap<char, FxHashSet<StateIdx>>,
     range_transitions: FxHashMap<(char, char), FxHashSet<StateIdx>>,
-    fail_transitions: FxHashSet<StateIdx>,
     empty_transitions: FxHashSet<StateIdx>,
 }
 
@@ -27,7 +31,6 @@ impl State {
         State {
             char_transitions: Default::default(),
             range_transitions: Default::default(),
-            fail_transitions: Default::default(),
             empty_transitions: Default::default(),
         }
     }
@@ -38,6 +41,7 @@ impl<A> NFA<A> {
         NFA {
             states: vec![State::new()],
             accepting: Default::default(),
+            fail: None,
         }
     }
 
@@ -63,8 +67,8 @@ impl<A> NFA<A> {
         self.states[state.0].range_transitions.iter()
     }
 
-    pub fn fail_transitions(&self, state: StateIdx) -> impl Iterator<Item = &StateIdx> {
-        self.states[state.0].fail_transitions.iter()
+    pub fn fail_action(&self) -> Option<&A> {
+        self.fail.as_ref()
     }
 
     pub fn new_state(&mut self) -> StateIdx {
@@ -83,6 +87,11 @@ impl<A> NFA<A> {
         regex_to_nfa::add_re(self, bindings, re, re_initial_state, re_accepting_state);
 
         self.add_empty_transition(nfa_initial_state, re_initial_state);
+    }
+
+    pub fn add_fail(&mut self, value: A) {
+        assert!(self.fail.is_none());
+        self.fail = Some(value);
     }
 
     pub fn add_char_transition(&mut self, state: StateIdx, char: char, next: StateIdx) {
@@ -115,12 +124,6 @@ impl<A> NFA<A> {
         let not_exists = self.states[state.0].empty_transitions.insert(next);
 
         assert!(not_exists, "add_empty_transition");
-    }
-
-    pub fn add_fail_transition(&mut self, state: StateIdx, next: StateIdx) {
-        let not_exists = self.states[state.0].fail_transitions.insert(next);
-
-        assert!(not_exists, "add_fail_transition");
     }
 
     pub fn make_accepting(&mut self, state: StateIdx, value: A) {
@@ -177,12 +180,6 @@ impl<A: std::fmt::Debug> NFA<A> {
                 }
             }
 
-            if next_states.is_empty() {
-                for state in &states {
-                    next_states.extend(self.states[state.0].fail_transitions.iter().copied());
-                }
-            }
-
             states = self.compute_state_closure(&mut next_states);
             println!("states after = {:?}", states);
         }
@@ -192,7 +189,7 @@ impl<A: std::fmt::Debug> NFA<A> {
             .filter_map(|state| self.accepting.get(state))
             .collect();
 
-        accepting_state_values.pop()
+        accepting_state_values.pop().or(self.fail.as_ref())
     }
 }
 
@@ -216,7 +213,6 @@ impl<A> Display for NFA<A> {
             let State {
                 char_transitions,
                 range_transitions,
-                fail_transitions,
                 empty_transitions,
             } = state;
 
@@ -230,16 +226,6 @@ impl<A> Display for NFA<A> {
                 }
 
                 writeln!(f, "e -> {}", HashSetDisplay(empty_transitions))?;
-            }
-
-            if !fail_transitions.is_empty() {
-                if !first {
-                    write!(f, "     ")?;
-                } else {
-                    first = false;
-                }
-
-                writeln!(f, "_ -> {}", HashSetDisplay(fail_transitions))?;
             }
 
             for (char, next) in char_transitions.iter() {
@@ -271,10 +257,13 @@ impl<A> Display for NFA<A> {
             if empty_transitions.is_empty()
                 && char_transitions.is_empty()
                 && range_transitions.is_empty()
-                && fail_transitions.is_empty()
             {
                 writeln!(f)?;
             }
+        }
+
+        if let Some(_) = self.fail {
+            writeln!(f, "*FAIL")?;
         }
 
         Ok(())

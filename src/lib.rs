@@ -9,7 +9,7 @@ mod nfa;
 mod nfa_to_dfa;
 mod regex_to_nfa;
 
-use ast::{Lexer, Regex, Rule, RuleRhs, Var};
+use ast::{Lexer, Regex, RegexOrFail, Rule, RuleRhs, SingleRule, Var};
 use dfa::DFA;
 use nfa::NFA;
 use nfa_to_dfa::nfa_to_dfa;
@@ -50,8 +50,11 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                         panic!("\"Init\" rule set can only be defined once");
                     }
                     let mut nfa: NFA<Option<RuleRhs>> = NFA::new();
-                    for rule in rules {
-                        nfa.add_regex(&bindings, &rule.lhs, rule.rhs.clone());
+                    for SingleRule { lhs, rhs } in rules {
+                        match lhs {
+                            RegexOrFail::Regex(re) => nfa.add_regex(&bindings, re, rhs.clone()),
+                            RegexOrFail::Fail => nfa.add_fail(rhs.clone()),
+                        }
                     }
 
                     // println!("NFA=\n{}", nfa);
@@ -71,10 +74,20 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                         Some(dfa) => dfa,
                     };
                     let mut nfa: NFA<Option<RuleRhs>> = NFA::new();
-                    for rule in rules {
-                        nfa.add_regex(&bindings, &rule.lhs, rule.rhs.clone());
+
+                    for SingleRule { lhs, rhs } in rules {
+                        match lhs {
+                            RegexOrFail::Regex(re) => nfa.add_regex(&bindings, re, rhs.clone()),
+                            RegexOrFail::Fail => nfa.add_fail(rhs.clone()),
+                        }
                     }
-                    let dfa_idx = dfa.add_dfa(nfa_to_dfa(&nfa));
+
+                    // println!("NFA=\n{}", nfa);
+
+                    let dfa_ = nfa_to_dfa(&nfa);
+                    // println!("DFA=\n{}", dfa_);
+                    let dfa_idx = dfa.add_dfa(dfa_);
+
                     if let Some(_) = dfas.insert(name.to_string(), dfa_idx) {
                         panic!("Rule set {:?} is defined multiple times", name.to_string());
                     }
@@ -95,8 +108,11 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                 }
 
                 let mut nfa: NFA<Option<RuleRhs>> = NFA::new();
-                for rule in rules {
-                    nfa.add_regex(&bindings, &rule.lhs, rule.rhs.clone());
+                for SingleRule { lhs, rhs } in rules {
+                    match lhs {
+                        RegexOrFail::Regex(re) => nfa.add_regex(&bindings, re, rhs.clone()),
+                        RegexOrFail::Fail => nfa.add_fail(rhs.clone()),
+                    }
                 }
 
                 let dfa_ = nfa_to_dfa(&nfa);
@@ -114,6 +130,8 @@ pub fn lexer(input: TokenStream) -> TokenStream {
             },
         }
     }
+
+    // println!("Final DFA=\n{}", dfa.as_ref().unwrap());
 
     // There should be a rule with name "Init"
     if let None = dfas.get("Init") {
@@ -493,10 +511,27 @@ mod tests {
         let mut nfa: NFA<usize> = NFA::new();
 
         nfa.add_regex(&Default::default(), &Regex::String("ab".to_owned()), 1);
-        nfa.add_regex(&Default::default(), &Regex::Fail, 2);
+        nfa.add_fail(2);
 
-        test_simulate(&nfa, vec![("a", None), ("ab", Some(1))]);
+        test_simulate(&nfa, vec![("a", Some(2)), ("ab", Some(1))]);
     }
+
+    /*
+    #[test]
+    fn simulate_multiple_accepting_states() {
+        let mut nfa: NFA<usize> = NFA::new();
+
+        nfa.add_regex(&Default::default(), &Regex::String("aaa".to_owned()), 1);
+        nfa.add_regex(&Default::default(), &Regex::String("aaa".to_owned()), 2);
+        nfa.add_regex(&Default::default(), &Regex::String("aa".to_owned()), 3);
+        nfa.add_fail(4);
+
+        test_simulate(
+            &nfa,
+            vec![("aaa", Some(1)), ("aa", Some(3)), ("a", Some(4))],
+        );
+    }
+    */
 
     #[test]
     fn range_and_char_confusion() {

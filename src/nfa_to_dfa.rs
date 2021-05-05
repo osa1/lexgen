@@ -21,7 +21,7 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
             .collect()
     };
 
-    let (mut dfa, dfa_initial_state) = DFA::new();
+    let (mut dfa, dfa_initial_state): (DFA<A>, DfaStateIdx) = DFA::new();
 
     // Maps sets NFA states to their states in the DFA
     let mut state_map: FxHashMap<BTreeSet<NfaStateIdx>, DfaStateIdx> = Default::default();
@@ -29,6 +29,12 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
 
     let mut work_list: Vec<BTreeSet<NfaStateIdx>> = vec![initial_states];
     let mut finished_dfa_states: FxHashSet<DfaStateIdx> = Default::default();
+
+    let fail_dfa_state = nfa.fail_action().and_then(|fail_action| {
+        let fail_state = dfa.new_state();
+        dfa.add_accepting_state(fail_state, fail_action.clone());
+        Some(fail_state)
+    });
 
     while let Some(current_nfa_states) = work_list.pop() {
         let current_dfa_state = match state_map.get(&current_nfa_states) {
@@ -49,7 +55,6 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
         let mut char_transitions: FxHashMap<char, FxHashSet<NfaStateIdx>> = Default::default();
         let mut range_transitions: FxHashMap<(char, char), FxHashSet<NfaStateIdx>> =
             Default::default();
-        let mut fail_transitions: FxHashSet<NfaStateIdx> = Default::default();
 
         for nfa_state in current_nfa_states.iter().copied() {
             if let Some(value) = nfa.get_accepting_state(nfa_state) {
@@ -70,11 +75,6 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
                     .entry((*range_begin, *range_end))
                     .or_default()
                     .extend(next_states.iter().copied());
-            }
-
-            // Collect failure transitions
-            for fail_next in nfa.fail_transitions(nfa_state) {
-                fail_transitions.insert(*fail_next);
             }
         }
 
@@ -109,15 +109,8 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
             work_list.push(closure);
         }
 
-        if !fail_transitions.is_empty() {
-            let closure: BTreeSet<NfaStateIdx> = nfa
-                .compute_state_closure(&fail_transitions)
-                .into_iter()
-                .collect();
-            let dfa_state = dfa_state_of_nfa_states(&mut dfa, &mut state_map, closure.clone());
-            dfa.add_fail_transition(current_dfa_state, dfa_state);
-
-            work_list.push(closure);
+        if let Some(fail_dfa_state) = fail_dfa_state {
+            dfa.add_fail_transition(current_dfa_state, fail_dfa_state);
         }
     }
 

@@ -38,8 +38,17 @@ pub enum Rule {
 }
 
 pub struct SingleRule {
-    pub lhs: Regex,
+    pub lhs: RegexOrFail,
     pub rhs: Option<RuleRhs>,
+}
+
+#[derive(Debug)]
+pub enum RegexOrFail {
+    Regex(Regex),
+
+    /// An `_` as the LHS of a rule. This rule only matches when none of the other rules in the
+    /// same rule set match.
+    Fail,
 }
 
 #[derive(Clone)]
@@ -116,8 +125,6 @@ pub enum Regex {
     ZeroOrOne(Box<Regex>),
     Concat(Box<Regex>, Box<Regex>),
     Or(Box<Regex>, Box<Regex>),
-    Fail,
-    // Diff(Box<Regex>, Box<Regex>),
 }
 
 #[derive(Debug, Clone)]
@@ -179,9 +186,6 @@ fn parse_regex_1(input: ParseStream) -> syn::Result<Regex> {
     } else if input.peek(syn::LitStr) {
         let str = input.parse::<syn::LitStr>()?;
         Ok(Regex::String(str.value()))
-    } else if input.peek(syn::token::Underscore) {
-        let _ = input.parse::<syn::token::Underscore>()?;
-        Ok(Regex::Fail)
     } else if input.peek(syn::token::Bracket) {
         let bracketed;
         syn::bracketed!(bracketed in input);
@@ -218,9 +222,19 @@ impl Parse for CharOrRange {
     }
 }
 
+impl Parse for RegexOrFail {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        if input.parse::<syn::token::Underscore>().is_ok() {
+            Ok(RegexOrFail::Fail)
+        } else {
+            Ok(RegexOrFail::Regex(input.parse::<Regex>()?))
+        }
+    }
+}
+
 impl Parse for SingleRule {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let lhs = Regex::parse(input)?;
+        let lhs = RegexOrFail::parse(input)?;
         if input.parse::<syn::token::Comma>().is_ok() {
             Ok(SingleRule { lhs, rhs: None })
         } else if input.parse::<syn::token::FatArrow>().is_ok() {

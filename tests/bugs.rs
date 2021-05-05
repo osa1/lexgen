@@ -1,11 +1,10 @@
 use lexgen::lexer;
 
 #[test]
-fn wildcard_confusion() {
+fn failure_confusion_1() {
     // The bug: in the lexer below, when the input is "\\\"", the first backslash would be pushed
-    // to the string buffer by the catch-all case. The correct behaviour is the catch-all case
-    // should only run if the next character is not '"' or '\\', as those cases are handled by the
-    // rules before it.
+    // to the string buffer by the catch-all (now called "failure") case. The correct behaviour is
+    // the failure case should only run if none of the other rules match to completion.
 
     #[derive(Debug, Default)]
     struct LexerState {
@@ -44,6 +43,57 @@ fn wildcard_confusion() {
     let mut lexer = Lexer::new("\\\"\"");
     assert_eq!(ignore_pos(lexer.next()), Some(Ok("\"".to_owned())));
     assert_eq!(ignore_pos(lexer.next()), None);
+}
+
+#[test]
+fn failure_confusion_2() {
+    // Similar to the bug above: the failure case should run if none of the other rules match to
+    // completion.
+
+    #[derive(Debug, Default)]
+    struct LexerState {
+        comment_depth: usize,
+    }
+
+    lexer! {
+        Lexer(LexerState) -> ();
+
+
+        rule Init {
+            ' ',
+
+            "(*" =>
+                |mut lexer| {
+                    lexer.state().comment_depth = 1;
+                    lexer.switch(LexerRule::Comment)
+                },
+        }
+
+        rule Comment {
+            "(*" =>
+                |mut lexer| {
+                    let depth = &mut lexer.state().comment_depth;
+                    *depth =  *depth + 1;
+                    lexer.continue_()
+                },
+
+            "*)" =>
+                |mut lexer| {
+                    let depth = &mut lexer.state().comment_depth;
+                    if *depth == 1 {
+                        lexer.switch(LexerRule::Init)
+                    } else {
+                        *depth = *depth - 1;
+                        lexer.continue_()
+                    }
+                },
+
+            _,
+        }
+    }
+
+    let mut lexer = Lexer::new("(* * *) (* (* ** *) *)");
+    assert_eq!(lexer.next(), None);
 }
 
 fn ignore_pos<A, E>(ret: Option<Result<(usize, A, usize), E>>) -> Option<Result<A, E>> {

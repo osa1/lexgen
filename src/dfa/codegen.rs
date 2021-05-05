@@ -155,7 +155,7 @@ pub fn reify(
 
             fn next(&mut self) -> Option<Self::Item> {
                 loop {
-                    // println!("state = {:?}, next char = {:?}, #matches = {}", self.state, self.iter.peek());
+                    // println!("state = {:?}, next char = {:?}", self.state, self.iter.peek());
                     match self.state {
                         #(#match_arms,)*
                     }
@@ -356,7 +356,6 @@ fn generate_state_arms(
 
             if char_transitions.is_empty()
                 && range_transitions.is_empty()
-                && fail_transition.is_none()
             {
                 action
             } else {

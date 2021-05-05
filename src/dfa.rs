@@ -161,7 +161,13 @@ impl<A> DFA<A> {
             return None;
         }
 
-        self.accepting.get(&state)
+        match self.accepting.get(&state) {
+            Some(action) => Some(action),
+            None => match self.states[state.0].fail_transition {
+                None => None,
+                Some(fail_state) => self.accepting.get(&fail_state),
+            },
+        }
     }
 }
 
@@ -191,7 +197,7 @@ impl<A> Display for DFA<A> {
             let mut first = true;
 
             if let Some(next) = fail_transition {
-                writeln!(f, "_ -> {}", next)?;
+                writeln!(f, "FAIL -> {}", next)?;
                 first = false;
             }
 
