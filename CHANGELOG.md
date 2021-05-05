@@ -1,4 +1,4 @@
-# Unreleased
+# 2021/05/05: 0.2.0
 
 - It is now possible to use the special lifetime `'input` in your token types
   to borrow from the input string. Example:
@@ -51,6 +51,40 @@
       ...
   }
   ```
+
+- Two new action kinds: "fallible" and "simple" added. The old ones defined
+  with `=>` are now called "infallible".
+
+  - "fallible" actions are defined with `=?` instead of `=>`. The difference
+    from infallible actions is the return type is `Result<Token, UserError>`,
+    instead of `Token`, where `UserError` is defined using `type Error = ...;`
+    syntax. LHS can have a `<'input>` lifetime parameter when borrowing from
+    the user input in the error values. When a user error type is defined, the
+    lexer error struct becomes an enum, with two variants:
+
+    ```rust
+    enum LexerError {
+        LexerError { char_idx: usize },
+        UserError(UserError),
+    }
+    ```
+
+  - "simple" actions are defined with `=` instead of `=>`. The RHS needs to be a
+    value for a token, instead of a closure for a lexer action. This rule kind is
+    useful when matching keywords and other simple tokens in a language. Example:
+
+    ```rust
+    lexer! {
+        Lexer -> Token;
+
+        '(' = Token::LParen,
+        ')' = Token::RParen,
+        ...
+    }
+    ```
+
+    The syntax `<regex> = <expr>` is syntactic sugar for `<regex> => |lexer|
+    lexer.return_(<expr>)`.
 
 # 2021/04/22: 0.1.0
 
