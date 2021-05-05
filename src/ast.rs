@@ -19,8 +19,11 @@ pub enum Rule {
     /// `let <ident> = <regex>;`
     Binding { var: Var, re: Regex },
 
+    /// `type Error = UserError;`
     ErrorType {
+        /// Lifetimes on the LHS of the declaration, e.g. `type Error<'input> = ...`;
         lifetimes: Vec<syn::Lifetime>,
+        /// Type on the RHS, e.g. `UserError<'input>`
         ty: syn::Type,
     },
 

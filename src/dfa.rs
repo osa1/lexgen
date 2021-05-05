@@ -250,7 +250,6 @@ pub fn reify(
         &handle_type_name,
         &action_enum_name,
         user_error_type.as_ref(),
-        user_error_type_lifetimes,
         &token_type,
     );
 
@@ -374,7 +373,7 @@ pub fn reify(
         }
 
         impl<'input> Iterator for #type_name<'input> {
-            type Item = Result<(usize, #token_type, usize), LexerError>;
+            type Item = Result<(usize, #token_type, usize), LexerError<#(#user_error_type_lifetimes),*>>;
 
             fn next(&mut self) -> Option<Self::Item> {
                 loop {
@@ -420,7 +419,6 @@ fn generate_state_arms(
     handle_type_name: &syn::Ident,
     action_enum_name: &syn::Ident,
     user_error_type: Option<&syn::Type>,
-    user_error_type_lifetimes: &[syn::Lifetime],
     token_type: &syn::Type,
 ) -> Vec<TokenStream> {
     let DFA { states, accepting } = dfa;

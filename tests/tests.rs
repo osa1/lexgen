@@ -284,3 +284,37 @@ fn rule_kind_fallible_no_lifetimes() {
     assert!(matches!(lexer.next(), Some(Err(LexerError::UserError(_)))));
     assert_eq!(lexer.next(), None);
 }
+
+#[test]
+fn rule_kind_fallible_with_lifetimes() {
+    #[derive(Debug, PartialEq, Eq)]
+    enum Token {
+        Int(i64),
+    }
+
+    #[derive(Debug, PartialEq, Eq)]
+    struct UserError<'input>(&'input str);
+
+    lexer! {
+        Lexer -> Token;
+
+        type Error<'input> = UserError<'input>;
+
+        [' ' '\t' '\n'],
+        ['a'-'z' '0'-'9']+ =? |lexer| {
+            let match_ = lexer.match_();
+            match str::parse(match_) {
+                Ok(i) => Ok(lexer.return_(Token::Int(i))),
+                Err(_) => Err(UserError(match_)),
+            }
+        },
+    }
+
+    let mut lexer = Lexer::new("123 blah");
+    assert_eq!(lexer.next(), Some(Ok((0, Token::Int(123), 3))));
+    assert!(matches!(
+        lexer.next(),
+        Some(Err(LexerError::UserError(UserError("blah"))))
+    ));
+    assert_eq!(lexer.next(), None);
+}
