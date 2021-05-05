@@ -273,8 +273,8 @@ fn rule_kind_fallible_no_lifetimes() {
         ['a'-'z' '0'-'9']+ =? |lexer| {
             let match_ = lexer.match_();
             match str::parse(match_) {
-                Ok(i) => Ok(lexer.return_(Token::Int(i))),
-                Err(err) => Err(UserError(err.to_string())),
+                Ok(i) => lexer.return_(Ok(Token::Int(i))),
+                Err(err) => lexer.return_(Err(UserError(err.to_string()))),
             }
         },
     }
@@ -304,8 +304,8 @@ fn rule_kind_fallible_with_lifetimes() {
         ['a'-'z' '0'-'9']+ =? |lexer| {
             let match_ = lexer.match_();
             match str::parse(match_) {
-                Ok(i) => Ok(lexer.return_(Token::Int(i))),
-                Err(_) => Err(UserError(match_)),
+                Ok(i) => lexer.return_(Ok(Token::Int(i))),
+                Err(_) => lexer.return_(Err(UserError(match_))),
             }
         },
     }

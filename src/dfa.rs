@@ -323,19 +323,19 @@ pub fn reify(
         #lexer_error_type
 
         impl<'lexer, 'input> #handle_type_name<'lexer, 'input> {
-            fn switch_and_return(self, rule: #rule_name_enum_name, token: #token_type) -> #action_enum_name<#token_type> {
+            fn switch_and_return<T>(self, rule: #rule_name_enum_name, token: T) -> #action_enum_name<T> {
                 #action_enum_name::SwitchAndReturn(token, rule)
             }
 
-            fn return_(self, token: #token_type) -> #action_enum_name<#token_type> {
+            fn return_<T>(self, token: T) -> #action_enum_name<T> {
                 #action_enum_name::Return(token)
             }
 
-            fn switch(self, rule: #rule_name_enum_name) -> #action_enum_name<#token_type> {
+            fn switch<T>(self, rule: #rule_name_enum_name) -> #action_enum_name<T> {
                 #action_enum_name::Switch(rule)
             }
 
-            fn continue_(self) -> #action_enum_name<#token_type> {
+            fn continue_<T>(self) -> #action_enum_name<T> {
                 #action_enum_name::Continue
             }
 
@@ -473,25 +473,6 @@ fn generate_state_arms(
                 }
             )
         } else if let Some(rhs) = accepting {
-            let user_action_cases = quote!(
-                #action_enum_name::Continue => {
-                    self.state = self.initial_state;
-                    continue;
-                }
-                #action_enum_name::Return(tok) => {
-                    self.state = self.initial_state;
-                    return Some(Ok((self.current_match_start, tok, self.current_match_end)));
-                }
-                #action_enum_name::Switch(rule_set) => {
-                    self.switch(rule_set);
-                    continue;
-                }
-                #action_enum_name::SwitchAndReturn(tok, rule_set) => {
-                    self.switch(rule_set);
-                    return Some(Ok((self.current_match_start, tok, self.current_match_end)));
-                }
-            );
-
             // Non-initial, accepting state
             let action = match rhs {
                 None => quote!({
@@ -512,7 +493,22 @@ fn generate_state_arms(
                     };
 
                     match rhs(handle) {
-                        #user_action_cases
+                        #action_enum_name::Continue => {
+                            self.state = self.initial_state;
+                            continue;
+                        }
+                        #action_enum_name::Return(tok) => {
+                            self.state = self.initial_state;
+                            return Some(Ok((self.current_match_start, tok, self.current_match_end)));
+                        }
+                        #action_enum_name::Switch(rule_set) => {
+                            self.switch(rule_set);
+                            continue;
+                        }
+                        #action_enum_name::SwitchAndReturn(tok, rule_set) => {
+                            self.switch(rule_set);
+                            return Some(Ok((self.current_match_start, tok, self.current_match_end)));
+                        }
                     }
                 }),
                 Some(RuleRhs {
@@ -527,7 +523,7 @@ fn generate_state_arms(
                         Some(user_error_type) => user_error_type,
                     };
                     quote!({
-                        let rhs: fn(#handle_type_name<'_, 'input>) -> Result<#action_enum_name<#token_type>, #user_error_type> = #expr;
+                        let rhs: fn(#handle_type_name<'_, 'input>) -> #action_enum_name<Result<#token_type, #user_error_type>> = #expr;
 
                         let str = &self.input[self.current_match_start..self.current_match_end];
                         let handle = #handle_type_name {
@@ -537,14 +533,27 @@ fn generate_state_arms(
                         };
 
                         match rhs(handle) {
-                            Err(user_error) => {
+                            #action_enum_name::Continue => {
                                 self.state = self.initial_state;
-                                return Some(Err(LexerError::UserError(user_error)));
+                                continue;
                             }
-                            Ok(action) => {
-                                match action {
-                                    #user_action_cases
-                                }
+                            #action_enum_name::Return(res) => {
+                                self.state = self.initial_state;
+                                return Some(match res {
+                                    Ok(tok) => Ok((self.current_match_start, tok, self.current_match_end)),
+                                    Err(err) => Err(LexerError::UserError(err)),
+                                });
+                            }
+                            #action_enum_name::Switch(rule_set) => {
+                                self.switch(rule_set);
+                                continue;
+                            }
+                            #action_enum_name::SwitchAndReturn(res, rule_set) => {
+                                self.switch(rule_set);
+                                return Some(match res {
+                                    Ok(tok) => Ok((self.current_match_start, tok, self.current_match_end)),
+                                    Err(err) => Err(LexerError::UserError(err)),
+                                });
                             }
                         }
                     })
