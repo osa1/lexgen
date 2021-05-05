@@ -500,7 +500,7 @@ fn generate_state_arms(
                 }),
                 Some(RuleRhs {
                     expr,
-                    kind: RuleKind::Normal,
+                    kind: RuleKind::Infallible,
                 }) => quote!({
                     let rhs: fn(#handle_type_name<'_, 'input>) -> #action_enum_name<#token_type> = #expr;
 

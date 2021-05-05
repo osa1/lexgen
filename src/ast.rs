@@ -50,13 +50,13 @@ pub struct RuleRhs {
 
 #[derive(Debug, Copy, Clone)]
 pub enum RuleKind {
+    /// Defined with `=`. RHS is not passed a `LexerHandle`, returns `Token`.
+    Simple,
     /// Defined with `=?`. RHS is passed a `LexerHandle`, returns `LexerAction<Result<Token,
     /// Error>>`.
     Fallible,
-    /// Defined with `=`. RHS is not passed a `LexerHandle`, returns `Token`.
-    Simple,
     /// Defined with `=>`. RHS is passed a `LexerHandle`, returns `LexerAction<Token>`
-    Normal,
+    Infallible,
 }
 
 impl fmt::Debug for Lexer {
@@ -230,7 +230,7 @@ impl Parse for SingleRule {
                 lhs,
                 rhs: Some(RuleRhs {
                     expr,
-                    kind: RuleKind::Normal,
+                    kind: RuleKind::Infallible,
                 }),
             })
         } else if input.parse::<syn::token::Eq>().is_ok() {
