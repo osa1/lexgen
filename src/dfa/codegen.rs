@@ -1,39 +1,3 @@
-// If a state has failure transition, effectively it's an accepting state
-// We can't consume the current chracter when transitioning to a failure state.
-// DFA::simulate actually gets this wrong. Fix it
-// TODO: Remove fail transitions, make all states accepting, with the failure action as the action
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 use super::{State, StateIdx, DFA};
 use crate::ast::{RuleKind, RuleRhs};
 
@@ -235,7 +199,7 @@ fn generate_state_arms(
     user_error_type: Option<&syn::Type>,
     token_type: &syn::Type,
 ) -> Vec<TokenStream> {
-    let DFA { states, accepting } = dfa;
+    let DFA { states } = dfa;
 
     let mut match_arms: Vec<TokenStream> = vec![];
 
@@ -252,11 +216,10 @@ fn generate_state_arms(
             char_transitions,
             range_transitions,
             fail_transition,
+            accepting,
         },
     ) in states.iter().enumerate()
     {
-        let accepting = accepting.get(&StateIdx(state_idx));
-
         let state_code: TokenStream = if state_idx == 0 {
             // Initial state. Difference from other states is we return `None` when the
             // iterator ends. In non-initial states EOF returns the last (longest) match, or
@@ -390,9 +353,7 @@ fn generate_state_arms(
                 &action,
             );
 
-            if char_transitions.is_empty()
-                && range_transitions.is_empty()
-            {
+            if char_transitions.is_empty() && range_transitions.is_empty() {
                 action
             } else {
                 quote!({

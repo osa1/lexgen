@@ -5,26 +5,28 @@ use fxhash::FxHashMap;
 /// Deterministic finite automate, parameterized on values of accepting states.
 #[derive(Debug)]
 pub struct DFA<A> {
-    states: Vec<State>,
-    accepting: FxHashMap<StateIdx, A>,
+    // Indexed by `StateIdx`
+    states: Vec<State<A>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StateIdx(usize);
 
 #[derive(Debug, Clone)]
-struct State {
+struct State<A> {
     char_transitions: FxHashMap<char, StateIdx>,
     range_transitions: FxHashMap<(char, char), StateIdx>,
     fail_transition: Option<StateIdx>,
+    accepting: Option<A>,
 }
 
-impl State {
-    fn new() -> State {
+impl<A> State<A> {
+    fn new() -> State<A> {
         State {
             char_transitions: Default::default(),
             range_transitions: Default::default(),
             fail_transition: None,
+            accepting: None,
         }
     }
 }
@@ -34,7 +36,6 @@ impl<A> DFA<A> {
         (
             DFA {
                 states: vec![State::new()],
-                accepting: Default::default(),
             },
             StateIdx(0),
         )
@@ -45,15 +46,11 @@ impl<A> DFA<A> {
     }
 
     pub fn add_accepting_state(&mut self, state: StateIdx, value: A) {
-        self.accepting.entry(state).or_insert(value);
-        // Old code that doesn't work when a char transitions overlaps with a range transition:
-        //
-        // let old = self.accepting.insert(state, value);
-        // assert!(
-        //     old.is_none(),
-        //     "add_accepting_state overriding action in state={:?}",
-        //     state,
-        // );
+        // Give first rule priority
+        let accepting = &mut self.states[state.0].accepting;
+        if accepting.is_none() {
+            *accepting = Some(value);
+        }
     }
 
     pub fn new_state(&mut self) -> StateIdx {
@@ -102,33 +99,35 @@ impl<A> DFA<A> {
     pub fn add_dfa(&mut self, other: DFA<A>) -> StateIdx {
         let n_current_states = self.states.len();
 
-        for state in &other.states {
-            let mut char_transitions: FxHashMap<char, StateIdx> = Default::default();
-            let mut range_transitions: FxHashMap<(char, char), StateIdx> = Default::default();
-            let mut fail_transition: Option<StateIdx> = None;
+        for State {
+            char_transitions,
+            range_transitions,
+            fail_transition,
+            accepting,
+        } in other.states
+        {
+            let mut new_char_transitions: FxHashMap<char, StateIdx> = Default::default();
+            let mut new_range_transitions: FxHashMap<(char, char), StateIdx> = Default::default();
+            let mut new_fail_transition: Option<StateIdx> = None;
 
-            for (char, next) in &state.char_transitions {
-                char_transitions.insert(*char, StateIdx(next.0 + n_current_states));
+            for (char, next) in char_transitions {
+                new_char_transitions.insert(char, StateIdx(next.0 + n_current_states));
             }
 
-            for (range, next) in &state.range_transitions {
-                range_transitions.insert(*range, StateIdx(next.0 + n_current_states));
+            for (range, next) in range_transitions {
+                new_range_transitions.insert(range, StateIdx(next.0 + n_current_states));
             }
 
-            if let Some(next) = &state.fail_transition {
-                fail_transition = Some(StateIdx(next.0 + n_current_states));
+            if let Some(next) = fail_transition {
+                new_fail_transition = Some(StateIdx(next.0 + n_current_states));
             }
 
             self.states.push(State {
-                char_transitions,
-                range_transitions,
-                fail_transition,
+                char_transitions: new_char_transitions,
+                range_transitions: new_range_transitions,
+                fail_transition: new_fail_transition,
+                accepting,
             });
-        }
-
-        for (idx, action) in other.accepting {
-            self.accepting
-                .insert(StateIdx(idx.0 + n_current_states), action);
         }
 
         StateIdx(n_current_states)
@@ -161,11 +160,11 @@ impl<A> DFA<A> {
             return None;
         }
 
-        match self.accepting.get(&state) {
+        match &self.states[state.0].accepting {
             Some(action) => Some(action),
             None => match self.states[state.0].fail_transition {
                 None => None,
-                Some(fail_state) => self.accepting.get(&fail_state),
+                Some(fail_state) => self.states[fail_state.0].accepting.as_ref(),
             },
         }
     }
@@ -182,17 +181,18 @@ impl Display for StateIdx {
 impl<A> Display for DFA<A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         for (state_idx, state) in self.states.iter().enumerate() {
-            if self.accepting.contains_key(&StateIdx(state_idx)) {
-                write!(f, "{:>4}:", format!("*{}", state_idx))?;
-            } else {
-                write!(f, "{:>4}:", state_idx)?;
-            }
-
             let State {
                 char_transitions,
                 range_transitions,
                 fail_transition,
+                accepting,
             } = state;
+
+            if accepting.is_some() {
+                write!(f, "{:>4}:", format!("*{}", state_idx))?;
+            } else {
+                write!(f, "{:>4}:", state_idx)?;
+            }
 
             let mut first = true;
 

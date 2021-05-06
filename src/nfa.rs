@@ -7,8 +7,8 @@ use fxhash::{FxHashMap, FxHashSet};
 /// Non-deterministic finite automate, parameterized on values of accepting states.
 #[derive(Debug)]
 pub struct NFA<A> {
-    states: Vec<State>,
-    accepting: FxHashMap<StateIdx, A>,
+    // Indexed by `StateIdx`
+    states: Vec<State<A>>,
 
     // Action for the "failure" state. In principle we could have many failure states and actions,
     // but we only need one per NFA for lexing, so we have one action for the entire NFA. (NB. This
@@ -20,18 +20,20 @@ pub struct NFA<A> {
 pub struct StateIdx(usize);
 
 #[derive(Debug)]
-struct State {
+struct State<A> {
     char_transitions: FxHashMap<char, FxHashSet<StateIdx>>,
     range_transitions: FxHashMap<(char, char), FxHashSet<StateIdx>>,
     empty_transitions: FxHashSet<StateIdx>,
+    accepting: Option<A>,
 }
 
-impl State {
-    fn new() -> State {
+impl<A> State<A> {
+    fn new() -> State<A> {
         State {
             char_transitions: Default::default(),
             range_transitions: Default::default(),
             empty_transitions: Default::default(),
+            accepting: None,
         }
     }
 }
@@ -40,7 +42,6 @@ impl<A> NFA<A> {
     pub fn new() -> NFA<A> {
         NFA {
             states: vec![State::new()],
-            accepting: Default::default(),
             fail: None,
         }
     }
@@ -50,7 +51,7 @@ impl<A> NFA<A> {
     }
 
     pub fn get_accepting_state(&self, state: StateIdx) -> Option<&A> {
-        self.accepting.get(&state)
+        self.states[state.0].accepting.as_ref()
     }
 
     pub fn char_transitions(
@@ -127,7 +128,8 @@ impl<A> NFA<A> {
     }
 
     pub fn make_accepting(&mut self, state: StateIdx, value: A) {
-        self.accepting.insert(state, value);
+        // TODO: Avoid overriding here?
+        self.states[state.0].accepting = Some(value);
     }
 
     pub fn compute_state_closure(&self, states: &FxHashSet<StateIdx>) -> FxHashSet<StateIdx> {
@@ -186,7 +188,7 @@ impl<A: std::fmt::Debug> NFA<A> {
 
         let mut accepting_state_values: Vec<&A> = states
             .iter()
-            .filter_map(|state| self.accepting.get(state))
+            .filter_map(|state| self.states[state.0].accepting.as_ref())
             .collect();
 
         accepting_state_values.pop().or(self.fail.as_ref())
@@ -204,17 +206,18 @@ impl Display for StateIdx {
 impl<A> Display for NFA<A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         for (state_idx, state) in self.states.iter().enumerate() {
-            if self.accepting.contains_key(&StateIdx(state_idx)) {
-                write!(f, "{:>4}", format!("*{}", state_idx))?;
-            } else {
-                write!(f, "{:>4}:", state_idx)?;
-            }
-
             let State {
                 char_transitions,
                 range_transitions,
                 empty_transitions,
+                accepting,
             } = state;
+
+            if accepting.is_some() {
+                write!(f, "{:>4}", format!("*{}", state_idx))?;
+            } else {
+                write!(f, "{:>4}:", state_idx)?;
+            }
 
             let mut first = true;
 
