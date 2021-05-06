@@ -80,7 +80,7 @@ impl<A> NFA<A> {
 
     pub fn add_regex(&mut self, bindings: &FxHashMap<Var, Regex>, re: &Regex, value: A) {
         let re_accepting_state = self.new_state();
-        self.make_accepting(re_accepting_state, value);
+        self.make_state_accepting(re_accepting_state, value);
 
         let re_initial_state = self.new_state();
         let nfa_initial_state = self.initial_state();
@@ -127,7 +127,7 @@ impl<A> NFA<A> {
         assert!(not_exists, "add_empty_transition");
     }
 
-    pub fn make_accepting(&mut self, state: StateIdx, value: A) {
+    pub fn make_state_accepting(&mut self, state: StateIdx, value: A) {
         // TODO: Avoid overriding here?
         self.states[state.0].accepting = Some(value);
     }

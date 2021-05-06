@@ -32,7 +32,7 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
 
     let fail_dfa_state = nfa.fail_action().and_then(|fail_action| {
         let fail_state = dfa.new_state();
-        dfa.add_accepting_state(fail_state, fail_action.clone());
+        dfa.make_state_accepting(fail_state, fail_action.clone());
         Some(fail_state)
     });
 
@@ -58,7 +58,7 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
 
         for nfa_state in current_nfa_states.iter().copied() {
             if let Some(value) = nfa.get_accepting_state(nfa_state) {
-                dfa.add_accepting_state(current_dfa_state, value.clone());
+                dfa.make_state_accepting(current_dfa_state, value.clone());
             }
 
             // Collect char transitions

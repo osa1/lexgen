@@ -45,7 +45,7 @@ impl<A> DFA<A> {
         StateIdx(0)
     }
 
-    pub fn add_accepting_state(&mut self, state: StateIdx, value: A) {
+    pub fn make_state_accepting(&mut self, state: StateIdx, value: A) {
         // Give first rule priority
         let accepting = &mut self.states[state.0].accepting;
         if accepting.is_none() {
