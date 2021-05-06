@@ -213,6 +213,7 @@ fn generate_state_arms(
     for (
         state_idx,
         State {
+            initial,
             char_transitions,
             range_transitions,
             fail_transition,
@@ -221,6 +222,8 @@ fn generate_state_arms(
     ) in states.iter().enumerate()
     {
         let state_code: TokenStream = if state_idx == 0 {
+            assert!(*initial);
+
             // Initial state. Difference from other states is we return `None` when the
             // iterator ends. In non-initial states EOF returns the last (longest) match, or
             // fails (error).
@@ -230,7 +233,7 @@ fn generate_state_arms(
             });
 
             let state_char_arms = generate_state_char_arms(
-                false,
+                true,
                 char_transitions,
                 range_transitions,
                 fail_transition,
@@ -238,11 +241,11 @@ fn generate_state_arms(
             );
 
             quote!(
-                match self.iter.next() {
+                match self.iter.peek().copied() {
                     None => return None,
                     Some((char_idx, char)) => {
                         self.current_match_start = char_idx;
-                        self.current_match_end = char_idx + char.len_utf8();
+                        self.current_match_end = char_idx;
                         match char {
                             #(#state_char_arms,)*
                         }
@@ -346,7 +349,7 @@ fn generate_state_arms(
             };
 
             let state_char_arms = generate_state_char_arms(
-                true,
+                *initial,
                 char_transitions,
                 range_transitions,
                 fail_transition,
@@ -378,17 +381,16 @@ fn generate_state_arms(
             });
 
             let state_char_arms = generate_state_char_arms(
-                false,
+                *initial,
                 char_transitions,
                 range_transitions,
                 fail_transition,
                 &action,
             );
 
-            quote!(match self.iter.next() {
+            quote!(match self.iter.peek().copied() {
                 None => return Some(Err(#error)),
                 Some((char_idx, char)) => {
-                    self.current_match_end += char.len_utf8();
                     match char {
                         #(#state_char_arms,)*
                     }
@@ -406,10 +408,10 @@ fn generate_state_arms(
     match_arms
 }
 
-/// Generate arms on `match self.iter.next() { ... }` (for non-matching states) or `match
-/// self.iter.peek().copied() { ... }` (for matching states) of DFA state.
+/// Generate arms on `match self.iter.next() { ... }` (for initial state) or `match
+/// self.iter.peek().copied() { ... }` (for other states) of DFA state.
 fn generate_state_char_arms(
-    accepting: bool,
+    initial: bool,
     char_transitions: &FxHashMap<char, StateIdx>,
     range_transitions: &FxHashMap<(char, char), StateIdx>,
     fail_transition: &Option<StateIdx>,
@@ -428,22 +430,13 @@ fn generate_state_char_arms(
     for (StateIdx(next_state), chars) in state_chars.iter() {
         let pat = quote!(#(#chars)|*);
 
-        if accepting {
-            // In an accepting state we only consume the next character if we're making a
-            // transition. See `state_code` below for where we use `peek` instead of `next`
-            // in accepting states.
-            state_char_arms.push(quote!(
-                #pat => {
-                    self.current_match_end += char.len_utf8();
-                    let _ = self.iter.next();
-                    self.state = #next_state;
-                }
-            ));
-        } else {
-            state_char_arms.push(quote!(
-                #pat => self.state = #next_state
-            ));
-        }
+        state_char_arms.push(quote!(
+            #pat => {
+                self.current_match_end += char.len_utf8();
+                let _ = self.iter.next();
+                self.state = #next_state;
+            }
+        ));
     }
 
     // Add range transitions. Same as above, use chain of "or"s for ranges with same transition.
@@ -465,28 +458,28 @@ fn generate_state_char_arms(
             guard
         };
 
-        if accepting {
-            state_char_arms.push(quote!(
-                x if #guard => {
-                    self.current_match_end += x.len_utf8();
-                    let _ = self.iter.next();
-                    self.state = #next_state;
-                }
-            ));
-        } else {
-            state_char_arms.push(quote!(
-                x if #guard => {
-                    self.state = #next_state;
-                }
-            ));
-        }
+        state_char_arms.push(quote!(
+            x if #guard => {
+                self.current_match_end += x.len_utf8();
+                let _ = self.iter.next();
+                self.state = #next_state;
+            }
+        ));
     }
 
     // Add default case
     match fail_transition {
         None => state_char_arms.push(quote!(_ => #action)),
         Some(StateIdx(next_state)) => {
-            state_char_arms.push(quote!(_ => { self.state = #next_state; }))
+            if initial {
+                state_char_arms.push(quote!(_ => {
+                    self.current_match_end += char.len_utf8();
+                    let _ = self.iter.next();
+                    self.state = #next_state;
+                }));
+            } else {
+                state_char_arms.push(quote!(_ => { self.state = #next_state; }));
+            }
         }
     }
 

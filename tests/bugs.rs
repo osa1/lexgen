@@ -106,10 +106,14 @@ fn failure_confusion_3() {
         _ = 2,
     }
 
-    let mut lexer = Lexer::new("a ab");
+    let mut lexer = Lexer::new("a ab abc");
     assert_eq!(lexer.next(), Some(Ok((0, 2, 1))));
     assert_eq!(lexer.next(), Some(Ok((1, 0, 2))));
     assert_eq!(lexer.next(), Some(Ok((2, 1, 4))));
+    assert_eq!(lexer.next(), Some(Ok((4, 0, 5))));
+    assert_eq!(lexer.next(), Some(Ok((5, 1, 7))));
+    assert_eq!(lexer.next(), Some(Ok((7, 2, 8))));
+    assert_eq!(lexer.next(), None);
 }
 
 fn ignore_pos<A, E>(ret: Option<Result<(usize, A, usize), E>>) -> Option<Result<A, E>> {

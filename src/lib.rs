@@ -115,7 +115,12 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                     }
                 }
 
+                // println!("NFA=\n{}", nfa);
+
                 let dfa_ = nfa_to_dfa(&nfa);
+
+                // println!("DFA=\n{}", dfa_);
+
                 let initial_state = dfa_.initial_state();
 
                 dfa = Some(dfa_);

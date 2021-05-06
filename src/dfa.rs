@@ -14,6 +14,9 @@ pub struct StateIdx(usize);
 
 #[derive(Debug, Clone)]
 struct State<A> {
+    // Is this the initial state of a rule set? This is important as failure transitions in initial
+    // states consumes the current character, but failure transitions in other states don't.
+    initial: bool,
     char_transitions: FxHashMap<char, StateIdx>,
     range_transitions: FxHashMap<(char, char), StateIdx>,
     fail_transition: Option<StateIdx>,
@@ -23,6 +26,7 @@ struct State<A> {
 impl<A> State<A> {
     fn new() -> State<A> {
         State {
+            initial: false,
             char_transitions: Default::default(),
             range_transitions: Default::default(),
             fail_transition: None,
@@ -33,9 +37,11 @@ impl<A> State<A> {
 
 impl<A> DFA<A> {
     pub fn new() -> (DFA<A>, StateIdx) {
+        let mut initial_state = State::new();
+        initial_state.initial = true;
         (
             DFA {
-                states: vec![State::new()],
+                states: vec![initial_state],
             },
             StateIdx(0),
         )
@@ -100,6 +106,7 @@ impl<A> DFA<A> {
         let n_current_states = self.states.len();
 
         for State {
+            initial,
             char_transitions,
             range_transitions,
             fail_transition,
@@ -123,6 +130,7 @@ impl<A> DFA<A> {
             }
 
             self.states.push(State {
+                initial,
                 char_transitions: new_char_transitions,
                 range_transitions: new_range_transitions,
                 fail_transition: new_fail_transition,
@@ -182,6 +190,7 @@ impl<A> Display for DFA<A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         for (state_idx, state) in self.states.iter().enumerate() {
             let State {
+                initial,
                 char_transitions,
                 range_transitions,
                 fail_transition,
@@ -189,9 +198,17 @@ impl<A> Display for DFA<A> {
             } = state;
 
             if accepting.is_some() {
-                write!(f, "{:>4}:", format!("*{}", state_idx))?;
+                if *initial {
+                    write!(f, "{:>5}:", format!("i*{}", state_idx))?;
+                } else {
+                    write!(f, "{:>5}:", format!("*{}", state_idx))?;
+                }
             } else {
-                write!(f, "{:>4}:", state_idx)?;
+                if *initial {
+                    write!(f, "{:>5}:", format!("i{}", state_idx))?;
+                } else {
+                    write!(f, "{:>5}:", state_idx)?;
+                }
             }
 
             let mut first = true;
@@ -221,7 +238,10 @@ impl<A> Display for DFA<A> {
                 writeln!(f, "{:?} - {:?} -> {}", range_begin, range_end, next)?;
             }
 
-            if char_transitions.is_empty() && range_transitions.is_empty() {
+            if char_transitions.is_empty()
+                && range_transitions.is_empty()
+                && fail_transition.is_none()
+            {
                 writeln!(f)?;
             }
         }
