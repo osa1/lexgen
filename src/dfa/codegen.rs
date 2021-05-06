@@ -1,3 +1,39 @@
+// If a state has failure transition, effectively it's an accepting state
+// We can't consume the current chracter when transitioning to a failure state.
+// DFA::simulate actually gets this wrong. Fix it
+// TODO: Remove fail transitions, make all states accepting, with the failure action as the action
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 use super::{State, StateIdx, DFA};
 use crate::ast::{RuleKind, RuleRhs};
 
@@ -360,7 +396,7 @@ fn generate_state_arms(
                 action
             } else {
                 quote!({
-                    match self.iter.peek() {
+                    match self.iter.peek().copied() {
                         None => {
                             #action
                         }
@@ -410,7 +446,7 @@ fn generate_state_arms(
 }
 
 /// Generate arms on `match self.iter.next() { ... }` (for non-matching states) or `match
-/// self.iter.peek() { ... }` (for matching states) of DFA state.
+/// self.iter.peek().copied() { ... }` (for matching states) of DFA state.
 fn generate_state_char_arms(
     accepting: bool,
     char_transitions: &FxHashMap<char, StateIdx>,
@@ -456,15 +492,14 @@ fn generate_state_char_arms(
     }
 
     for (StateIdx(next_state), mut ranges) in state_ranges.into_iter() {
-        let x = if accepting { quote!(*x) } else { quote!(x) };
         let guard = if ranges.len() == 1 {
             let (range_begin, range_end) = ranges.pop().unwrap();
-            quote!(#x >= #range_begin && #x <= #range_end)
+            quote!(x >= #range_begin && x <= #range_end)
         } else {
             let (range_begin, range_end) = ranges.pop().unwrap();
-            let mut guard = quote!(#x >= #range_begin && #x <= #range_end);
+            let mut guard = quote!(x >= #range_begin && x <= #range_end);
             while let Some((range_begin, range_end)) = ranges.pop() {
-                guard = quote!((#x >= #range_begin && #x <= #range_end) || #guard);
+                guard = quote!((x >= #range_begin && x <= #range_end) || #guard);
             }
             guard
         };
