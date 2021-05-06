@@ -146,7 +146,7 @@ of rules. The syntax is:
 - `<regex>?` for zero or one repetitions of `<regex>`
 - `<regex> <regex>` for concatenation
 - `<regex> | <regex>` for alternation (match the first one, or the second one)
-- `_` can only appear at the top-level (in a LHS of a rule) and matches when
+- `_` can only appear at the top-level (in the LHS of a rule) and matches when
   none of the other rules match.
 
 `*`, `+`, and `?` have the same binding power. `|` has the least binding power.

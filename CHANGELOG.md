@@ -1,3 +1,7 @@
+# 2021/05/06: 0.2.1
+
+- Fixed various bugs in `_` pattern handling.
+
 # 2021/05/05: 0.2.0
 
 - It is now possible to use the special lifetime `'input` in your token types
