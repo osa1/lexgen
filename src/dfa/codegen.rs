@@ -257,93 +257,13 @@ fn generate_state_arms(
                     self.state = self.initial_state;
                     continue;
                 }),
-                Some(RuleRhs {
-                    expr,
-                    kind: RuleKind::Infallible,
-                }) => quote!({
-                    let rhs: fn(#handle_type_name<'_, 'input>) -> #action_enum_name<#token_type> = #expr;
-
-                    let str = &self.input[self.current_match_start..self.current_match_end];
-                    let handle = #handle_type_name {
-                        iter: &mut self.iter,
-                        match_: str,
-                        user_state: &mut self.user_state,
-                    };
-
-                    match rhs(handle) {
-                        #action_enum_name::Continue => {
-                            self.state = self.initial_state;
-                            continue;
-                        }
-                        #action_enum_name::Return(tok) => {
-                            self.state = self.initial_state;
-                            return Some(Ok((self.current_match_start, tok, self.current_match_end)));
-                        }
-                        #action_enum_name::Switch(rule_set) => {
-                            self.switch(rule_set);
-                            continue;
-                        }
-                        #action_enum_name::SwitchAndReturn(tok, rule_set) => {
-                            self.switch(rule_set);
-                            return Some(Ok((self.current_match_start, tok, self.current_match_end)));
-                        }
-                    }
-                }),
-                Some(RuleRhs {
-                    expr,
-                    kind: RuleKind::Fallible,
-                }) => {
-                    let user_error_type = match user_error_type {
-                        None => panic!(
-                            "Fallible rules can only be used with a user error type, \
-                            declared with `type Error = ...;` syntax"
-                        ),
-                        Some(user_error_type) => user_error_type,
-                    };
-                    quote!({
-                        let rhs: fn(#handle_type_name<'_, 'input>) -> #action_enum_name<Result<#token_type, #user_error_type>> = #expr;
-
-                        let str = &self.input[self.current_match_start..self.current_match_end];
-                        let handle = #handle_type_name {
-                            iter: &mut self.iter,
-                            match_: str,
-                            user_state: &mut self.user_state,
-                        };
-
-                        match rhs(handle) {
-                            #action_enum_name::Continue => {
-                                self.state = self.initial_state;
-                                continue;
-                            }
-                            #action_enum_name::Return(res) => {
-                                self.state = self.initial_state;
-                                return Some(match res {
-                                    Ok(tok) => Ok((self.current_match_start, tok, self.current_match_end)),
-                                    Err(err) => Err(LexerError::UserError(err)),
-                                });
-                            }
-                            #action_enum_name::Switch(rule_set) => {
-                                self.switch(rule_set);
-                                continue;
-                            }
-                            #action_enum_name::SwitchAndReturn(res, rule_set) => {
-                                self.switch(rule_set);
-                                return Some(match res {
-                                    Ok(tok) => Ok((self.current_match_start, tok, self.current_match_end)),
-                                    Err(err) => Err(LexerError::UserError(err)),
-                                });
-                            }
-                        }
-                    })
-                }
-                Some(RuleRhs {
-                    expr,
-                    kind: RuleKind::Simple,
-                }) => quote!({
-                    let rhs: #token_type = #expr;
-                    self.state = self.initial_state;
-                    return Some(Ok((self.current_match_start, rhs, self.current_match_end)));
-                }),
+                Some(rhs) => generate_semantic_action(
+                    rhs,
+                    handle_type_name,
+                    action_enum_name,
+                    user_error_type,
+                    token_type,
+                ),
             };
 
             let state_char_arms = generate_state_char_arms(
@@ -482,4 +402,97 @@ fn generate_state_char_arms(
     }
 
     state_char_arms
+}
+
+fn generate_semantic_action(
+    rhs: &RuleRhs,
+    handle_type_name: &syn::Ident,
+    action_enum_name: &syn::Ident,
+    user_error_type: Option<&syn::Type>,
+    token_type: &syn::Type,
+) -> TokenStream {
+    let RuleRhs { expr, kind } = rhs;
+
+    match kind {
+        RuleKind::Simple => quote!({
+            let rhs: #token_type = #expr;
+            self.state = self.initial_state;
+            return Some(Ok((self.current_match_start, rhs, self.current_match_end)));
+        }),
+
+        RuleKind::Fallible => {
+            let user_error_type = match user_error_type {
+                None => panic!(
+                    "Fallible rules can only be used with a user error type, \
+                            declared with `type Error = ...;` syntax"
+                ),
+                Some(user_error_type) => user_error_type,
+            };
+            quote!({
+                let rhs: fn(#handle_type_name<'_, 'input>) -> #action_enum_name<Result<#token_type, #user_error_type>> = #expr;
+
+                let str = &self.input[self.current_match_start..self.current_match_end];
+                let handle = #handle_type_name {
+                    iter: &mut self.iter,
+                    match_: str,
+                    user_state: &mut self.user_state,
+                };
+
+                match rhs(handle) {
+                    #action_enum_name::Continue => {
+                        self.state = self.initial_state;
+                        continue;
+                    }
+                    #action_enum_name::Return(res) => {
+                        self.state = self.initial_state;
+                        return Some(match res {
+                            Ok(tok) => Ok((self.current_match_start, tok, self.current_match_end)),
+                            Err(err) => Err(LexerError::UserError(err)),
+                        });
+                    }
+                    #action_enum_name::Switch(rule_set) => {
+                        self.switch(rule_set);
+                        continue;
+                    }
+                    #action_enum_name::SwitchAndReturn(res, rule_set) => {
+                        self.switch(rule_set);
+                        return Some(match res {
+                            Ok(tok) => Ok((self.current_match_start, tok, self.current_match_end)),
+                            Err(err) => Err(LexerError::UserError(err)),
+                        });
+                    }
+                }
+            })
+        }
+
+        RuleKind::Infallible => quote!({
+            let rhs: fn(#handle_type_name<'_, 'input>) -> #action_enum_name<#token_type> = #expr;
+
+            let str = &self.input[self.current_match_start..self.current_match_end];
+            let handle = #handle_type_name {
+                iter: &mut self.iter,
+                match_: str,
+                user_state: &mut self.user_state,
+            };
+
+            match rhs(handle) {
+                #action_enum_name::Continue => {
+                    self.state = self.initial_state;
+                    continue;
+                }
+                #action_enum_name::Return(tok) => {
+                    self.state = self.initial_state;
+                    return Some(Ok((self.current_match_start, tok, self.current_match_end)));
+                }
+                #action_enum_name::Switch(rule_set) => {
+                    self.switch(rule_set);
+                    continue;
+                }
+                #action_enum_name::SwitchAndReturn(tok, rule_set) => {
+                    self.switch(rule_set);
+                    return Some(Ok((self.current_match_start, tok, self.current_match_end)));
+                }
+            }
+        }),
+    }
 }
