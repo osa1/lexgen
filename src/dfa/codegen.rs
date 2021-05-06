@@ -182,8 +182,6 @@ fn generate_switch(
     quote!(
         fn switch(&mut self, rule: #enum_name) {
             match rule {
-                #enum_name::Init =>
-                    self.state = 0,
                 #(#arms,)*
             }
             self.initial_state = self.state;
