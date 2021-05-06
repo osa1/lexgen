@@ -53,7 +53,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                     for SingleRule { lhs, rhs } in rules {
                         match lhs {
                             RegexOrFail::Regex(re) => nfa.add_regex(&bindings, re, rhs.clone()),
-                            RegexOrFail::Fail => nfa.add_fail(rhs.clone()),
+                            RegexOrFail::Fail => nfa.set_fail_action(rhs.clone()),
                         }
                     }
 
@@ -78,7 +78,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                     for SingleRule { lhs, rhs } in rules {
                         match lhs {
                             RegexOrFail::Regex(re) => nfa.add_regex(&bindings, re, rhs.clone()),
-                            RegexOrFail::Fail => nfa.add_fail(rhs.clone()),
+                            RegexOrFail::Fail => nfa.set_fail_action(rhs.clone()),
                         }
                     }
 
@@ -111,7 +111,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                 for SingleRule { lhs, rhs } in rules {
                     match lhs {
                         RegexOrFail::Regex(re) => nfa.add_regex(&bindings, re, rhs.clone()),
-                        RegexOrFail::Fail => nfa.add_fail(rhs.clone()),
+                        RegexOrFail::Fail => nfa.set_fail_action(rhs.clone()),
                     }
                 }
 
@@ -511,7 +511,7 @@ mod tests {
         let mut nfa: NFA<usize> = NFA::new();
 
         nfa.add_regex(&Default::default(), &Regex::String("ab".to_owned()), 1);
-        nfa.add_fail(2);
+        nfa.set_fail_action(2);
 
         test_simulate(&nfa, vec![("a", Some(2)), ("ab", Some(1))]);
     }
@@ -524,7 +524,7 @@ mod tests {
         nfa.add_regex(&Default::default(), &Regex::String("aaa".to_owned()), 1);
         nfa.add_regex(&Default::default(), &Regex::String("aaa".to_owned()), 2);
         nfa.add_regex(&Default::default(), &Regex::String("aa".to_owned()), 3);
-        nfa.add_fail(4);
+        nfa.set_fail_action(4);
 
         test_simulate(
             &nfa,

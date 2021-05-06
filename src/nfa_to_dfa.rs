@@ -30,7 +30,7 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
     let mut work_list: Vec<BTreeSet<NfaStateIdx>> = vec![initial_states];
     let mut finished_dfa_states: FxHashSet<DfaStateIdx> = Default::default();
 
-    let fail_dfa_state = nfa.fail_action().and_then(|fail_action| {
+    let fail_dfa_state = nfa.get_fail_action().and_then(|fail_action| {
         let fail_state = dfa.new_state();
         dfa.make_state_accepting(fail_state, fail_action.clone());
         Some(fail_state)

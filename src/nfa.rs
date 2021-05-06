@@ -68,8 +68,13 @@ impl<A> NFA<A> {
         self.states[state.0].range_transitions.iter()
     }
 
-    pub fn fail_action(&self) -> Option<&A> {
+    pub fn get_fail_action(&self) -> Option<&A> {
         self.fail.as_ref()
+    }
+
+    pub fn set_fail_action(&mut self, value: A) {
+        assert!(self.fail.is_none());
+        self.fail = Some(value);
     }
 
     pub fn new_state(&mut self) -> StateIdx {
@@ -88,11 +93,6 @@ impl<A> NFA<A> {
         regex_to_nfa::add_re(self, bindings, re, re_initial_state, re_accepting_state);
 
         self.add_empty_transition(nfa_initial_state, re_initial_state);
-    }
-
-    pub fn add_fail(&mut self, value: A) {
-        assert!(self.fail.is_none());
-        self.fail = Some(value);
     }
 
     pub fn add_char_transition(&mut self, state: StateIdx, char: char, next: StateIdx) {
