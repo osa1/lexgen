@@ -43,7 +43,7 @@ pub fn reify(
 
     let lexer_error_type = match user_error_type {
         None => quote!(
-            #[derive(Debug, PartialEq, Eq)]
+            #[derive(Debug, PartialEq, Eq, Clone, Copy)]
             #visibility struct LexerError {
                 char_idx: usize,
             }

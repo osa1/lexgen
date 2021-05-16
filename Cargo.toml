@@ -1,6 +1,6 @@
 [package]
 name = "lexgen"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Ömer Sinan Ağacan <omeragacan@gmail.com>"]
 description = "A fully-featured lexer generator implemented as a proc macro"
 edition = "2018"

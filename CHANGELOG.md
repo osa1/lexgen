@@ -1,3 +1,7 @@
+# 2021/05/16: 0.2.2
+
+- `LexerError` type now implements `Clone` and `Copy`.
+
 # 2021/05/06: 0.2.1
 
 - Fixed various bugs in `_` pattern handling.
