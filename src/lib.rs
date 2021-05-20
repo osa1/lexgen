@@ -45,7 +45,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                 }
             }
             Rule::RuleSet { name, rules } => {
-                if name.to_string() == "Init" {
+                if name == "Init" {
                     if dfa.is_some() {
                         panic!("\"Init\" rule set can only be defined once");
                     }

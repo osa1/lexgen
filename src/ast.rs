@@ -282,7 +282,7 @@ impl Parse for Rule {
         } else if input.peek(syn::Ident) {
             // Name rules
             let ident = input.parse::<syn::Ident>()?;
-            if ident.to_string() != "rule" {
+            if ident != "rule" {
                 return Err(syn::Error::new(
                     ident.span(),
                     "Unknown identifier, expected \"rule\", \"let\", or a regex",
@@ -303,7 +303,7 @@ impl Parse for Rule {
             })
         } else if input.parse::<syn::token::Type>().is_ok() {
             let ident = input.parse::<syn::Ident>()?;
-            if ident.to_string() != "Error" {
+            if ident != "Error" {
                 panic!("Error type syntax is: `type Error = ...;`");
             }
             let mut lifetimes: Vec<syn::Lifetime> = vec![];

@@ -99,7 +99,7 @@ impl<A> NFA<A> {
         let not_exists = self.states[state.0]
             .char_transitions
             .entry(char)
-            .or_insert(Default::default())
+            .or_default()
             .insert(next);
 
         assert!(not_exists, "add_char_transition");
@@ -115,7 +115,7 @@ impl<A> NFA<A> {
         let not_exists = self.states[state.0]
             .range_transitions
             .entry((range_begin, range_end))
-            .or_insert(Default::default())
+            .or_default()
             .insert(next);
 
         assert!(not_exists, "add_range_transition");
