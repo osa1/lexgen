@@ -318,3 +318,27 @@ fn rule_kind_fallible_with_lifetimes() {
     ));
     assert_eq!(lexer.next(), None);
 }
+
+fn ignore_pos<A, E>(ret: Option<Result<(usize, A, usize), E>>) -> Option<Result<A, E>> {
+    ret.map(|res| res.map(|(_, a, _)| a))
+}
+
+/*
+#[test]
+fn overlapping_ranges() {
+    lexer! {
+        Lexer -> usize;
+
+        ['a'-'b'] '1' = 1,
+        ['a'-'c'] '2' = 2,
+    }
+
+    let mut lexer = Lexer::new("a1");
+    assert_eq!(ignore_pos(lexer.next()), Some(Ok(1)));
+    assert_eq!(lexer.next(), None);
+
+    let mut lexer = Lexer::new("a2");
+    assert_eq!(ignore_pos(lexer.next()), Some(Ok(2)));
+    assert_eq!(lexer.next(), None);
+}
+*/

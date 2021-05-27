@@ -7,6 +7,7 @@ mod dfa;
 mod display;
 mod nfa;
 mod nfa_to_dfa;
+mod range_set;
 mod regex_to_nfa;
 
 use ast::{Lexer, Regex, RegexOrFail, Rule, RuleRhs, SingleRule, Var};
@@ -508,5 +509,29 @@ mod tests {
         );
 
         test_simulate(&nfa, vec![("ab", Some(1)), ("ac", Some(2))]);
+    }
+
+    #[test]
+    fn overlapping_ranges() {
+        let mut nfa: NFA<usize> = NFA::new();
+
+        nfa.add_regex(
+            &Default::default(),
+            &Regex::Concat(
+                Box::new(Regex::CharSet(CharSet(vec![CharOrRange::Range('a', 'b')]))),
+                Box::new(Regex::Char('1')),
+            ),
+            1,
+        );
+        nfa.add_regex(
+            &Default::default(),
+            &Regex::Concat(
+                Box::new(Regex::CharSet(CharSet(vec![CharOrRange::Range('a', 'c')]))),
+                Box::new(Regex::Char('2')),
+            ),
+            2,
+        );
+
+        test_simulate(&nfa, vec![("a1", Some(1)), ("a2", Some(2))]);
     }
 }
