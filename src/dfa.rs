@@ -12,7 +12,7 @@ pub struct DFA<A> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StateIdx(usize);
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct State<A> {
     // Is this the initial state of a rule set? This is important as failure transitions in initial
     // states consumes the current character, but failure transitions in other states don't.
