@@ -41,7 +41,7 @@ impl<A> RangeMap<A> {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.ranges.is_empty()
+        self.iter().next().is_none()
     }
 }
 
