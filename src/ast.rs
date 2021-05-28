@@ -7,6 +7,7 @@ use std::fmt;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Var(pub String);
 
+#[derive(Clone)]
 pub struct Lexer {
     pub public: bool,
     pub type_name: syn::Ident,
@@ -15,6 +16,7 @@ pub struct Lexer {
     pub rules: Vec<Rule>,
 }
 
+#[derive(Clone)]
 pub enum Rule {
     /// `let <ident> = <regex>;`
     Binding { var: Var, re: Regex },
@@ -37,12 +39,13 @@ pub enum Rule {
     UnnamedRules { rules: Vec<SingleRule> },
 }
 
+#[derive(Clone)]
 pub struct SingleRule {
     pub lhs: RegexOrFail,
     pub rhs: Option<RuleRhs>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum RegexOrFail {
     Regex(Regex),
 

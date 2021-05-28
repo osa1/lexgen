@@ -2,7 +2,7 @@
 //!
 //! [1]: https://github.com/osa1/lexgen
 
-mod ast;
+pub mod ast;
 mod dfa;
 mod display;
 mod nfa;
@@ -15,17 +15,16 @@ use nfa::NFA;
 use nfa_to_dfa::nfa_to_dfa;
 
 use fxhash::FxHashMap;
-use proc_macro::TokenStream;
+use proc_macro2::TokenStream;
 
-#[proc_macro]
-pub fn lexer(input: TokenStream) -> TokenStream {
+pub fn lexer(lexer: Lexer) -> TokenStream {
     let Lexer {
         public,
         type_name,
         user_state_type,
         token_type,
         rules: top_level_rules,
-    } = syn::parse_macro_input!(input as Lexer);
+    } = lexer;
 
     // Maps DFA names to their initial states in the final DFA
     let mut dfas: FxHashMap<String, dfa::StateIdx> = Default::default();
