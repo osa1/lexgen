@@ -84,13 +84,13 @@ impl<A> DFA<A> {
     pub fn add_range_transition(
         &mut self,
         state: StateIdx,
-        range_begin: char,
-        range_end: char,
+        range_begin: u32,
+        range_end: u32,
         next: StateIdx,
     ) {
         self.states[state.0]
             .range_transitions
-            .insert(range_begin as u32, range_end as u32, next);
+            .insert(range_begin, range_end, next);
     }
 
     pub fn add_fail_transition(&mut self, state: StateIdx, next: StateIdx) {

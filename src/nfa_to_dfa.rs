@@ -7,7 +7,6 @@ use crate::nfa::StateIdx as NfaStateIdx;
 
 use std::collections::hash_map::Entry;
 use std::collections::BTreeSet;
-use std::convert::TryFrom;
 
 use fxhash::{FxHashMap, FxHashSet};
 
@@ -108,12 +107,7 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
             let closure: BTreeSet<NfaStateIdx> =
                 nfa.compute_state_closure(&state_set).into_iter().collect();
             let dfa_state = dfa_state_of_nfa_states(&mut dfa, &mut state_map, closure.clone());
-            dfa.add_range_transition(
-                current_dfa_state,
-                char::try_from(range.start).unwrap(),
-                char::try_from(range.end).unwrap(),
-                dfa_state,
-            );
+            dfa.add_range_transition(current_dfa_state, range.start, range.end, dfa_state);
 
             work_list.push(closure);
         }
