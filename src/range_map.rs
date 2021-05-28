@@ -145,7 +145,7 @@ impl<A: Clone> RangeMap<A> {
                 continue;
             }
 
-            todo!()
+            unreachable!()
         }
     }
 
