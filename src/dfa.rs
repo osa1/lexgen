@@ -127,7 +127,11 @@ impl<A> DFA<A> {
             for range in range_transitions.iter() {
                 let values = &range.values;
                 assert_eq!(values.len(), 1);
-                new_range_transitions.insert(range.start, range.end, values[0]);
+                new_range_transitions.insert(
+                    range.start,
+                    range.end,
+                    StateIdx(values[0].0 + n_current_states),
+                );
             }
 
             if let Some(next) = fail_transition {
