@@ -323,7 +323,6 @@ fn ignore_pos<A, E>(ret: Option<Result<(usize, A, usize), E>>) -> Option<Result<
     ret.map(|res| res.map(|(_, a, _)| a))
 }
 
-/*
 #[test]
 fn overlapping_ranges() {
     lexer! {
@@ -341,4 +340,3 @@ fn overlapping_ranges() {
     assert_eq!(ignore_pos(lexer.next()), Some(Ok(2)));
     assert_eq!(lexer.next(), None);
 }
-*/

@@ -27,6 +27,7 @@ impl<A> RangeMap<A> {
         }
     }
 
+    #[cfg(test)]
     fn iter_all(&self) -> impl Iterator<Item = &Range<A>> {
         self.ranges.iter()
     }
@@ -53,16 +54,8 @@ pub struct Range<A> {
 }
 
 impl<A> Range<A> {
-    fn new(start: u32, end: u32, value: A) -> Range<A> {
-        Range::with_values(start, end, vec![value])
-    }
-
     fn with_values(start: u32, end: u32, values: Vec<A>) -> Range<A> {
         Range { start, end, values }
-    }
-
-    fn add_value(&mut self, value: A) {
-        self.values.push(value)
     }
 
     fn add_values(&mut self, values: impl Iterator<Item = A>) {

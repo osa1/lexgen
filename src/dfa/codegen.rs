@@ -1,7 +1,7 @@
 use super::{State, StateIdx, DFA};
 
 use crate::ast::{RuleKind, RuleRhs};
-use crate::range_map::{Range, RangeMap};
+use crate::range_map::RangeMap;
 
 use std::convert::TryFrom;
 
