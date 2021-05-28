@@ -399,3 +399,13 @@ fn overlap_middle() {
         vec![(10, 14, vec![0]), (15, 15, vec![0, 1]), (16, 20, vec![0])]
     );
 }
+
+#[test]
+fn overlap_exact() {
+    let mut ranges: RangeMap<u32> = RangeMap::new();
+
+    ranges.insert(10, 20, 0);
+    ranges.insert(10, 20, 1);
+
+    assert_eq!(to_vec_skip_spaces(&ranges), vec![(10, 20, vec![0, 1])]);
+}
