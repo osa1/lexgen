@@ -1,17 +1,24 @@
 use std::cmp::{max, min};
 
-/// A set of inclusive ranges, with insertion and iteration operations. Insertion allows
+/// A map of inclusive ranges, with insertion and iteration operations. Insertion allows
 /// overlapping ranges. When two ranges overlap, value of the overlapping parts is the union of
 /// values of the overlapping ranges.
-pub struct RangeSet<A> {
+#[derive(Debug)]
+pub struct RangeMap<A> {
     // NB. internally we don't have any overlaps. Overlapping ranges are split into smaller
     // non-overlapping ranges.
     ranges: Vec<Range<A>>,
 }
 
-impl<A> RangeSet<A> {
-    fn new() -> RangeSet<A> {
-        RangeSet {
+impl<A> Default for RangeMap<A> {
+    fn default() -> Self {
+        RangeMap::new()
+    }
+}
+
+impl<A> RangeMap<A> {
+    fn new() -> RangeMap<A> {
+        RangeMap {
             ranges: vec![Range {
                 start: 0,
                 end: usize::MAX,
@@ -20,8 +27,12 @@ impl<A> RangeSet<A> {
         }
     }
 
-    fn iter(&self) -> impl Iterator<Item = &Range<A>> {
+    fn iter_all(&self) -> impl Iterator<Item = &Range<A>> {
         self.ranges.iter()
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &Range<A>> {
+        self.ranges.iter().filter(|r| !r.values.is_empty())
     }
 }
 
@@ -47,8 +58,8 @@ impl<A> Range<A> {
     }
 }
 
-impl<A: Clone> RangeSet<A> {
-    fn insert(&mut self, new_range_start: usize, new_range_end: usize, value: A) {
+impl<A: Clone> RangeMap<A> {
+    pub fn insert(&mut self, new_range_start: usize, new_range_end: usize, value: A) {
         // Scan all ranges and split as necessary
 
         let mut range_idx = 0;
@@ -140,13 +151,13 @@ fn to_tuple<A: Clone>(range: &Range<A>) -> (usize, usize, Vec<A>) {
 }
 
 #[cfg(test)]
-fn to_vec<A: Clone>(set: &RangeSet<A>) -> Vec<(usize, usize, Vec<A>)> {
-    set.iter().map(to_tuple).collect()
+fn to_vec<A: Clone>(map: &RangeMap<A>) -> Vec<(usize, usize, Vec<A>)> {
+    map.iter_all().map(to_tuple).collect()
 }
 
 #[test]
 fn add_non_overlapping() {
-    let mut ranges: RangeSet<u32> = RangeSet::new();
+    let mut ranges: RangeMap<u32> = RangeMap::new();
 
     ranges.insert(0, 10, 1);
     ranges.insert(20, 30, 0);
@@ -164,7 +175,7 @@ fn add_non_overlapping() {
 
 #[test]
 fn add_non_overlapping_reverse() {
-    let mut ranges: RangeSet<u32> = RangeSet::new();
+    let mut ranges: RangeMap<u32> = RangeMap::new();
 
     ranges.insert(20, 30, 0);
     ranges.insert(0, 10, 1);
@@ -182,7 +193,7 @@ fn add_non_overlapping_reverse() {
 
 #[test]
 fn add_overlapping_1() {
-    let mut ranges: RangeSet<u32> = RangeSet::new();
+    let mut ranges: RangeMap<u32> = RangeMap::new();
 
     ranges.insert(0, 10, 0);
     ranges.insert(10, 20, 1);
@@ -200,7 +211,7 @@ fn add_overlapping_1() {
 
 #[test]
 fn add_overlapping_1_reverse() {
-    let mut ranges: RangeSet<u32> = RangeSet::new();
+    let mut ranges: RangeMap<u32> = RangeMap::new();
 
     ranges.insert(10, 20, 1);
     ranges.insert(0, 10, 0);
@@ -218,7 +229,7 @@ fn add_overlapping_1_reverse() {
 
 #[test]
 fn add_overlapping_2() {
-    let mut ranges: RangeSet<u32> = RangeSet::new();
+    let mut ranges: RangeMap<u32> = RangeMap::new();
 
     ranges.insert(50, 100, 0);
 

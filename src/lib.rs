@@ -7,7 +7,7 @@ mod dfa;
 mod display;
 mod nfa;
 mod nfa_to_dfa;
-mod range_set;
+mod range_map;
 mod regex_to_nfa;
 
 use ast::{Lexer, Regex, RegexOrFail, Rule, RuleRhs, SingleRule, Var};
