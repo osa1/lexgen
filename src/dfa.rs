@@ -1,5 +1,9 @@
 pub mod codegen;
 
+use crate::range_map::{Range, RangeMap};
+
+use std::convert::TryFrom;
+
 use fxhash::FxHashMap;
 
 /// Deterministic finite automate, parameterized on values of accepting states.
@@ -18,7 +22,7 @@ struct State<A> {
     // states consumes the current character, but failure transitions in other states don't.
     initial: bool,
     char_transitions: FxHashMap<char, StateIdx>,
-    range_transitions: FxHashMap<(char, char), StateIdx>,
+    range_transitions: RangeMap<StateIdx>,
     fail_transition: Option<StateIdx>,
     accepting: Option<A>,
 }
@@ -84,10 +88,9 @@ impl<A> DFA<A> {
         range_end: char,
         next: StateIdx,
     ) {
-        let old = self.states[state.0]
+        self.states[state.0]
             .range_transitions
-            .insert((range_begin, range_end), next);
-        assert!(old.is_none());
+            .insert(range_begin as u32, range_end as u32, next);
     }
 
     pub fn add_fail_transition(&mut self, state: StateIdx, next: StateIdx) {
@@ -114,15 +117,17 @@ impl<A> DFA<A> {
         } in other.states
         {
             let mut new_char_transitions: FxHashMap<char, StateIdx> = Default::default();
-            let mut new_range_transitions: FxHashMap<(char, char), StateIdx> = Default::default();
+            let mut new_range_transitions: RangeMap<StateIdx> = Default::default();
             let mut new_fail_transition: Option<StateIdx> = None;
 
             for (char, next) in char_transitions {
                 new_char_transitions.insert(char, StateIdx(next.0 + n_current_states));
             }
 
-            for (range, next) in range_transitions {
-                new_range_transitions.insert(range, StateIdx(next.0 + n_current_states));
+            for range in range_transitions.iter() {
+                let values = &range.values;
+                assert_eq!(values.len(), 1);
+                new_range_transitions.insert(range.start, range.end, values[0]);
             }
 
             if let Some(next) = fail_transition {
@@ -153,9 +158,12 @@ impl<A> DFA<A> {
                 continue;
             }
 
-            for ((range_begin, range_end), next) in &self.states[state.0].range_transitions {
-                if char >= *range_begin && char <= *range_end {
-                    state = *next;
+            for range in self.states[state.0].range_transitions.iter() {
+                let Range { start, end, values } = range;
+                assert_eq!(values.len(), 1);
+                let next = values[0];
+                if char as u32 >= *start && char as u32 <= *end {
+                    state = next;
                     continue 'char_loop;
                 }
             }
@@ -228,14 +236,21 @@ impl<A> Display for DFA<A> {
                 writeln!(f, "{:?} -> {}", char, next)?;
             }
 
-            for ((range_begin, range_end), next) in range_transitions.iter() {
+            for Range { start, end, values } in range_transitions.iter() {
                 if !first {
                     write!(f, "     ")?;
                 } else {
                     first = false;
                 }
 
-                writeln!(f, "{:?} - {:?} -> {}", range_begin, range_end, next)?;
+                assert_eq!(values.len(), 1);
+                writeln!(
+                    f,
+                    "{:?} - {:?} -> {}",
+                    char::try_from(*start).unwrap(),
+                    char::try_from(*end).unwrap(),
+                    values[0]
+                )?;
             }
 
             if char_transitions.is_empty()
