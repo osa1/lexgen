@@ -164,6 +164,81 @@ fn to_vec<A: Clone>(map: &RangeMap<A>) -> Vec<(u32, u32, Vec<A>)> {
     map.iter_all().map(to_tuple).collect()
 }
 
+#[cfg(test)]
+fn to_vec_skip_spaces<A: Clone>(map: &RangeMap<A>) -> Vec<(u32, u32, Vec<A>)> {
+    map.iter().map(to_tuple).collect()
+}
+
+#[test]
+fn overlap_left() {
+    let mut ranges: RangeMap<u32> = RangeMap::new();
+
+    ranges.insert(10, 20, 0);
+    ranges.insert(5, 15, 1);
+
+    assert_eq!(
+        to_vec_skip_spaces(&ranges),
+        vec![(5, 9, vec![1]), (10, 15, vec![0, 1]), (16, 20, vec![0])]
+    );
+
+    ranges.insert(5, 5, 2);
+
+    assert_eq!(
+        to_vec_skip_spaces(&ranges),
+        vec![
+            (5, 5, vec![1, 2]),
+            (6, 9, vec![1]),
+            (10, 15, vec![0, 1]),
+            (16, 20, vec![0]),
+        ]
+    );
+
+    let mut ranges: RangeMap<u32> = RangeMap::new();
+
+    ranges.insert(10, 20, 0);
+    ranges.insert(10, 15, 1);
+
+    assert_eq!(
+        to_vec_skip_spaces(&ranges),
+        vec![(10, 15, vec![0, 1]), (16, 20, vec![0])]
+    );
+}
+
+#[test]
+fn overlap_right() {
+    let mut ranges: RangeMap<u32> = RangeMap::new();
+
+    ranges.insert(5, 15, 1);
+    ranges.insert(10, 20, 0);
+
+    assert_eq!(
+        to_vec_skip_spaces(&ranges),
+        vec![(5, 9, vec![1]), (10, 15, vec![1, 0]), (16, 20, vec![0])]
+    );
+
+    ranges.insert(20, 20, 2);
+
+    assert_eq!(
+        to_vec_skip_spaces(&ranges),
+        vec![
+            (5, 9, vec![1]),
+            (10, 15, vec![1, 0]),
+            (16, 19, vec![0]),
+            (20, 20, vec![0, 2]),
+        ]
+    );
+
+    let mut ranges: RangeMap<u32> = RangeMap::new();
+
+    ranges.insert(10, 15, 1);
+    ranges.insert(10, 20, 0);
+
+    assert_eq!(
+        to_vec_skip_spaces(&ranges),
+        vec![(10, 15, vec![1, 0]), (16, 20, vec![0])]
+    );
+}
+
 #[test]
 fn add_non_overlapping() {
     let mut ranges: RangeMap<u32> = RangeMap::new();
@@ -290,5 +365,37 @@ fn add_overlapping_2() {
             (101, 110, vec![2]),
             (111, u32::MAX, vec![]),
         ]
+    );
+}
+
+#[test]
+fn large_range_multiple_overlaps() {
+    let mut ranges: RangeMap<u32> = RangeMap::new();
+
+    ranges.insert(10, 20, 0);
+    ranges.insert(21, 30, 1);
+    ranges.insert(5, 35, 2);
+
+    assert_eq!(
+        to_vec_skip_spaces(&ranges),
+        vec![
+            (5, 9, vec![2]),
+            (10, 20, vec![0, 2]),
+            (21, 30, vec![1, 2]),
+            (31, 35, vec![2]),
+        ]
+    );
+}
+
+#[test]
+fn overlap_middle() {
+    let mut ranges: RangeMap<u32> = RangeMap::new();
+
+    ranges.insert(10, 20, 0);
+    ranges.insert(15, 15, 1);
+
+    assert_eq!(
+        to_vec_skip_spaces(&ranges),
+        vec![(10, 14, vec![0]), (15, 15, vec![0, 1]), (16, 20, vec![0])]
     );
 }
