@@ -1,5 +1,6 @@
 use crate::dfa::DFA;
 use crate::nfa::NFA;
+use crate::range_map::RangeMap;
 
 use crate::dfa::StateIdx as DfaStateIdx;
 use crate::nfa::StateIdx as NfaStateIdx;
@@ -53,8 +54,7 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
         finished_dfa_states.insert(current_dfa_state);
 
         let mut char_transitions: FxHashMap<char, FxHashSet<NfaStateIdx>> = Default::default();
-        let mut range_transitions: FxHashMap<(char, char), FxHashSet<NfaStateIdx>> =
-            Default::default();
+        let mut range_transitions: RangeMap<NfaStateIdx> = Default::default();
 
         for nfa_state in current_nfa_states.iter().copied() {
             if let Some(value) = nfa.get_accepting_state(nfa_state) {
@@ -71,10 +71,12 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
 
             // Collect range transitions
             for ((range_begin, range_end), next_states) in nfa.range_transitions(nfa_state) {
-                range_transitions
-                    .entry((*range_begin, *range_end))
-                    .or_default()
-                    .extend(next_states.iter().copied());
+                let next_states = next_states.iter().copied().collect::<Vec<NfaStateIdx>>();
+                range_transitions.insert_values(
+                    *range_begin as u32,
+                    *range_end as u32,
+                    &next_states,
+                );
             }
         }
 
@@ -82,9 +84,9 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
         for (char, mut char_states) in char_transitions.into_iter() {
             // For ranges that also cover the char we need to add the range transitions to the char
             // transition
-            for (range, range_states) in range_transitions.iter() {
-                if char >= range.0 && char <= range.1 {
-                    for range_state in range_states {
+            for range in range_transitions.iter() {
+                if char as u32 >= range.start && char as u32 <= range.end {
+                    for range_state in &range.values {
                         char_states.insert(*range_state);
                     }
                 }
@@ -100,11 +102,12 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
             work_list.push(closure);
         }
 
-        for ((range_begin, range_end), states) in range_transitions.into_iter() {
+        for range in range_transitions.into_iter() {
+            let state_set: FxHashSet<NfaStateIdx> = range.values.into_iter().collect();
             let closure: BTreeSet<NfaStateIdx> =
-                nfa.compute_state_closure(&states).into_iter().collect();
+                nfa.compute_state_closure(&state_set).into_iter().collect();
             let dfa_state = dfa_state_of_nfa_states(&mut dfa, &mut state_map, closure.clone());
-            dfa.add_range_transition(current_dfa_state, range_begin, range_end, dfa_state);
+            dfa.add_range_transition(current_dfa_state, range.start, range.end, dfa_state);
 
             work_list.push(closure);
         }
