@@ -328,15 +328,24 @@ fn overlapping_ranges() {
     lexer! {
         Lexer -> usize;
 
+        ' ',
         ['a'-'b'] '1' = 1,
         ['a'-'c'] '2' = 2,
+        ['b'-'c'] '3' = 3,
+        'a' '4' = 4,
+        'b' '5' = 5,
+        'c' '6' = 6,
     }
 
-    let mut lexer = Lexer::new("a1");
-    assert_eq!(ignore_pos(lexer.next()), Some(Ok(1)));
-    assert_eq!(lexer.next(), None);
-
-    let mut lexer = Lexer::new("a2");
-    assert_eq!(ignore_pos(lexer.next()), Some(Ok(2)));
+    let mut lexer = Lexer::new("a1 b1 a2 b2 b3 c3 a4 b5 c6");
+    assert_eq!(ignore_pos(lexer.next()), Some(Ok(1))); // a1
+    assert_eq!(ignore_pos(lexer.next()), Some(Ok(1))); // b1
+    assert_eq!(ignore_pos(lexer.next()), Some(Ok(2))); // a2
+    assert_eq!(ignore_pos(lexer.next()), Some(Ok(2))); // b2
+    assert_eq!(ignore_pos(lexer.next()), Some(Ok(3))); // b3
+    assert_eq!(ignore_pos(lexer.next()), Some(Ok(3))); // c3
+    assert_eq!(ignore_pos(lexer.next()), Some(Ok(4))); // a4
+    assert_eq!(ignore_pos(lexer.next()), Some(Ok(5))); // b5
+    assert_eq!(ignore_pos(lexer.next()), Some(Ok(6))); // c6
     assert_eq!(lexer.next(), None);
 }
