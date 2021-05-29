@@ -149,7 +149,7 @@ fn lua_long_strings() {
             ' ',
 
             '[' =>
-                |mut lexer: LuaLongStringLexerHandle| {
+                |mut lexer| {
                     *lexer.state() = Default::default();
                     lexer.switch(LuaLongStringLexerRule::LeftBracket)
                 },
@@ -157,37 +157,37 @@ fn lua_long_strings() {
 
         rule LeftBracket {
             '=' =>
-                |mut lexer: LuaLongStringLexerHandle| {
+                |mut lexer| {
                     lexer.state().left_size += 1;
                     lexer.continue_()
                 },
 
             '[' =>
-                |lexer: LuaLongStringLexerHandle|
+                |lexer|
                     lexer.switch(LuaLongStringLexerRule::String),
         }
 
         rule String {
             ']' =>
-                |mut lexer: LuaLongStringLexerHandle| {
+                |mut lexer| {
                     lexer.state().right_size = 0;
                     lexer.switch(LuaLongStringLexerRule::RightBracket)
                 },
 
             _ =>
-                |lexer: LuaLongStringLexerHandle|
+                |lexer|
                     lexer.continue_(),
         }
 
         rule RightBracket {
             '=' =>
-                |mut lexer: LuaLongStringLexerHandle| {
+                |mut lexer| {
                     lexer.state().right_size += 1;
                     lexer.continue_()
                 },
 
             ']' =>
-                |mut lexer: LuaLongStringLexerHandle| {
+                |mut lexer| {
                     let state = *lexer.state();
                     if state.left_size == state.right_size {
                         let match_ = lexer.match_[state.left_size+2..lexer.match_.len() - state.right_size - 2].to_owned();
@@ -198,7 +198,7 @@ fn lua_long_strings() {
                 },
 
             _ =>
-                |lexer: LuaLongStringLexerHandle|
+                |lexer|
                     lexer.switch(LuaLongStringLexerRule::String),
         }
     }
