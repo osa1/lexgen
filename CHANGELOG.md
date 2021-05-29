@@ -1,3 +1,8 @@
+# Unreleased
+
+- lexgen now comes with a set of built-in regular expressions for matching
+  Unicode alphanumerics, uppercases, whitespaces etc. See README for details.
+
 # 2021/05/28: 0.3.0
 
 - Fixed handling of overlapping ranges in a single NFA/DFA state. (#3)
