@@ -480,7 +480,6 @@ mod tests {
         test_simulate(&nfa, vec![("a", Some(2)), ("ab", Some(1))]);
     }
 
-    /*
     #[test]
     fn simulate_multiple_accepting_states() {
         let mut nfa: NFA<usize> = NFA::new();
@@ -495,7 +494,6 @@ mod tests {
             vec![("aaa", Some(1)), ("aa", Some(3)), ("a", Some(4))],
         );
     }
-    */
 
     #[test]
     fn range_and_char_confusion() {
