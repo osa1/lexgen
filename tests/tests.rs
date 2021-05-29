@@ -349,3 +349,29 @@ fn overlapping_ranges() {
     assert_eq!(ignore_pos(lexer.next()), Some(Ok(6))); // c6
     assert_eq!(lexer.next(), None);
 }
+
+#[test]
+fn builtins() {
+    lexer! {
+        Lexer -> usize;
+
+        $$alphabetic+ '1' = 1,
+        $$alphanumeric+ '2' = 2,
+        $$ascii+ '3' = 3,
+        $$ascii_alphabetic+ '4' = 4,
+        $$ascii_alphanumeric+ '5' = 5,
+        $$ascii_control+ '6' = 5,
+        $$ascii_digit+ '7' = 5,
+        $$ascii_graphic+ '8' = 5,
+        $$ascii_hexdigit+ '9' = 5,
+        $$ascii_lowercase+ "10" = 5,
+        $$ascii_punctuation+ "11" = 5,
+        $$ascii_uppercase+ "12" = 5,
+        $$ascii_whitespace+ "13" = 5,
+        $$control+ "14" = 5,
+        $$lowercase+ "15" = 5,
+        $$numeric+ "16" = 5,
+        $$uppercase+ "17" = 5,
+        $$whitespace+ "18" = 5,
+    }
+}
