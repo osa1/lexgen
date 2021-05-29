@@ -350,6 +350,7 @@ fn overlapping_ranges() {
     assert_eq!(lexer.next(), None);
 }
 
+/*
 #[test]
 fn builtins() {
     lexer! {
@@ -375,3 +376,4 @@ fn builtins() {
         $$whitespace+ "18" = 5,
     }
 }
+*/
