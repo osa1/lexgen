@@ -320,12 +320,16 @@ fn generate_state_arms(
             })
         };
 
+        let state_idx_code = if state_idx == states.len() - 1 {
+            quote!(_)
+        } else {
+            quote!(#state_idx)
+        };
+
         match_arms.push(quote!(
-            #state_idx => #state_code
+            #state_idx_code => #state_code
         ));
     }
-
-    match_arms.push(quote!(_ => unreachable!()));
 
     match_arms
 }
@@ -371,18 +375,13 @@ fn generate_state_char_arms(
         ));
     }
 
-    for (StateIdx(next_state), mut ranges) in state_ranges.into_iter() {
-        let guard = if ranges.len() == 1 {
-            let (range_begin, range_end) = ranges.pop().unwrap();
-            quote!(x >= #range_begin && x <= #range_end)
-        } else {
-            let (range_begin, range_end) = ranges.pop().unwrap();
-            let mut guard = quote!(x >= #range_begin && x <= #range_end);
-            while let Some((range_begin, range_end)) = ranges.pop() {
-                guard = quote!((x >= #range_begin && x <= #range_end) || #guard);
-            }
-            guard
-        };
+    for (StateIdx(next_state), ranges) in state_ranges.into_iter() {
+        let range_checks: Vec<TokenStream> = ranges
+            .into_iter()
+            .map(|(range_begin, range_end)| quote!((x >= #range_begin && x <= #range_end)))
+            .collect();
+
+        let guard = quote!(#(#range_checks)||*);
 
         state_char_arms.push(quote!(
             x if #guard => {
