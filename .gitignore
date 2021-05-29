@@ -1,2 +1,3 @@
 /target
+/char_range_gen/target
 Cargo.lock

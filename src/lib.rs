@@ -3,8 +3,10 @@
 //! [1]: https://github.com/osa1/lexgen
 
 mod ast;
+mod char_ranges;
 mod dfa;
 mod display;
+mod builtin;
 mod nfa;
 mod nfa_to_dfa;
 mod range_map;
