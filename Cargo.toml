@@ -1,6 +1,6 @@
 [package]
 name = "lexgen"
-version = "0.2.2"
+version = "0.3.0"
 authors = ["Ömer Sinan Ağacan <omeragacan@gmail.com>"]
 description = "A fully-featured lexer generator implemented as a proc macro"
 edition = "2018"
@@ -8,7 +8,6 @@ license = "MIT"
 homepage = "https://github.com/osa1/lexgen"
 
 [lib]
-name = "lexgen"
 proc_macro = false
 
 [[bin]]

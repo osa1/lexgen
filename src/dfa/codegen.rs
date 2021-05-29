@@ -1,5 +1,9 @@
 use super::{State, StateIdx, DFA};
+
 use crate::ast::{RuleKind, RuleRhs};
+use crate::range_map::RangeMap;
+
+use std::convert::TryFrom;
 
 use fxhash::FxHashMap;
 use proc_macro2::TokenStream;
@@ -316,12 +320,16 @@ fn generate_state_arms(
             })
         };
 
+        let state_idx_code = if state_idx == states.len() - 1 {
+            quote!(_)
+        } else {
+            quote!(#state_idx)
+        };
+
         match_arms.push(quote!(
-            #state_idx => #state_code
+            #state_idx_code => #state_code
         ));
     }
-
-    match_arms.push(quote!(_ => unreachable!()));
 
     match_arms
 }
@@ -331,7 +339,7 @@ fn generate_state_arms(
 fn generate_state_char_arms(
     initial: bool,
     char_transitions: &FxHashMap<char, StateIdx>,
-    range_transitions: &FxHashMap<(char, char), StateIdx>,
+    range_transitions: &RangeMap<StateIdx>,
     fail_transition: &Option<StateIdx>,
     action: &TokenStream,
 ) -> Vec<TokenStream> {
@@ -359,22 +367,21 @@ fn generate_state_char_arms(
 
     // Add range transitions. Same as above, use chain of "or"s for ranges with same transition.
     let mut state_ranges: FxHashMap<StateIdx, Vec<(char, char)>> = Default::default();
-    for (range, state_idx) in range_transitions {
-        state_ranges.entry(*state_idx).or_default().push(*range);
+    for range in range_transitions.iter() {
+        assert_eq!(range.values.len(), 1);
+        state_ranges.entry(range.values[0]).or_default().push((
+            char::try_from(range.start).unwrap(),
+            char::try_from(range.end).unwrap(),
+        ));
     }
 
-    for (StateIdx(next_state), mut ranges) in state_ranges.into_iter() {
-        let guard = if ranges.len() == 1 {
-            let (range_begin, range_end) = ranges.pop().unwrap();
-            quote!(x >= #range_begin && x <= #range_end)
-        } else {
-            let (range_begin, range_end) = ranges.pop().unwrap();
-            let mut guard = quote!(x >= #range_begin && x <= #range_end);
-            while let Some((range_begin, range_end)) = ranges.pop() {
-                guard = quote!((x >= #range_begin && x <= #range_end) || #guard);
-            }
-            guard
-        };
+    for (StateIdx(next_state), ranges) in state_ranges.into_iter() {
+        let range_checks: Vec<TokenStream> = ranges
+            .into_iter()
+            .map(|(range_begin, range_end)| quote!((x >= #range_begin && x <= #range_end)))
+            .collect();
+
+        let guard = quote!(#(#range_checks)||*);
 
         state_char_arms.push(quote!(
             x if #guard => {
