@@ -1,5 +1,7 @@
 use lexgen::lexer;
 
+use std::convert::TryFrom;
+
 #[test]
 fn simple() {
     mod lexer {
@@ -323,6 +325,12 @@ fn ignore_pos<A, E>(ret: Option<Result<(usize, A, usize), E>>) -> Option<Result<
     ret.map(|res| res.map(|(_, a, _)| a))
 }
 
+fn next<A, E>(
+    iter: &mut dyn Iterator<Item = Result<(usize, A, usize), E>>,
+) -> Option<Result<A, E>> {
+    ignore_pos(iter.next())
+}
+
 #[test]
 fn overlapping_ranges() {
     lexer! {
@@ -338,14 +346,70 @@ fn overlapping_ranges() {
     }
 
     let mut lexer = Lexer::new("a1 b1 a2 b2 b3 c3 a4 b5 c6");
-    assert_eq!(ignore_pos(lexer.next()), Some(Ok(1))); // a1
-    assert_eq!(ignore_pos(lexer.next()), Some(Ok(1))); // b1
-    assert_eq!(ignore_pos(lexer.next()), Some(Ok(2))); // a2
-    assert_eq!(ignore_pos(lexer.next()), Some(Ok(2))); // b2
-    assert_eq!(ignore_pos(lexer.next()), Some(Ok(3))); // b3
-    assert_eq!(ignore_pos(lexer.next()), Some(Ok(3))); // c3
-    assert_eq!(ignore_pos(lexer.next()), Some(Ok(4))); // a4
-    assert_eq!(ignore_pos(lexer.next()), Some(Ok(5))); // b5
-    assert_eq!(ignore_pos(lexer.next()), Some(Ok(6))); // c6
+    assert_eq!(next(&mut lexer), Some(Ok(1))); // a1
+    assert_eq!(next(&mut lexer), Some(Ok(1))); // b1
+    assert_eq!(next(&mut lexer), Some(Ok(2))); // a2
+    assert_eq!(next(&mut lexer), Some(Ok(2))); // b2
+    assert_eq!(next(&mut lexer), Some(Ok(3))); // b3
+    assert_eq!(next(&mut lexer), Some(Ok(3))); // c3
+    assert_eq!(next(&mut lexer), Some(Ok(4))); // a4
+    assert_eq!(next(&mut lexer), Some(Ok(5))); // b5
+    assert_eq!(next(&mut lexer), Some(Ok(6))); // c6
     assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn builtin_alphabetic() {
+    lexer! {
+        Lexer -> ();
+
+        ' ',
+        $$alphabetic = (),
+    }
+
+    // Test characters copied from Rust std documentation
+
+    let mut lexer = Lexer::new("a 京 💝");
+    assert_eq!(next(&mut lexer), Some(Ok(())));
+    assert_eq!(next(&mut lexer), Some(Ok(())));
+    assert!(matches!(next(&mut lexer), Some(Err(_))));
+}
+
+#[test]
+fn builtin_alphanumeric() {
+    lexer! {
+        Lexer -> ();
+
+        ' ',
+        $$alphanumeric = (),
+    }
+
+    let mut lexer = Lexer::new("٣ 7 ৬ ¾ ① K و 藏");
+    assert_eq!(next(&mut lexer), Some(Ok(())));
+    assert_eq!(next(&mut lexer), Some(Ok(())));
+    assert_eq!(next(&mut lexer), Some(Ok(())));
+    assert_eq!(next(&mut lexer), Some(Ok(())));
+    assert_eq!(next(&mut lexer), Some(Ok(())));
+    assert_eq!(next(&mut lexer), Some(Ok(())));
+    assert_eq!(next(&mut lexer), Some(Ok(())));
+    assert_eq!(next(&mut lexer), Some(Ok(())));
+    assert_eq!(next(&mut lexer), None);
+}
+
+#[test]
+fn builtin_ascii() {
+    lexer! {
+        Lexer -> ();
+
+        $$ascii = (),
+    }
+
+    for i in 0u32..128 {
+        let c = char::try_from(i).unwrap();
+        let mut str = String::new();
+        str.push(c);
+
+        let mut lexer = Lexer::new(&str);
+        assert_eq!(next(&mut lexer), Some(Ok(())));
+    }
 }

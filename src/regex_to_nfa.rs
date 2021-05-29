@@ -1,5 +1,8 @@
 use crate::ast::{CharOrRange, Regex, Var};
+use crate::builtin::BUILTIN_RANGES;
 use crate::nfa::{StateIdx, NFA};
+
+use std::convert::TryFrom;
 
 use fxhash::FxHashMap;
 
@@ -11,6 +14,28 @@ pub fn add_re<A>(
     cont: StateIdx,
 ) {
     match re {
+        Regex::Builtin(builtin_name) => {
+            let builtin = BUILTIN_RANGES.iter().find_map(|(name, builtin_)| {
+                if *name == builtin_name.0 {
+                    Some(*builtin_)
+                } else {
+                    None
+                }
+            });
+
+            let builtin =
+                builtin.unwrap_or_else(|| panic!("Unknown builtin regex: {}", builtin_name.0));
+
+            for (range_start, range_end) in builtin.get_ranges() {
+                nfa.add_range_transition(
+                    current,
+                    char::try_from(*range_start).unwrap(),
+                    char::try_from(*range_end).unwrap(),
+                    cont,
+                );
+            }
+        }
+
         Regex::Var(var) => {
             let re = bindings
                 .get(var)
@@ -43,8 +68,8 @@ pub fn add_re<A>(
                     CharOrRange::Char(char) => {
                         nfa.add_char_transition(current, *char, cont);
                     }
-                    CharOrRange::Range(range_begin, range_end) => {
-                        nfa.add_range_transition(current, *range_begin, *range_end, cont);
+                    CharOrRange::Range(range_start, range_end) => {
+                        nfa.add_range_transition(current, *range_start, *range_end, cont);
                     }
                 }
             }
