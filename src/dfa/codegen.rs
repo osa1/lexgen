@@ -320,12 +320,16 @@ fn generate_state_arms(
             })
         };
 
+        let state_idx_code = if state_idx == states.len() - 1 {
+            quote!(_)
+        } else {
+            quote!(#state_idx)
+        };
+
         match_arms.push(quote!(
-            #state_idx => #state_code
+            #state_idx_code => #state_code
         ));
     }
-
-    match_arms.push(quote!(_ => unreachable!()));
 
     match_arms
 }
