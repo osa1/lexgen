@@ -398,8 +398,7 @@ fn generate_state_arms(
     match_arms
 }
 
-/// Generate arms on `match self.iter.next() { ... }` (for initial state) or `match
-/// self.iter.peek().copied() { ... }` (for other states) of DFA state.
+/// Generate arms for `match self.iter.peek().copied() { ... }`
 fn generate_state_char_arms(
     initial: bool,
     char_transitions: &FxHashMap<char, StateIdx>,
