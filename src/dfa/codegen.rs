@@ -91,11 +91,11 @@ pub fn reify(
                             if c <= *end {
                                 std::cmp::Ordering::Equal
                             } else {
-                                std::cmp::Ordering::Greater
+                                std::cmp::Ordering::Less
                             }
                         }
                         std::cmp::Ordering::Equal => std::cmp::Ordering::Equal,
-                        other => other,
+                        std::cmp::Ordering::Less => std::cmp::Ordering::Greater,
                     })
                     .is_ok()
             }
