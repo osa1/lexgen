@@ -6,8 +6,21 @@ use crate::range_map::RangeMap;
 use std::convert::TryFrom;
 
 use fxhash::FxHashMap;
-use proc_macro2::TokenStream;
+use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
+
+// Max. size for guards in ranges. When a case have more ranges than this we generate a binary
+// search table.
+//
+// Using binary search for large number of guards should be more efficient in runtime, but more
+// importantly, when using builtin regexes like `$$uppercase` that has a lot of cases (see
+// `char_ranges` module), rustc uses GiBs of RAM when compiling the generated code, even in debug
+// mode. For example, the test `builtins` takes more than 32GiB of memory to compile.
+//
+// Binary search does less comparisons in the worst case when we have more than 3 cases, but the
+// code for binary search is more complicated than a chain of `||`s, so I think it makes sense to
+// have a slightly larger number here.
+const MAX_GUARD_SIZE: usize = 9;
 
 pub fn reify(
     dfa: &DFA<Option<RuleRhs>>,
@@ -27,18 +40,21 @@ pub fn reify(
 
     let handle_type_name = syn::Ident::new(&(type_name.to_string() + "Handle"), type_name.span());
 
+    let mut search_tables: Vec<TokenStream> = vec![];
+
     let match_arms = generate_state_arms(
         dfa,
         &handle_type_name,
         &action_enum_name,
         user_error_type.as_ref(),
         &token_type,
+        &mut search_tables,
     );
 
     let rule_name_enum_name = syn::Ident::new(&(type_name.to_string() + "Rule"), type_name.span());
     let rule_name_idents: Vec<syn::Ident> = rule_states
         .keys()
-        .map(|rule_name| syn::Ident::new(rule_name, proc_macro2::Span::call_site()))
+        .map(|rule_name| syn::Ident::new(rule_name, Span::call_site()))
         .collect();
 
     let switch_method = generate_switch(&rule_name_enum_name, rule_states);
@@ -59,6 +75,28 @@ pub fn reify(
                 UserError(#user_error_type),
             }
         ),
+    };
+
+    let binary_search_fn = if search_tables.is_empty() {
+        quote!()
+    } else {
+        quote!(
+            fn binary_search(c: char, table: &[(char, char)]) -> bool {
+                table
+                    .binary_search_by(|(start, end)| match c.cmp(start) {
+                        std::cmp::Ordering::Greater => {
+                            if c <= *end {
+                                std::cmp::Ordering::Equal
+                            } else {
+                                std::cmp::Ordering::Greater
+                            }
+                        }
+                        std::cmp::Ordering::Equal => std::cmp::Ordering::Equal,
+                        other => other,
+                    })
+                    .is_ok()
+            }
+        )
     };
 
     quote!(
@@ -154,6 +192,9 @@ pub fn reify(
             #switch_method
         }
 
+        #(#search_tables)*
+        #binary_search_fn
+
         impl<'input> Iterator for #type_name<'input> {
             type Item = Result<(usize, #token_type, usize), LexerError<#(#user_error_type_lifetimes),*>>;
 
@@ -176,7 +217,7 @@ fn generate_switch(
     let mut arms: Vec<TokenStream> = vec![];
 
     for (rule_name, StateIdx(state_idx)) in rule_states.iter() {
-        let rule_ident = syn::Ident::new(rule_name, proc_macro2::Span::call_site());
+        let rule_ident = syn::Ident::new(rule_name, Span::call_site());
         arms.push(quote!(
             #enum_name::#rule_ident =>
                 self.state = #state_idx
@@ -200,6 +241,7 @@ fn generate_state_arms(
     action_enum_name: &syn::Ident,
     user_error_type: Option<&syn::Type>,
     token_type: &syn::Type,
+    search_tables: &mut Vec<TokenStream>,
 ) -> Vec<TokenStream> {
     let DFA { states } = dfa;
 
@@ -235,11 +277,13 @@ fn generate_state_arms(
             });
 
             let state_char_arms = generate_state_char_arms(
+                state_idx,
                 true,
                 char_transitions,
                 range_transitions,
                 fail_transition,
                 &action,
+                search_tables,
             );
 
             quote!(
@@ -271,11 +315,13 @@ fn generate_state_arms(
             };
 
             let state_char_arms = generate_state_char_arms(
+                state_idx,
                 *initial,
                 char_transitions,
                 range_transitions,
                 fail_transition,
                 &action,
+                search_tables,
             );
 
             if char_transitions.is_empty() && range_transitions.is_empty() {
@@ -303,11 +349,13 @@ fn generate_state_arms(
             });
 
             let state_char_arms = generate_state_char_arms(
+                state_idx,
                 *initial,
                 char_transitions,
                 range_transitions,
                 fail_transition,
                 &action,
+                search_tables,
             );
 
             quote!(match self.iter.peek().copied() {
@@ -337,11 +385,13 @@ fn generate_state_arms(
 /// Generate arms on `match self.iter.next() { ... }` (for initial state) or `match
 /// self.iter.peek().copied() { ... }` (for other states) of DFA state.
 fn generate_state_char_arms(
+    state_idx: usize,
     initial: bool,
     char_transitions: &FxHashMap<char, StateIdx>,
     range_transitions: &RangeMap<StateIdx>,
     fail_transition: &Option<StateIdx>,
     action: &TokenStream,
+    search_tables: &mut Vec<TokenStream>,
 ) -> Vec<TokenStream> {
     // Arms of the `match` for the current character
     let mut state_char_arms: Vec<TokenStream> = vec![];
@@ -375,13 +425,22 @@ fn generate_state_char_arms(
         ));
     }
 
-    for (StateIdx(next_state), ranges) in state_ranges.into_iter() {
-        let range_checks: Vec<TokenStream> = ranges
-            .into_iter()
-            .map(|(range_begin, range_end)| quote!((x >= #range_begin && x <= #range_end)))
-            .collect();
+    for (range_idx, (StateIdx(next_state), ranges)) in state_ranges.into_iter().enumerate() {
+        let guard = if ranges.len() > MAX_GUARD_SIZE {
+            let (binary_search_table_code, binary_search_table_id) =
+                generate_binary_search_table(state_idx, range_idx, &ranges);
 
-        let guard = quote!(#(#range_checks)||*);
+            search_tables.push(binary_search_table_code);
+
+            quote!(binary_search(x, &#binary_search_table_id))
+        } else {
+            let range_checks: Vec<TokenStream> = ranges
+                .into_iter()
+                .map(|(range_begin, range_end)| quote!((x >= #range_begin && x <= #range_end)))
+                .collect();
+
+            quote!(#(#range_checks)||*)
+        };
 
         state_char_arms.push(quote!(
             x if #guard => {
@@ -409,6 +468,33 @@ fn generate_state_char_arms(
     }
 
     state_char_arms
+}
+
+// NB. This assumes `ranges` is sorted and the elements do not overlap.
+fn generate_binary_search_table(
+    state_idx: usize,
+    range_idx: usize,
+    ranges: &[(char, char)],
+) -> (TokenStream, syn::Ident) {
+    let ident = syn::Ident::new(
+        &format!("S{}_R{}_TABLE", state_idx, range_idx),
+        Span::call_site(),
+    );
+
+    let tuples: Vec<TokenStream> = ranges
+        .iter()
+        .map(|(start, end)| quote!((#start, #end)))
+        .collect();
+
+    let n_ranges = ranges.len();
+
+    let code = quote!(
+        static #ident: [(char, char); #n_ranges] = [
+            #(#tuples,)*
+        ];
+    );
+
+    (code, ident)
 }
 
 fn generate_semantic_action(
