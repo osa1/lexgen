@@ -1,4 +1,7 @@
+mod search_table;
+
 use super::{State, StateIdx, DFA};
+use search_table::SearchTableSet;
 
 use crate::ast::{RuleKind, RuleRhs};
 use crate::range_map::RangeMap;
@@ -40,7 +43,7 @@ pub fn reify(
 
     let handle_type_name = syn::Ident::new(&(type_name.to_string() + "Handle"), type_name.span());
 
-    let mut search_tables: Vec<TokenStream> = vec![];
+    let mut search_tables = SearchTableSet::new();
 
     let match_arms = generate_state_arms(
         dfa,
@@ -98,6 +101,22 @@ pub fn reify(
             }
         )
     };
+
+    let search_tables: Vec<TokenStream> = search_tables
+        .iter()
+        .map(|(ranges, ident)| {
+            let n_ranges = ranges.len();
+            let pairs: Vec<TokenStream> = ranges
+                .iter()
+                .map(|(start, end)| quote!((#start, #end)))
+                .collect();
+            quote!(
+                static #ident: [(char, char); #n_ranges] = [
+                    #(#pairs),*
+                ];
+            )
+        })
+        .collect();
 
     quote!(
         // Possible outcomes of a user action
@@ -241,7 +260,7 @@ fn generate_state_arms(
     action_enum_name: &syn::Ident,
     user_error_type: Option<&syn::Type>,
     token_type: &syn::Type,
-    search_tables: &mut Vec<TokenStream>,
+    search_tables: &mut SearchTableSet,
 ) -> Vec<TokenStream> {
     let DFA { states } = dfa;
 
@@ -277,7 +296,6 @@ fn generate_state_arms(
             });
 
             let state_char_arms = generate_state_char_arms(
-                state_idx,
                 true,
                 char_transitions,
                 range_transitions,
@@ -315,7 +333,6 @@ fn generate_state_arms(
             };
 
             let state_char_arms = generate_state_char_arms(
-                state_idx,
                 *initial,
                 char_transitions,
                 range_transitions,
@@ -349,7 +366,6 @@ fn generate_state_arms(
             });
 
             let state_char_arms = generate_state_char_arms(
-                state_idx,
                 *initial,
                 char_transitions,
                 range_transitions,
@@ -385,13 +401,12 @@ fn generate_state_arms(
 /// Generate arms on `match self.iter.next() { ... }` (for initial state) or `match
 /// self.iter.peek().copied() { ... }` (for other states) of DFA state.
 fn generate_state_char_arms(
-    state_idx: usize,
     initial: bool,
     char_transitions: &FxHashMap<char, StateIdx>,
     range_transitions: &RangeMap<StateIdx>,
     fail_transition: &Option<StateIdx>,
     action: &TokenStream,
-    search_tables: &mut Vec<TokenStream>,
+    search_tables: &mut SearchTableSet,
 ) -> Vec<TokenStream> {
     // Arms of the `match` for the current character
     let mut state_char_arms: Vec<TokenStream> = vec![];
@@ -425,12 +440,9 @@ fn generate_state_char_arms(
         ));
     }
 
-    for (range_idx, (StateIdx(next_state), ranges)) in state_ranges.into_iter().enumerate() {
+    for (StateIdx(next_state), ranges) in state_ranges.into_iter() {
         let guard = if ranges.len() > MAX_GUARD_SIZE {
-            let (binary_search_table_code, binary_search_table_id) =
-                generate_binary_search_table(state_idx, range_idx, &ranges);
-
-            search_tables.push(binary_search_table_code);
+            let binary_search_table_id = search_tables.add_table(ranges);
 
             quote!(binary_search(x, &#binary_search_table_id))
         } else {
@@ -468,33 +480,6 @@ fn generate_state_char_arms(
     }
 
     state_char_arms
-}
-
-// NB. This assumes `ranges` is sorted and the elements do not overlap.
-fn generate_binary_search_table(
-    state_idx: usize,
-    range_idx: usize,
-    ranges: &[(char, char)],
-) -> (TokenStream, syn::Ident) {
-    let ident = syn::Ident::new(
-        &format!("S{}_R{}_TABLE", state_idx, range_idx),
-        Span::call_site(),
-    );
-
-    let tuples: Vec<TokenStream> = ranges
-        .iter()
-        .map(|(start, end)| quote!((#start, #end)))
-        .collect();
-
-    let n_ranges = ranges.len();
-
-    let code = quote!(
-        static #ident: [(char, char); #n_ranges] = [
-            #(#tuples,)*
-        ];
-    );
-
-    (code, ident)
 }
 
 fn generate_semantic_action(
