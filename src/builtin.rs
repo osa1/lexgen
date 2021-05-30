@@ -1,3 +1,5 @@
+#![allow(non_camel_case_types)]
+
 // NB. We use this type instead of storing `&'static [...]`s directly to make debugging easier.
 #[derive(Debug, Clone, Copy)]
 pub enum BuiltinCharRange {
@@ -19,9 +21,11 @@ pub enum BuiltinCharRange {
     Numeric,
     Uppercase,
     Whitespace,
+    XID_Start,
+    XID_Continue,
 }
 
-pub static BUILTIN_RANGES: [(&'static str, BuiltinCharRange); 18] = [
+pub static BUILTIN_RANGES: [(&'static str, BuiltinCharRange); 20] = [
     ("alphabetic", BuiltinCharRange::Alphabetic),
     ("alphanumeric", BuiltinCharRange::Alphanumeric),
     ("ascii", BuiltinCharRange::Ascii),
@@ -40,6 +44,8 @@ pub static BUILTIN_RANGES: [(&'static str, BuiltinCharRange); 18] = [
     ("numeric", BuiltinCharRange::Numeric),
     ("uppercase", BuiltinCharRange::Uppercase),
     ("whitespace", BuiltinCharRange::Whitespace),
+    ("XID_Start", BuiltinCharRange::XID_Start),
+    ("XID_Continue", BuiltinCharRange::XID_Continue),
 ];
 
 impl BuiltinCharRange {
@@ -65,6 +71,8 @@ impl BuiltinCharRange {
             BuiltinCharRange::Numeric => &NUMERIC,
             BuiltinCharRange::Uppercase => &UPPERCASE,
             BuiltinCharRange::Whitespace => &WHITESPACE,
+            BuiltinCharRange::XID_Start => &XID_START,
+            BuiltinCharRange::XID_Continue => &XID_CONTINUE,
         }
     }
 }

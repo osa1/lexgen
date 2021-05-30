@@ -55,7 +55,7 @@ ascii_fn!(is_ascii_punctuation);
 ascii_fn!(is_ascii_uppercase);
 ascii_fn!(is_ascii_whitespace);
 
-static FNS: [(fn(char) -> bool, &'static str); 18] = [
+static FNS: [(fn(char) -> bool, &'static str); 20] = [
     (char::is_alphabetic, "ALPHABETIC"),
     (char::is_alphanumeric, "ALPHANUMERIC"),
     (is_ascii, "ASCII"),
@@ -74,4 +74,9 @@ static FNS: [(fn(char) -> bool, &'static str); 18] = [
     (char::is_numeric, "NUMERIC"),
     (char::is_uppercase, "UPPERCASE"),
     (char::is_whitespace, "WHITESPACE"),
+    (<char as unicode_xid::UnicodeXID>::is_xid_start, "XID_START"),
+    (
+        <char as unicode_xid::UnicodeXID>::is_xid_continue,
+        "XID_CONTINUE",
+    ),
 ];
