@@ -1,4 +1,4 @@
-# Unreleased
+# 2021/05/30: 0.4.0
 
 - lexgen now comes with a set of built-in regular expressions for matching
   Unicode alphanumerics, uppercases, whitespaces etc. See README for details.
