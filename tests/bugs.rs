@@ -176,6 +176,9 @@ fn continue_confusion_2() {
 
     let mut lexer = Lexer::new("a");
     assert!(matches!(lexer.next(), Some(Err(_))));
+
+    let mut lexer = Lexer::new("aa");
+    assert!(matches!(lexer.next(), Some(Err(_))));
 }
 
 fn ignore_pos<A, E>(ret: Option<Result<(usize, A, usize), E>>) -> Option<Result<A, E>> {
