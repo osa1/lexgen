@@ -132,6 +132,8 @@ of rules. The syntax is:
 
 - `$var` for variables defined in the let binding section. Variables need to be
   defined before used.
+- `$$var` for built-in regexes (see "Built-in regular expressions" section
+  below).
 - Rust character syntax for characters, e.g. `'a'`.
 - Rust string syntax for strings, e.g. `"abc"`.
 - `[...]` for character sets. Inside the brackets you can have one or more of:
@@ -151,6 +153,46 @@ of rules. The syntax is:
 
 `*`, `+`, and `?` have the same binding power. `|` has the least binding power.
 You can use parenthesis for grouping, e.g. `('a' | 'b')*`
+
+## Built-in regular expressions
+
+lexgen comes with a set of built-in regular expressions. Regular
+expressions listed below match the same set of characters as their Rust
+counterparts. For example, `$$alphabetic` matches the same set of characters as
+Rust's [`char::is_alphabetic`]:
+
+- `$$alphabetic`
+- `$$alphanumeric`
+- `$$ascii`
+- `$$ascii_alphabetic`
+- `$$ascii_alphanumeric`
+- `$$ascii_control`
+- `$$ascii_digit`
+- `$$ascii_graphic`
+- `$$ascii_hexdigit`
+- `$$ascii_lowercase`
+- `$$ascii_punctuation`
+- `$$ascii_uppercase`
+- `$$ascii_whitespace`
+- `$$control`
+- `$$lowercase`
+- `$$numeric`
+- `$$uppercase`
+- `$$whitespace`
+
+(Note that in the generated code we don't use Rust `char` methods. For simple
+cases like `$$ascii` we generate simple range checks. For more complicated
+cases like `$$lowercase` we generate a binary search table and run binary
+search when checking a character)
+
+In addition, these two built-in regular expressions match Unicode [XID_Start and
+XID_Continue]:
+
+- `$$XID_Start`
+- `$$XID_Continue`
+
+[`char::is_alphabetic`]: https://doc.rust-lang.org/std/primitive.char.html#method.is_alphabetic
+[XID_Start and XID_Continue]: http://www.unicode.org/reports/tr31/
 
 ## Rule syntax
 

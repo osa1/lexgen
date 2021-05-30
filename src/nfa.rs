@@ -186,12 +186,15 @@ impl<A: std::fmt::Debug> NFA<A> {
             println!("states after = {:?}", states);
         }
 
-        let mut accepting_state_values: Vec<&A> = states
-            .iter()
-            .filter_map(|state| self.states[state.0].accepting.as_ref())
-            .collect();
+        let mut states: Vec<StateIdx> = states.into_iter().collect();
+        states.sort();
 
-        accepting_state_values.pop().or(self.fail.as_ref())
+        let accept_value = states
+            .into_iter()
+            .filter_map(|s| self.states[s.0].accepting.as_ref())
+            .next();
+
+        accept_value.or(self.fail.as_ref())
     }
 }
 

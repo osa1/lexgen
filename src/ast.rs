@@ -7,6 +7,9 @@ use std::fmt;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Var(pub String);
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Builtin(pub String);
+
 #[derive(Clone)]
 pub struct Lexer {
     pub public: bool,
@@ -119,6 +122,7 @@ impl fmt::Debug for SingleRule {
 
 #[derive(Debug, Clone)]
 pub enum Regex {
+    Builtin(Builtin),
     Var(Var),
     Char(char),
     String(String),
@@ -181,8 +185,13 @@ fn parse_regex_1(input: ParseStream) -> syn::Result<Regex> {
         Regex::parse(&parenthesized)
     } else if input.peek(syn::token::Dollar) {
         let _ = input.parse::<syn::token::Dollar>()?;
-        let ident = input.parse::<syn::Ident>()?;
-        Ok(Regex::Var(Var(ident.to_string())))
+        if input.parse::<syn::token::Dollar>().is_ok() {
+            let ident = input.parse::<syn::Ident>()?;
+            Ok(Regex::Builtin(Builtin(ident.to_string())))
+        } else {
+            let ident = input.parse::<syn::Ident>()?;
+            Ok(Regex::Var(Var(ident.to_string())))
+        }
     } else if input.peek(syn::LitChar) {
         let char = input.parse::<syn::LitChar>()?;
         Ok(Regex::Char(char.value()))
