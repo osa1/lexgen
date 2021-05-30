@@ -116,6 +116,68 @@ fn failure_confusion_3() {
     assert_eq!(lexer.next(), None);
 }
 
+#[test]
+fn failure_confusion_4() {
+    lexer! {
+        Lexer -> u32;
+
+        ' ',
+        "aaa" = 1,
+        "aa" = 2,
+        _ = 3,
+    }
+
+    let mut lexer = Lexer::new("aaa aa a");
+
+    assert_eq!(lexer.next(), Some(Ok((0, 1, 3))));
+    assert_eq!(lexer.next(), Some(Ok((4, 2, 6))));
+    assert_eq!(lexer.next(), Some(Ok((7, 3, 8))));
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn continue_confusion_1() {
+    lexer! {
+        Lexer -> u32;
+
+        _,
+    }
+
+    let mut lexer = Lexer::new("");
+    assert_eq!(lexer.next(), None);
+
+    let mut lexer = Lexer::new("a");
+    assert_eq!(lexer.next(), None);
+
+    let mut lexer = Lexer::new("aaa");
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn continue_confusion_2() {
+    lexer! {
+        Lexer -> u32;
+
+        rule Init {
+            _ => |lexer| lexer.switch(LexerRule::Test),
+        }
+
+        // Previously failure code would run on end-of-stream, which resets the state to `Test` and
+        // continues, causing a loop.
+        //
+        // This issue does not exist in `Init` as we explicitly handle EOF there, to stop the main
+        // loop.
+        //
+        // Instead end-of-stream in a state other than `Init` should fail with "unexpected EOF".
+        rule Test {
+            _,
+        }
+    }
+
+    let mut lexer = Lexer::new("a");
+    assert!(matches!(lexer.next(), Some(Err(_))));
+}
+
 fn ignore_pos<A, E>(ret: Option<Result<(usize, A, usize), E>>) -> Option<Result<A, E>> {
     ret.map(|res| res.map(|(_, a, _)| a))
 }

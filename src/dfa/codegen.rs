@@ -288,8 +288,8 @@ fn generate_state_arms(
             assert!(*initial);
 
             // Initial state. Difference from other states is we return `None` when the
-            // iterator ends. In non-initial states EOF returns the last (longest) match, or
-            // fails (error).
+            // stream ends. In non-initial states EOS (end-of-stream) returns the last (longest)
+            // match, or fails (error).
             let error = make_lexer_error(quote!(self.current_match_start));
             let action = quote!({
                 return Some(Err(#error));
@@ -336,7 +336,7 @@ fn generate_state_arms(
                 *initial,
                 char_transitions,
                 range_transitions,
-                fail_transition,
+                &None,
                 &action,
                 search_tables,
             );
@@ -361,9 +361,14 @@ fn generate_state_arms(
             // Non-initial, non-accepting state. In a non-accepting state we want to consume a
             // character anyway so we can use `next` instead of `peek`.
             let error = make_lexer_error(quote!(self.current_match_start));
-            let action = quote!({
-                return Some(Err(#error));
-            });
+            let action = match fail_transition {
+                None => quote!({
+                    return Some(Err(#error));
+                }),
+                Some(StateIdx(fail_state)) => quote!({
+                    self.state = #fail_state;
+                }),
+            };
 
             let state_char_arms = generate_state_char_arms(
                 *initial,
@@ -374,8 +379,19 @@ fn generate_state_arms(
                 search_tables,
             );
 
+            let end_of_stream_action = if *initial {
+                // In an initial state other than the state 0 we fail with "unexpected EOF"
+                quote!({
+                    return Some(Err(#error));
+                })
+            } else {
+                // Otherwise we run the semantic action and go to initial state of the current DFA.
+                // Initial state will then fail.
+                action
+            };
+
             quote!(match self.iter.peek().copied() {
-                None => return Some(Err(#error)),
+                None => #end_of_stream_action,
                 Some((char_idx, char)) => {
                     match char {
                         #(#state_char_arms,)*
