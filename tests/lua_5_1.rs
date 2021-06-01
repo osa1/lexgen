@@ -1,11 +1,11 @@
-//! A Lua 5.1 lexer. We use this as
-//!
-//! - An example: this file is linked from README
-//!
-//! - A test: `test_data` contains all Lua files in Lua 5.1 source distribution, we lex it using
-//!   this lexer as a test.
-//!
-//! - A benchmark: We also use `test_data` lexing time as a runtime benchmark.
+// A Lua 5.1 lexer. We use this as
+//
+// - An example: this file is linked from README
+//
+// - A test: `test_data` contains all Lua files in Lua 5.1 source distribution, we lex it using
+//   this lexer as a test.
+//
+// - A benchmark: We also use `test_data` lexing time as a runtime benchmark.
 
 use lexgen::lexer;
 
