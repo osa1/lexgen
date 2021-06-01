@@ -1,0 +1,506 @@
+-- This file is contains concatenation of Lua files in Lua 5.1 source
+-- distribution, used to test the Lua lexer (and lexgen) and as a runtime
+-- benchmark.
+
+-- Copyright (C) 1994-2012 Lua.org, PUC-Rio.
+-- 
+-- Permission is hereby granted, free of charge, to any person obtaining a copy
+-- of this software and associated documentation files (the "Software"), to deal
+-- in the Software without restriction, including without limitation the rights
+-- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+-- copies of the Software, and to permit persons to whom the Software is
+-- furnished to do so, subject to the following conditions:
+-- 
+-- The above copyright notice and this permission notice shall be included in
+-- all copies or substantial portions of the Software.
+-- 
+-- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+-- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+-- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+-- AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+-- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+-- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+-- THE SOFTWARE.
+
+delta=1e-6	-- tolerance
+
+function bisect(f,a,b,fa,fb)
+ local c=(a+b)/2
+ io.write(n," c=",c," a=",a," b=",b,"\n")
+ if c==a or c==b or math.abs(a-b)<delta then return c,b-a end
+ n=n+1
+ local fc=f(c)
+ if fa*fc<0 then return bisect(f,a,c,fa,fc) else return bisect(f,c,b,fc,fb) end
+end
+
+-- find root of f in the inverval [a,b]. needs f(a)*f(b)<0
+function solve(f,a,b)
+ n=0
+ local z,e=bisect(f,a,b,f(a),f(b))
+ io.write(string.format("after %d steps, root is %.17g with error %.1e, f=%.1e\n",n,z,e,f(z)))
+end
+
+-- our function
+function f(x)
+ return x*x*x-x-1
+end
+
+-- find zero in [1,2]
+solve(f,1,2)
+-- temperature conversion table (celsius to farenheit)
+
+for c0=-20,50-1,10 do
+	io.write("C ")
+	for c=c0,c0+10-1 do
+		io.write(string.format("%3.0f ",c))
+	end
+	io.write("\n")
+	
+	io.write("F ")
+	for c=c0,c0+10-1 do
+		f=(9/5)*c+32
+		io.write(string.format("%3.0f ",f))
+	end
+	io.write("\n\n")
+end
+-- echo command line arguments
+
+for i=0,table.getn(arg) do
+ print(i,arg[i])
+end
+-- read environment variables as if they were global variables
+
+local f=function (t,i) return os.getenv(i) end
+setmetatable(getfenv(),{__index=f})
+
+-- an example
+print(a,USER,PATH)
+-- function closures are powerful
+
+-- traditional fixed-point operator from functional programming
+Y = function (g)
+      local a = function (f) return f(f) end
+      return a(function (f)
+                 return g(function (x)
+                             local c=f(f)
+                             return c(x)
+                           end)
+               end)
+end
+
+
+-- factorial without recursion
+F = function (f)
+      return function (n)
+               if n == 0 then return 1
+               else return n*f(n-1) end
+             end
+    end
+
+factorial = Y(F)   -- factorial is the fixed point of F
+
+-- now test it
+function test(x)
+	io.write(x,"! = ",factorial(x),"\n")
+end
+
+for n=0,16 do
+	test(n)
+end
+-- example of for with generator functions
+
+function generatefib (n)
+  return coroutine.wrap(function ()
+    local a,b = 1, 1
+    while a <= n do
+      coroutine.yield(a)
+      a, b = b, a+b
+    end
+  end)
+end
+
+for i in generatefib(1000) do print(i) end
+-- fibonacci function with cache
+
+-- very inefficient fibonacci function
+function fib(n)
+	N=N+1
+	if n<2 then
+		return n
+	else
+		return fib(n-1)+fib(n-2)
+	end
+end
+
+-- a general-purpose value cache
+function cache(f)
+	local c={}
+	return function (x)
+		local y=c[x]
+		if not y then
+			y=f(x)
+			c[x]=y
+		end
+		return y
+	end
+end
+
+-- run and time it
+function test(s,f)
+	N=0
+	local c=os.clock()
+	local v=f(n)
+	local t=os.clock()-c
+	print(s,n,v,t,N)
+end
+
+n=arg[1] or 24		-- for other values, do lua fib.lua XX
+n=tonumber(n)
+print("","n","value","time","evals")
+test("plain",fib)
+fib=cache(fib)
+test("cached",fib)
+-- reads luac listings and reports global variable usage
+-- lines where a global is written to are marked with "*"
+-- typical usage: luac -p -l file.lua | lua globals.lua | sort | lua table.lua
+
+while 1 do
+ local s=io.read()
+ if s==nil then break end
+ local ok,_,l,op,g=string.find(s,"%[%-?(%d*)%]%s*([GS])ETGLOBAL.-;%s+(.*)$")
+ if ok then
+  if op=="S" then op="*" else op="" end
+  io.write(g,"\t",l,op,"\n")
+ end
+end
+-- the first program in every language
+
+io.write("Hello world, from ",_VERSION,"!\n")
+-- life.lua
+-- original by Dave Bollinger <DBollinger@compuserve.com> posted to lua-l
+-- modified to use ANSI terminal escape sequences
+-- modified to use for instead of while
+
+local write=io.write
+
+ALIVE="¥"	DEAD="þ"
+ALIVE="O"	DEAD="-"
+
+function delay() -- NOTE: SYSTEM-DEPENDENT, adjust as necessary
+  for i=1,10000 do end
+  -- local i=os.clock()+1 while(os.clock()<i) do end
+end
+
+function ARRAY2D(w,h)
+  local t = {w=w,h=h}
+  for y=1,h do
+    t[y] = {}
+    for x=1,w do
+      t[y][x]=0
+    end
+  end
+  return t
+end
+
+_CELLS = {}
+
+-- give birth to a "shape" within the cell array
+function _CELLS:spawn(shape,left,top)
+  for y=0,shape.h-1 do
+    for x=0,shape.w-1 do
+      self[top+y][left+x] = shape[y*shape.w+x+1]
+    end
+  end
+end
+
+-- run the CA and produce the next generation
+function _CELLS:evolve(next)
+  local ym1,y,yp1,yi=self.h-1,self.h,1,self.h
+  while yi > 0 do
+    local xm1,x,xp1,xi=self.w-1,self.w,1,self.w
+    while xi > 0 do
+      local sum = self[ym1][xm1] + self[ym1][x] + self[ym1][xp1] +
+                  self[y][xm1] + self[y][xp1] +
+                  self[yp1][xm1] + self[yp1][x] + self[yp1][xp1]
+      next[y][x] = ((sum==2) and self[y][x]) or ((sum==3) and 1) or 0
+      xm1,x,xp1,xi = x,xp1,xp1+1,xi-1
+    end
+    ym1,y,yp1,yi = y,yp1,yp1+1,yi-1
+  end
+end
+
+-- output the array to screen
+function _CELLS:draw()
+  local out="" -- accumulate to reduce flicker
+  for y=1,self.h do
+   for x=1,self.w do
+      out=out..(((self[y][x]>0) and ALIVE) or DEAD)
+    end
+    out=out.."\n"
+  end
+  write(out)
+end
+
+-- constructor
+function CELLS(w,h)
+  local c = ARRAY2D(w,h)
+  c.spawn = _CELLS.spawn
+  c.evolve = _CELLS.evolve
+  c.draw = _CELLS.draw
+  return c
+end
+
+--
+-- shapes suitable for use with spawn() above
+--
+HEART = { 1,0,1,1,0,1,1,1,1; w=3,h=3 }
+GLIDER = { 0,0,1,1,0,1,0,1,1; w=3,h=3 }
+EXPLODE = { 0,1,0,1,1,1,1,0,1,0,1,0; w=3,h=4 }
+FISH = { 0,1,1,1,1,1,0,0,0,1,0,0,0,0,1,1,0,0,1,0; w=5,h=4 }
+BUTTERFLY = { 1,0,0,0,1,0,1,1,1,0,1,0,0,0,1,1,0,1,0,1,1,0,0,0,1; w=5,h=5 }
+
+-- the main routine
+function LIFE(w,h)
+  -- create two arrays
+  local thisgen = CELLS(w,h)
+  local nextgen = CELLS(w,h)
+
+  -- create some life
+  -- about 1000 generations of fun, then a glider steady-state
+  thisgen:spawn(GLIDER,5,4)
+  thisgen:spawn(EXPLODE,25,10)
+  thisgen:spawn(FISH,4,12)
+
+  -- run until break
+  local gen=1
+  write("\027[2J")	-- ANSI clear screen
+  while 1 do
+    thisgen:evolve(nextgen)
+    thisgen,nextgen = nextgen,thisgen
+    write("\027[H")	-- ANSI home cursor
+    thisgen:draw()
+    write("Life - generation ",gen,"\n")
+    gen=gen+1
+    if gen>2000 then break end
+    --delay()		-- no delay
+  end
+end
+
+LIFE(40,20)
+-- bare-bones luac in Lua
+-- usage: lua luac.lua file.lua
+
+assert(arg[1]~=nil and arg[2]==nil,"usage: lua luac.lua file.lua")
+f=assert(io.open("luac.out","wb"))
+assert(f:write(string.dump(assert(loadfile(arg[1])))))
+assert(f:close())
+-- an implementation of printf
+
+function printf(...)
+ io.write(string.format(...))
+end
+
+printf("Hello %s from %s on %s\n",os.getenv"USER" or "there",_VERSION,os.date())
+-- make global variables readonly
+
+local f=function (t,i) error("cannot redefine global variable `"..i.."'",2) end
+local g={}
+local G=getfenv()
+setmetatable(g,{__index=G,__newindex=f})
+setfenv(1,g)
+
+-- an example
+rawset(g,"x",3)
+x=2
+y=1	-- cannot redefine `y'
+-- the sieve of of Eratosthenes programmed with coroutines
+-- typical usage: lua -e N=1000 sieve.lua | column
+
+-- generate all the numbers from 2 to n
+function gen (n)
+  return coroutine.wrap(function ()
+    for i=2,n do coroutine.yield(i) end
+  end)
+end
+
+-- filter the numbers generated by `g', removing multiples of `p'
+function filter (p, g)
+  return coroutine.wrap(function ()
+    while 1 do
+      local n = g()
+      if n == nil then return end
+      if math.mod(n, p) ~= 0 then coroutine.yield(n) end
+    end
+  end)
+end
+
+N=N or 1000		-- from command line
+x = gen(N)		-- generate primes up to N
+while 1 do
+  local n = x()		-- pick a number until done
+  if n == nil then break end
+  print(n)		-- must be a prime number
+  x = filter(n, x)	-- now remove its multiples
+end
+-- two implementations of a sort function
+-- this is an example only. Lua has now a built-in function "sort"
+
+-- extracted from Programming Pearls, page 110
+function qsort(x,l,u,f)
+ if l<u then
+  local m=math.random(u-(l-1))+l-1	-- choose a random pivot in range l..u
+  x[l],x[m]=x[m],x[l]			-- swap pivot to first position
+  local t=x[l]				-- pivot value
+  m=l
+  local i=l+1
+  while i<=u do
+    -- invariant: x[l+1..m] < t <= x[m+1..i-1]
+    if f(x[i],t) then
+      m=m+1
+      x[m],x[i]=x[i],x[m]		-- swap x[i] and x[m]
+    end
+    i=i+1
+  end
+  x[l],x[m]=x[m],x[l]			-- swap pivot to a valid place
+  -- x[l+1..m-1] < x[m] <= x[m+1..u]
+  qsort(x,l,m-1,f)
+  qsort(x,m+1,u,f)
+ end
+end
+
+function selectionsort(x,n,f)
+ local i=1
+ while i<=n do
+  local m,j=i,i+1
+  while j<=n do
+   if f(x[j],x[m]) then m=j end
+   j=j+1
+  end
+ x[i],x[m]=x[m],x[i]			-- swap x[i] and x[m]
+ i=i+1
+ end
+end
+
+function show(m,x)
+ io.write(m,"\n\t")
+ local i=1
+ while x[i] do
+  io.write(x[i])
+  i=i+1
+  if x[i] then io.write(",") end
+ end
+ io.write("\n")
+end
+
+function testsorts(x)
+ local n=1
+ while x[n] do n=n+1 end; n=n-1		-- count elements
+ show("original",x)
+ qsort(x,1,n,function (x,y) return x<y end)
+ show("after quicksort",x)
+ selectionsort(x,n,function (x,y) return x>y end)
+ show("after reverse selection sort",x)
+ qsort(x,1,n,function (x,y) return x<y end)
+ show("after quicksort again",x)
+end
+
+-- array to be sorted
+x={"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"}
+
+testsorts(x)
+-- make table, grouping all data for the same item
+-- input is 2 columns (item, data)
+
+local A
+while 1 do
+ local l=io.read()
+ if l==nil then break end
+ local _,_,a,b=string.find(l,'"?([_%w]+)"?%s*(.*)$')
+ if a~=A then A=a io.write("\n",a,":") end
+ io.write(" ",b)
+end
+io.write("\n")
+-- trace calls
+-- example: lua -ltrace-calls bisect.lua
+
+local level=0
+
+local function hook(event)
+ local t=debug.getinfo(3)
+ io.write(level," >>> ",string.rep(" ",level))
+ if t~=nil and t.currentline>=0 then io.write(t.short_src,":",t.currentline," ") end
+ t=debug.getinfo(2)
+ if event=="call" then
+  level=level+1
+ else
+  level=level-1 if level<0 then level=0 end
+ end
+ if t.what=="main" then
+  if event=="call" then
+   io.write("begin ",t.short_src)
+  else
+   io.write("end ",t.short_src)
+  end
+ elseif t.what=="Lua" then
+-- table.foreach(t,print)
+  io.write(event," ",t.name or "(Lua)"," <",t.linedefined,":",t.short_src,">")
+ else
+ io.write(event," ",t.name or "(C)"," [",t.what,"] ")
+ end
+ io.write("\n")
+end
+
+debug.sethook(hook,"cr")
+level=0
+-- trace assigments to global variables
+
+do
+ -- a tostring that quotes strings. note the use of the original tostring.
+ local _tostring=tostring
+ local tostring=function(a)
+  if type(a)=="string" then
+   return string.format("%q",a)
+  else
+   return _tostring(a)
+  end
+ end
+
+ local log=function (name,old,new)
+  local t=debug.getinfo(3,"Sl")
+  local line=t.currentline
+  io.write(t.short_src)
+  if line>=0 then io.write(":",line) end
+  io.write(": ",name," is now ",tostring(new)," (was ",tostring(old),")","\n")
+ end
+
+ local g={}
+ local set=function (t,name,value)
+  log(name,g[name],value)
+  g[name]=value
+ end
+ setmetatable(getfenv(),{__index=g,__newindex=set})
+end
+
+-- an example
+
+a=1
+b=2
+a=10
+b=20
+b=nil
+b=200
+print(a,b,c)
+-- hex dump
+-- usage: lua xd.lua < file
+
+local offset=0
+while true do
+ local s=io.read(16)
+ if s==nil then return end
+ io.write(string.format("%08X  ",offset))
+ string.gsub(s,"(.)",
+	function (c) io.write(string.format("%02X ",string.byte(c))) end)
+ io.write(string.rep(" ",3*(16-string.len(s))))
+ io.write(" ",string.gsub(s,"%c","."),"\n") 
+ offset=offset+16
+end
