@@ -123,7 +123,7 @@ pub fn reify(
         enum #action_enum_name<T> {
             // User action did not return a token, continue with lexing
             Continue,
-            // User action returned a token, add it to the match stack
+            // User action returned a token, return it
             Return(T),
             // User action requested switching to the given rule set
             Switch(#rule_name_enum_name),
