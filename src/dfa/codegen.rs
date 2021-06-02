@@ -1,5 +1,6 @@
 mod search_table;
 
+use super::simplify::Trans;
 use super::{State, StateIdx, DFA};
 use search_table::SearchTableSet;
 
@@ -26,7 +27,7 @@ use quote::{quote, ToTokens};
 const MAX_GUARD_SIZE: usize = 9;
 
 pub fn reify(
-    dfa: &DFA<StateIdx, Option<RuleRhs>>,
+    dfa: &DFA<Trans<Option<RuleRhs>>, Option<RuleRhs>>,
     user_state_type: Option<syn::Type>,
     user_error_type: Option<syn::Type>,
     user_error_type_lifetimes: &[syn::Lifetime],
@@ -255,7 +256,7 @@ fn generate_switch(
 
 /// Generate arms of `match self.state { ... }` of a DFA.
 fn generate_state_arms(
-    dfa: &DFA<StateIdx, Option<RuleRhs>>,
+    dfa: &DFA<Trans<Option<RuleRhs>>, Option<RuleRhs>>,
     handle_type_name: &syn::Ident,
     action_enum_name: &syn::Ident,
     user_error_type: Option<&syn::Type>,
@@ -365,9 +366,24 @@ fn generate_state_arms(
                 None => quote!({
                     return Some(Err(#error));
                 }),
-                Some(StateIdx(fail_state)) => quote!({
-                    self.state = #fail_state;
+                Some(Trans::Trans(StateIdx(next))) => quote!({
+                    self.state = #next;
                 }),
+                Some(Trans::Accept(action)) => match action {
+                    Some(rhs) => generate_semantic_action(
+                        rhs,
+                        handle_type_name,
+                        action_enum_name,
+                        user_error_type,
+                        token_type,
+                    ),
+                    None => quote!({
+                        self.state = self.initial_state;
+                    }),
+                },
+                // Some(StateIdx(fail_state)) => quote!({
+                //     self.state = #fail_state;
+                // }),
             };
 
             let state_char_arms = generate_state_char_arms(
@@ -417,9 +433,9 @@ fn generate_state_arms(
 /// Generate arms for `match self.iter.peek().copied() { ... }`
 fn generate_state_char_arms(
     initial: bool,
-    char_transitions: &FxHashMap<char, StateIdx>,
-    range_transitions: &RangeMap<StateIdx>,
-    fail_transition: &Option<StateIdx>,
+    char_transitions: &FxHashMap<char, Trans<Option<RuleRhs>>>,
+    range_transitions: &RangeMap<Trans<Option<RuleRhs>>>,
+    fail_transition: &Option<Trans<Option<RuleRhs>>>,
     action: &TokenStream,
     search_tables: &mut SearchTableSet,
 ) -> Vec<TokenStream> {
