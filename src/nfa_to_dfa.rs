@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 
 use fxhash::{FxHashMap, FxHashSet};
 
-pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
+pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<DfaStateIdx, A> {
     let initial_state = nfa.initial_state();
 
     let initial_states: BTreeSet<NfaStateIdx> = {
@@ -22,7 +22,7 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
             .collect()
     };
 
-    let (mut dfa, dfa_initial_state): (DFA<A>, DfaStateIdx) = DFA::new();
+    let (mut dfa, dfa_initial_state): (DFA<DfaStateIdx, A>, DfaStateIdx) = DFA::new();
 
     // Maps sets NFA states to their states in the DFA
     let mut state_map: FxHashMap<BTreeSet<NfaStateIdx>, DfaStateIdx> = Default::default();
@@ -121,7 +121,7 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<A> {
 }
 
 fn dfa_state_of_nfa_states<A>(
-    dfa: &mut DFA<A>,
+    dfa: &mut DFA<DfaStateIdx, A>,
     state_map: &mut FxHashMap<BTreeSet<NfaStateIdx>, DfaStateIdx>,
     states: BTreeSet<NfaStateIdx>,
 ) -> DfaStateIdx {

@@ -43,6 +43,23 @@ impl<A> RangeMap<A> {
     pub fn is_empty(&self) -> bool {
         self.iter().next().is_none()
     }
+
+    pub fn filter_map<F, B>(self, f: F) -> RangeMap<B>
+    where
+        F: Fn(A) -> Option<B>,
+    {
+        RangeMap {
+            ranges: self
+                .ranges
+                .into_iter()
+                .map(|Range { start, end, values }| Range {
+                    start,
+                    end,
+                    values: values.into_iter().filter_map(&f).collect(),
+                })
+                .collect(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

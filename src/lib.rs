@@ -13,7 +13,7 @@ mod range_map;
 mod regex_to_nfa;
 
 use ast::{Lexer, Regex, RegexOrFail, Rule, RuleRhs, SingleRule, Var};
-use dfa::DFA;
+use dfa::{StateIdx as DfaStateIdx, DFA};
 use nfa::NFA;
 use nfa_to_dfa::nfa_to_dfa;
 
@@ -35,7 +35,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
 
     let mut bindings: FxHashMap<Var, Regex> = Default::default();
 
-    let mut dfa: Option<DFA<Option<RuleRhs>>> = None;
+    let mut dfa: Option<DFA<DfaStateIdx, Option<RuleRhs>>> = None;
 
     let mut user_error_type: Option<syn::Type> = None;
     let mut user_error_lifetimes: Vec<syn::Lifetime> = vec![];

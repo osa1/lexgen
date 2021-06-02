@@ -26,7 +26,7 @@ use quote::{quote, ToTokens};
 const MAX_GUARD_SIZE: usize = 9;
 
 pub fn reify(
-    dfa: &DFA<Option<RuleRhs>>,
+    dfa: &DFA<StateIdx, Option<RuleRhs>>,
     user_state_type: Option<syn::Type>,
     user_error_type: Option<syn::Type>,
     user_error_type_lifetimes: &[syn::Lifetime],
@@ -255,7 +255,7 @@ fn generate_switch(
 
 /// Generate arms of `match self.state { ... }` of a DFA.
 fn generate_state_arms(
-    dfa: &DFA<Option<RuleRhs>>,
+    dfa: &DFA<StateIdx, Option<RuleRhs>>,
     handle_type_name: &syn::Ident,
     action_enum_name: &syn::Ident,
     user_error_type: Option<&syn::Type>,
