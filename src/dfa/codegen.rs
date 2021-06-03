@@ -307,6 +307,10 @@ fn generate_state_arms(
                 fail_transition,
                 &action,
                 search_tables,
+                handle_type_name,
+                action_enum_name,
+                user_error_type,
+                token_type,
             );
 
             quote!(
@@ -347,6 +351,10 @@ fn generate_state_arms(
                     &None,
                     &action,
                     search_tables,
+                    handle_type_name,
+                    action_enum_name,
+                    user_error_type,
+                    token_type,
                 );
 
                 quote!({
@@ -385,9 +393,6 @@ fn generate_state_arms(
                         self.state = self.initial_state;
                     }),
                 },
-                // Some(StateIdx(fail_state)) => quote!({
-                //     self.state = #fail_state;
-                // }),
             };
 
             let state_char_arms = generate_state_char_arms(
@@ -397,6 +402,10 @@ fn generate_state_arms(
                 fail_transition,
                 &action,
                 search_tables,
+                handle_type_name,
+                action_enum_name,
+                user_error_type,
+                token_type,
             );
 
             let end_of_stream_action = if *initial {
@@ -442,6 +451,10 @@ fn generate_state_char_arms(
     fail_transition: &Option<Trans<Option<RuleRhs>>>,
     action: &TokenStream,
     search_tables: &mut SearchTableSet,
+    handle_type_name: &syn::Ident,
+    action_enum_name: &syn::Ident,
+    user_error_type: Option<&syn::Type>,
+    token_type: &syn::Type,
 ) -> Vec<TokenStream> {
     // Arms of the `match` for the current character
     let mut state_char_arms: Vec<TokenStream> = vec![];
@@ -499,20 +512,34 @@ fn generate_state_char_arms(
     }
 
     // Add default case
-    match fail_transition {
-        None => state_char_arms.push(quote!(_ => #action)),
-        Some(StateIdx(next_state)) => {
+    let default_case = match fail_transition {
+        None => quote!(_ => #action),
+        Some(Trans::Trans(StateIdx(next_state))) => {
             if initial {
-                state_char_arms.push(quote!(_ => {
+                quote!(_ => {
                     self.current_match_end += char.len_utf8();
                     let _ = self.iter.next();
                     self.state = #next_state;
-                }));
+                })
             } else {
-                state_char_arms.push(quote!(_ => { self.state = #next_state; }));
+                quote!(_ => { self.state = #next_state; })
             }
         }
-    }
+        Some(Trans::Accept(action)) => match action {
+            Some(rhs) => generate_semantic_action(
+                rhs,
+                handle_type_name,
+                action_enum_name,
+                user_error_type,
+                token_type,
+            ),
+            None => quote!({
+                self.state = self.initial_state;
+            }),
+        },
+    };
+
+    state_char_arms.push(default_case);
 
     state_char_arms
 }
