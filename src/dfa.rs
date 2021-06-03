@@ -187,7 +187,7 @@ impl<A> DFA<StateIdx, A> {
     }
 }
 
-impl<T, A> DFA<T, A> {
+impl<A> DFA<StateIdx, A> {
     #[cfg(test)]
     pub fn simulate(&self, chars: &mut dyn Iterator<Item = char>) -> Option<&A> {
         let mut state = StateIdx(0);

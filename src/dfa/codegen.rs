@@ -27,7 +27,7 @@ use quote::{quote, ToTokens};
 const MAX_GUARD_SIZE: usize = 9;
 
 pub fn reify(
-    dfa: &DFA<Trans<Option<RuleRhs>>, Option<RuleRhs>>,
+    dfa: DFA<Trans<Option<RuleRhs>>, Option<RuleRhs>>,
     user_state_type: Option<syn::Type>,
     user_error_type: Option<syn::Type>,
     user_error_type_lifetimes: &[syn::Lifetime],
@@ -256,7 +256,7 @@ fn generate_switch(
 
 /// Generate arms of `match self.state { ... }` of a DFA.
 fn generate_state_arms(
-    dfa: &DFA<Trans<Option<RuleRhs>>, Option<RuleRhs>>,
+    dfa: DFA<Trans<Option<RuleRhs>>, Option<RuleRhs>>,
     handle_type_name: &syn::Ident,
     action_enum_name: &syn::Ident,
     user_error_type: Option<&syn::Type>,
@@ -278,6 +278,8 @@ fn generate_state_arms(
         }
     };
 
+    let n_states = states.len();
+
     for (
         state_idx,
         State {
@@ -287,10 +289,10 @@ fn generate_state_arms(
             fail_transition,
             accepting,
         },
-    ) in states.iter().enumerate()
+    ) in states.into_iter().enumerate()
     {
         let state_code: TokenStream = if state_idx == 0 {
-            assert!(*initial);
+            assert!(initial);
 
             // Initial state. Difference from other states is we return `None` when the
             // stream ends. In non-initial states EOS (end-of-stream) returns the last (longest)
@@ -333,7 +335,7 @@ fn generate_state_arms(
                     continue;
                 }),
                 Some(rhs) => generate_semantic_action(
-                    rhs,
+                    &rhs,
                     handle_type_name,
                     action_enum_name,
                     user_error_type,
@@ -345,10 +347,10 @@ fn generate_state_arms(
                 action
             } else {
                 let state_char_arms = generate_state_char_arms(
-                    *initial,
+                    initial,
                     char_transitions,
                     range_transitions,
-                    &None,
+                    None,
                     &action,
                     search_tables,
                     handle_type_name,
@@ -374,7 +376,7 @@ fn generate_state_arms(
             // Non-initial, non-accepting state. In a non-accepting state we want to consume a
             // character anyway so we can use `next` instead of `peek`.
             let error = make_lexer_error();
-            let action = match fail_transition {
+            let action = match &fail_transition {
                 None => quote!({
                     return Some(Err(#error));
                 }),
@@ -396,7 +398,7 @@ fn generate_state_arms(
             };
 
             let state_char_arms = generate_state_char_arms(
-                *initial,
+                initial,
                 char_transitions,
                 range_transitions,
                 fail_transition,
@@ -408,7 +410,7 @@ fn generate_state_arms(
                 token_type,
             );
 
-            let end_of_stream_action = if *initial {
+            let end_of_stream_action = if initial {
                 // In an initial state other than the state 0 we fail with "unexpected EOF"
                 quote!({
                     return Some(Err(#error));
@@ -429,7 +431,7 @@ fn generate_state_arms(
             })
         };
 
-        let state_idx_code = if state_idx == states.len() - 1 {
+        let state_idx_code = if state_idx == n_states - 1 {
             quote!(_)
         } else {
             quote!(#state_idx)
@@ -446,9 +448,9 @@ fn generate_state_arms(
 /// Generate arms for `match self.iter.peek().copied() { ... }`
 fn generate_state_char_arms(
     initial: bool,
-    char_transitions: &FxHashMap<char, Trans<Option<RuleRhs>>>,
-    range_transitions: &RangeMap<Trans<Option<RuleRhs>>>,
-    fail_transition: &Option<Trans<Option<RuleRhs>>>,
+    char_transitions: FxHashMap<char, Trans<Option<RuleRhs>>>,
+    range_transitions: RangeMap<Trans<Option<RuleRhs>>>,
+    fail_transition: Option<Trans<Option<RuleRhs>>>,
     action: &TokenStream,
     search_tables: &mut SearchTableSet,
     handle_type_name: &syn::Ident,
@@ -462,8 +464,27 @@ fn generate_state_char_arms(
     // Add char transitions. Collect characters for next states, to be able to use or
     // patterns in arms and reduce code size
     let mut state_chars: FxHashMap<StateIdx, Vec<char>> = Default::default();
-    for (char, state_idx) in char_transitions {
-        state_chars.entry(*state_idx).or_default().push(*char);
+    for (char, next) in char_transitions {
+        match next {
+            Trans::Accept(action) => {
+                let action_code = match action {
+                    Some(rhs) => generate_semantic_action(
+                        &rhs,
+                        handle_type_name,
+                        action_enum_name,
+                        user_error_type,
+                        token_type,
+                    ),
+                    None => quote!({
+                        self.state = self.initial_state;
+                    }),
+                };
+                state_char_arms.push(quote!(
+                    #char => {#action_code}
+                ));
+            }
+            Trans::Trans(state_idx) => state_chars.entry(state_idx).or_default().push(char),
+        }
     }
 
     for (StateIdx(next_state), chars) in state_chars.iter() {
@@ -480,12 +501,33 @@ fn generate_state_char_arms(
 
     // Add range transitions. Same as above, use chain of "or"s for ranges with same transition.
     let mut state_ranges: FxHashMap<StateIdx, Vec<(char, char)>> = Default::default();
-    for range in range_transitions.iter() {
+    for mut range in range_transitions.into_iter() {
         assert_eq!(range.values.len(), 1);
-        state_ranges.entry(range.values[0]).or_default().push((
-            char::try_from(range.start).unwrap(),
-            char::try_from(range.end).unwrap(),
-        ));
+        match range.values.remove(0) {
+            Trans::Trans(state_idx) => state_ranges.entry(state_idx).or_default().push((
+                char::try_from(range.start).unwrap(),
+                char::try_from(range.end).unwrap(),
+            )),
+            Trans::Accept(action) => {
+                let action_code = match action {
+                    Some(rhs) => generate_semantic_action(
+                        &rhs,
+                        handle_type_name,
+                        action_enum_name,
+                        user_error_type,
+                        token_type,
+                    ),
+                    None => quote!({
+                        self.state = self.initial_state;
+                    }),
+                };
+                let range_start = char::from_u32(range.start).unwrap();
+                let range_end = char::from_u32(range.end).unwrap();
+                state_char_arms.push(quote!(
+                    x if x >= #range_start && x <= #range_end => {#action_code}
+                ));
+            }
+        }
     }
 
     for (StateIdx(next_state), ranges) in state_ranges.into_iter() {
@@ -525,18 +567,21 @@ fn generate_state_char_arms(
                 quote!(_ => { self.state = #next_state; })
             }
         }
-        Some(Trans::Accept(action)) => match action {
-            Some(rhs) => generate_semantic_action(
-                rhs,
-                handle_type_name,
-                action_enum_name,
-                user_error_type,
-                token_type,
-            ),
-            None => quote!({
-                self.state = self.initial_state;
-            }),
-        },
+        Some(Trans::Accept(action)) => {
+            let action_code = match action {
+                Some(rhs) => generate_semantic_action(
+                    &rhs,
+                    handle_type_name,
+                    action_enum_name,
+                    user_error_type,
+                    token_type,
+                ),
+                None => quote!({
+                    self.state = self.initial_state;
+                }),
+            };
+            quote!(_ => #action_code)
+        }
     };
 
     state_char_arms.push(default_case);

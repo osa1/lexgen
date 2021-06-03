@@ -157,7 +157,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
     let dfa = dfa::simplify::simplify(dfa.unwrap());
 
     dfa::codegen::reify(
-        &dfa,
+        dfa,
         user_state_type,
         user_error_type,
         &user_error_lifetimes,
