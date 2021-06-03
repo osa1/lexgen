@@ -1,6 +1,8 @@
 use super::{State, StateIdx, DFA};
 use crate::range_map::Range;
 
+use fxhash::FxHashMap;
+
 #[derive(Debug)]
 pub enum Trans<A> {
     Accept(A),
@@ -9,7 +11,10 @@ pub enum Trans<A> {
 
 /// Removes accepting states with no transitions, makes the transitions to those states accepting.
 // TODO: We need to turn RHSs into identifiers by introducing functions for user actions
-pub fn simplify<A: Clone>(dfa: DFA<StateIdx, A>) -> DFA<Trans<A>, A> {
+pub fn simplify<A: Clone>(
+    dfa: DFA<StateIdx, A>,
+    dfa_state_indices: &mut FxHashMap<String, StateIdx>,
+) -> DFA<Trans<A>, A> {
     let mut empty_states: Vec<(StateIdx, Option<A>)> = vec![];
     let mut non_empty_states: Vec<(StateIdx, State<StateIdx, A>)> = vec![];
 
@@ -19,6 +24,13 @@ pub fn simplify<A: Clone>(dfa: DFA<StateIdx, A>) -> DFA<Trans<A>, A> {
         } else {
             non_empty_states.push((state_idx, state));
         }
+    }
+
+    for (_, t) in dfa_state_indices.iter_mut() {
+        let idx = match empty_states.binary_search_by(|(state_idx, _)| state_idx.cmp(&t)) {
+            Ok(idx) | Err(idx) => idx,
+        };
+        *t = t.map(|i| i - idx);
     }
 
     let map_transition = |t: StateIdx| -> Option<Trans<A>> {

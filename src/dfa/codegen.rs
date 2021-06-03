@@ -480,7 +480,11 @@ fn generate_state_char_arms(
                     }),
                 };
                 state_char_arms.push(quote!(
-                    #char => {#action_code}
+                    #char => {
+                        self.current_match_end += char.len_utf8();
+                        let _ = self.iter.next();
+                        #action_code
+                    }
                 ));
             }
             Trans::Trans(state_idx) => state_chars.entry(state_idx).or_default().push(char),
@@ -524,7 +528,11 @@ fn generate_state_char_arms(
                 let range_start = char::from_u32(range.start).unwrap();
                 let range_end = char::from_u32(range.end).unwrap();
                 state_char_arms.push(quote!(
-                    x if x >= #range_start && x <= #range_end => {#action_code}
+                    x if x >= #range_start && x <= #range_end => {
+                        self.current_match_end += char.len_utf8();
+                        let _ = self.iter.next();
+                        #action_code
+                    }
                 ));
             }
         }
