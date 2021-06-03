@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 jobs:
   build:
-    name: 'Build and test the library'
+    name: 'Build and test'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -21,23 +21,6 @@ jobs:
 
       - name: Test
         run: cargo test
-
-  test_examples:
-    name: 'Test Lua lexer example'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-
-      - name: 'Download and unpack lua-5.1.5'
-        run: |
-            wget https://www.lua.org/ftp/lua-5.1.5.tar.gz
-            tar -xvf lua-5.1.5.tar.gz
-
-      - name: 'Run lua_5_1 examples on Lua 5.1.5 tests'
-        run: |
-            # Exclude 'life.lua', it's not encoded in UTF-8
-            cargo run --example lua_5_1 -- \
-                $(find lua-5.1.5/test -name '*.lua' -a ! -name 'life.lua')
 
   formatting:
     name: 'Check formatting'

@@ -267,10 +267,14 @@ fn generate_state_arms(
 
     let mut match_arms: Vec<TokenStream> = vec![];
 
-    let make_lexer_error = |arg: TokenStream| -> TokenStream {
+    let make_lexer_error = || -> TokenStream {
         match user_error_type {
-            None => quote!(LexerError { char_idx: #arg }),
-            Some(_) => quote!(LexerError::LexerError { char_idx: #arg }),
+            None => quote!(LexerError {
+                char_idx: self.current_match_start
+            }),
+            Some(_) => quote!(LexerError::LexerError {
+                char_idx: self.current_match_start
+            }),
         }
     };
 
@@ -291,7 +295,7 @@ fn generate_state_arms(
             // Initial state. Difference from other states is we return `None` when the
             // stream ends. In non-initial states EOS (end-of-stream) returns the last (longest)
             // match, or fails (error).
-            let error = make_lexer_error(quote!(self.current_match_start));
+            let error = make_lexer_error();
             let action = quote!({
                 return Some(Err(#error));
             });
@@ -333,18 +337,18 @@ fn generate_state_arms(
                 ),
             };
 
-            let state_char_arms = generate_state_char_arms(
-                *initial,
-                char_transitions,
-                range_transitions,
-                &None,
-                &action,
-                search_tables,
-            );
-
             if char_transitions.is_empty() && range_transitions.is_empty() {
                 action
             } else {
+                let state_char_arms = generate_state_char_arms(
+                    *initial,
+                    char_transitions,
+                    range_transitions,
+                    &None,
+                    &action,
+                    search_tables,
+                );
+
                 quote!({
                     match self.iter.peek().copied() {
                         None => {
@@ -361,7 +365,7 @@ fn generate_state_arms(
         } else {
             // Non-initial, non-accepting state. In a non-accepting state we want to consume a
             // character anyway so we can use `next` instead of `peek`.
-            let error = make_lexer_error(quote!(self.current_match_start));
+            let error = make_lexer_error();
             let action = match fail_transition {
                 None => quote!({
                     return Some(Err(#error));

@@ -17,6 +17,8 @@ use dfa::{StateIdx as DfaStateIdx, DFA};
 use nfa::NFA;
 use nfa_to_dfa::nfa_to_dfa;
 
+use std::collections::hash_map::Entry;
+
 use fxhash::FxHashMap;
 use proc_macro::TokenStream;
 
@@ -40,13 +42,20 @@ pub fn lexer(input: TokenStream) -> TokenStream {
     let mut user_error_type: Option<syn::Type> = None;
     let mut user_error_lifetimes: Vec<syn::Lifetime> = vec![];
 
-    for rule in &top_level_rules {
+    let have_named_rules = top_level_rules
+        .iter()
+        .any(|rule| matches!(rule, Rule::RuleSet { .. }));
+
+    for rule in top_level_rules {
         match rule {
-            Rule::Binding { var, re } => {
-                if let Some(_) = bindings.insert(var.clone(), re.clone()) {
-                    panic!("Variable {:?} is defined multiple times", var.0);
+            Rule::Binding { var, re } => match bindings.entry(var) {
+                Entry::Occupied(entry) => {
+                    panic!("Variable {:?} is defined multiple times", entry.key().0);
                 }
-            }
+                Entry::Vacant(entry) => {
+                    entry.insert(re);
+                }
+            },
             Rule::RuleSet { name, rules } => {
                 if name == "Init" {
                     if dfa.is_some() {
@@ -55,8 +64,8 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                     let mut nfa: NFA<Option<RuleRhs>> = NFA::new();
                     for SingleRule { lhs, rhs } in rules {
                         match lhs {
-                            RegexOrFail::Regex(re) => nfa.add_regex(&bindings, re, rhs.clone()),
-                            RegexOrFail::Fail => nfa.set_fail_action(rhs.clone()),
+                            RegexOrFail::Regex(re) => nfa.add_regex(&bindings, &re, rhs),
+                            RegexOrFail::Fail => nfa.set_fail_action(rhs),
                         }
                     }
 
@@ -80,8 +89,8 @@ pub fn lexer(input: TokenStream) -> TokenStream {
 
                     for SingleRule { lhs, rhs } in rules {
                         match lhs {
-                            RegexOrFail::Regex(re) => nfa.add_regex(&bindings, re, rhs.clone()),
-                            RegexOrFail::Fail => nfa.set_fail_action(rhs.clone()),
+                            RegexOrFail::Regex(re) => nfa.add_regex(&bindings, &re, rhs),
+                            RegexOrFail::Fail => nfa.set_fail_action(rhs),
                         }
                     }
 
@@ -97,10 +106,6 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                 }
             }
             Rule::UnnamedRules { rules } => {
-                let have_named_rules = top_level_rules
-                    .iter()
-                    .any(|rule| matches!(rule, Rule::RuleSet { .. }));
-
                 if dfa.is_some() || have_named_rules {
                     panic!(
                         "Unnamed rules cannot be mixed with named rules. Make sure to either \
@@ -113,8 +118,8 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                 let mut nfa: NFA<Option<RuleRhs>> = NFA::new();
                 for SingleRule { lhs, rhs } in rules {
                     match lhs {
-                        RegexOrFail::Regex(re) => nfa.add_regex(&bindings, re, rhs.clone()),
-                        RegexOrFail::Fail => nfa.set_fail_action(rhs.clone()),
+                        RegexOrFail::Regex(re) => nfa.add_regex(&bindings, &re, rhs),
+                        RegexOrFail::Fail => nfa.set_fail_action(rhs),
                     }
                 }
 
@@ -131,8 +136,8 @@ pub fn lexer(input: TokenStream) -> TokenStream {
             }
             Rule::ErrorType { ty, lifetimes } => match user_error_type {
                 None => {
-                    user_error_type = Some(ty.clone());
-                    user_error_lifetimes = lifetimes.clone();
+                    user_error_type = Some(ty);
+                    user_error_lifetimes = lifetimes;
                 }
                 Some(_) => panic!("Error type defined multiple times"),
             },

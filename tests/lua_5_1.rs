@@ -1,48 +1,13 @@
-//! Lexes a given Lua 5.1 file and prints the tokens. Runs some tests when run without an argument.
-
-// TODOs:
+// A Lua 5.1 lexer. We use this as
 //
-// - Exclude newlines in strings
-// - Locale-dependant alphabetic chars in variables (???)
+// - An example: this file is linked from README
+//
+// - A test: `test_data` contains all Lua files in Lua 5.1 source distribution, we lex it using
+//   this lexer as a test.
+//
+// - A benchmark: We also use `test_data` lexing time as a runtime benchmark.
 
 use lexgen::lexer;
-
-fn main() {
-    let args: Vec<String> = std::env::args().collect();
-
-    if args.len() == 1 {
-        run_tests();
-    } else {
-        let files = &args[1..];
-        for file in files {
-            let contents = std::fs::read_to_string(file).unwrap();
-            let lexer = Lexer::new(&contents);
-            let mut tokens: Vec<Token> = vec![];
-            for token in lexer {
-                match token {
-                    Err(err) => {
-                        eprintln!("Unable to lex {:?}: {:?}", file, err);
-                        std::process::exit(1);
-                    }
-                    Ok((_, tok, _)) => {
-                        tokens.push(tok);
-                    }
-                }
-            }
-            println!("{:?}: {:?}", file, tokens);
-        }
-    }
-}
-
-fn run_tests() {
-    lex_lua_simple();
-    lex_lua_var();
-    lex_lua_string();
-    lex_lua_long_string();
-    lex_lua_number();
-    lex_lua_comment();
-    lex_lua_windows_line_ending();
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -420,6 +385,7 @@ fn ignore_pos<A, E>(ret: Option<Result<(usize, A, usize), E>>) -> Option<Result<
     ret.map(|res| res.map(|(_, a, _)| a))
 }
 
+#[test]
 fn lex_lua_number() {
     let mut lexer = Lexer::new("3 3.0 3.1416 314.16e-2 0.31416E1 0xff 0x56");
 
@@ -439,6 +405,7 @@ fn lex_lua_number() {
     assert_eq!(ignore_pos(lexer.next()), Some(Ok(Token::Number("0x56"))));
 }
 
+#[test]
 fn lex_lua_string() {
     let str = "
             \"test\"
@@ -461,6 +428,7 @@ test'\\\"\"
     );
 }
 
+#[test]
 fn lex_lua_long_string() {
     let mut lexer = Lexer::new("[[ ]] [=[test]=] [=[ ]]");
     assert_eq!(
@@ -474,6 +442,7 @@ fn lex_lua_long_string() {
     assert!(matches!(lexer.next(), Some(Err(_))));
 }
 
+#[test]
 fn lex_lua_comment() {
     let mut lexer = Lexer::new(
         "-- test
@@ -487,6 +456,7 @@ fn lex_lua_comment() {
     assert_eq!(ignore_pos(lexer.next()), None);
 }
 
+#[test]
 fn lex_lua_var() {
     let str = "ab ab1 ab_1_2 Aab";
     let mut lexer = Lexer::new(str);
@@ -497,6 +467,7 @@ fn lex_lua_var() {
     assert_eq!(ignore_pos(lexer.next()), Some(Ok(Token::Var("Aab"))));
 }
 
+#[test]
 fn lex_lua_simple() {
     let lexer = Lexer::new(
         "+ - * / % ^ # == ~= <= >= < > = ( ) { } [ ] \
@@ -565,9 +536,22 @@ fn lex_lua_simple() {
     );
 }
 
+#[test]
 fn lex_lua_windows_line_ending() {
     let mut lexer = Lexer::new("+\r\n+");
     assert_eq!(ignore_pos(lexer.next()), Some(Ok(Token::Plus)));
     assert_eq!(ignore_pos(lexer.next()), Some(Ok(Token::Plus)));
     assert_eq!(ignore_pos(lexer.next()), None);
+}
+
+#[test]
+fn lex_lua_files() {
+    let str = std::fs::read_to_string("tests/test_data").unwrap();
+    let mut lexer = Lexer::new(&str);
+    let mut i = 0;
+    while let Some(tok) = lexer.next() {
+        assert!(tok.is_ok());
+        i += 1;
+    }
+    println!("{} tokens", i);
 }
