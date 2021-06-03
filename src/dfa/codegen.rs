@@ -580,7 +580,15 @@ fn generate_state_char_arms(
                     self.state = self.initial_state;
                 }),
             };
-            quote!(_ => #action_code)
+            if initial {
+                quote!(_ => {
+                    self.current_match_end += char.len_utf8();
+                    let _ = self.iter.next();
+                    #action_code
+                })
+            } else {
+                quote!(_ => #action_code)
+            }
         }
     };
 
