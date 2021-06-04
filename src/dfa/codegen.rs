@@ -453,7 +453,7 @@ fn generate_state_char_arms(
     char_transitions: FxHashMap<char, Trans<RuleRhs>>,
     range_transitions: RangeMap<Trans<RuleRhs>>,
     fail_transition: Option<Trans<RuleRhs>>,
-    action: &TokenStream,
+    fail_action: &TokenStream,
     search_tables: &mut SearchTableSet,
     handle_type_name: &syn::Ident,
     action_enum_name: &syn::Ident,
@@ -469,19 +469,13 @@ fn generate_state_char_arms(
     for (char, next) in char_transitions {
         match next {
             Trans::Accept(action) => {
-                let action_code = match action {
-                    RuleRhs::None => quote!(
-                        self.state = self.initial_state;
-                    ),
-                    RuleRhs::Rhs { expr, kind } => generate_semantic_action(
-                        &expr,
-                        kind,
-                        handle_type_name,
-                        action_enum_name,
-                        user_error_type,
-                        token_type,
-                    ),
-                };
+                let action_code = generate_rhs_code(
+                    &action,
+                    handle_type_name,
+                    action_enum_name,
+                    user_error_type,
+                    token_type,
+                );
                 state_char_arms.push(quote!(
                     #char => {
                         self.current_match_end += char.len_utf8();
@@ -516,19 +510,13 @@ fn generate_state_char_arms(
                 char::try_from(range.end).unwrap(),
             )),
             Trans::Accept(action) => {
-                let action_code = match action {
-                    RuleRhs::None => quote!(
-                        self.state = self.initial_state;
-                    ),
-                    RuleRhs::Rhs { expr, kind } => generate_semantic_action(
-                        &expr,
-                        kind,
-                        handle_type_name,
-                        action_enum_name,
-                        user_error_type,
-                        token_type,
-                    ),
-                };
+                let action_code = generate_rhs_code(
+                    &action,
+                    handle_type_name,
+                    action_enum_name,
+                    user_error_type,
+                    token_type,
+                );
                 let range_start = char::from_u32(range.start).unwrap();
                 let range_end = char::from_u32(range.end).unwrap();
                 state_char_arms.push(quote!(
@@ -568,7 +556,7 @@ fn generate_state_char_arms(
     // Add default case
     let default_case = match fail_transition {
         None => quote!(_ => {
-            #action
+            #fail_action
         }),
         Some(Trans::Trans(StateIdx(next_state))) => {
             if initial {
@@ -578,23 +566,19 @@ fn generate_state_char_arms(
                     self.state = #next_state;
                 })
             } else {
-                quote!(_ => { self.state = #next_state; })
+                quote!(_ => {
+                    self.state = #next_state;
+                })
             }
         }
         Some(Trans::Accept(action)) => {
-            let action_code = match action {
-                RuleRhs::None => quote!(
-                    self.state = self.initial_state;
-                ),
-                RuleRhs::Rhs { kind, expr } => generate_semantic_action(
-                    &expr,
-                    kind,
-                    handle_type_name,
-                    action_enum_name,
-                    user_error_type,
-                    token_type,
-                ),
-            };
+            let action_code = generate_rhs_code(
+                &action,
+                handle_type_name,
+                action_enum_name,
+                user_error_type,
+                token_type,
+            );
             if initial {
                 quote!(_ => {
                     self.current_match_end += char.len_utf8();
@@ -612,6 +596,30 @@ fn generate_state_char_arms(
     state_char_arms.push(default_case);
 
     state_char_arms
+}
+
+// NB. Generates multiple states without enclosing `{...}`, see comments in
+// `generate_semantic_action`
+fn generate_rhs_code(
+    action: &RuleRhs,
+    handle_type_name: &syn::Ident,
+    action_enum_name: &syn::Ident,
+    user_error_type: Option<&syn::Type>,
+    token_type: &syn::Type,
+) -> TokenStream {
+    match action {
+        RuleRhs::None => quote!(
+            self.state = self.initial_state;
+        ),
+        RuleRhs::Rhs { kind, expr } => generate_semantic_action(
+            &expr,
+            *kind,
+            handle_type_name,
+            action_enum_name,
+            user_error_type,
+            token_type,
+        ),
+    }
 }
 
 // NB. This function generates multiple statements but without enclosing `{...}`. Make sure to
