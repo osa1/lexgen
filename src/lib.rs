@@ -13,7 +13,7 @@ mod range_map;
 mod regex_to_nfa;
 
 use ast::{Lexer, Regex, RegexOrFail, Rule, RuleRhs, SingleRule, Var};
-use dfa::DFA;
+use dfa::{StateIdx as DfaStateIdx, DFA};
 use nfa::NFA;
 use nfa_to_dfa::nfa_to_dfa;
 
@@ -37,7 +37,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
 
     let mut bindings: FxHashMap<Var, Regex> = Default::default();
 
-    let mut dfa: Option<DFA<Option<RuleRhs>>> = None;
+    let mut dfa: Option<DFA<DfaStateIdx, RuleRhs>> = None;
 
     let mut user_error_type: Option<syn::Type> = None;
     let mut user_error_lifetimes: Vec<syn::Lifetime> = vec![];
@@ -61,7 +61,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                     if dfa.is_some() {
                         panic!("\"Init\" rule set can only be defined once");
                     }
-                    let mut nfa: NFA<Option<RuleRhs>> = NFA::new();
+                    let mut nfa: NFA<RuleRhs> = NFA::new();
                     for SingleRule { lhs, rhs } in rules {
                         match lhs {
                             RegexOrFail::Regex(re) => nfa.add_regex(&bindings, &re, rhs),
@@ -85,7 +85,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                         None => panic!("First rule set should be named \"Init\""),
                         Some(dfa) => dfa,
                     };
-                    let mut nfa: NFA<Option<RuleRhs>> = NFA::new();
+                    let mut nfa: NFA<RuleRhs> = NFA::new();
 
                     for SingleRule { lhs, rhs } in rules {
                         match lhs {
@@ -115,7 +115,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                     );
                 }
 
-                let mut nfa: NFA<Option<RuleRhs>> = NFA::new();
+                let mut nfa: NFA<RuleRhs> = NFA::new();
                 for SingleRule { lhs, rhs } in rules {
                     match lhs {
                         RegexOrFail::Regex(re) => nfa.add_regex(&bindings, &re, rhs),
@@ -154,8 +154,10 @@ pub fn lexer(input: TokenStream) -> TokenStream {
         );
     }
 
+    let dfa = dfa::simplify::simplify(dfa.unwrap(), &mut dfas);
+
     dfa::codegen::reify(
-        &dfa.unwrap(),
+        dfa,
         user_state_type,
         user_error_type,
         &user_error_lifetimes,

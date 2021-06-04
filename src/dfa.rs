@@ -1,4 +1,5 @@
 pub mod codegen;
+pub mod simplify;
 
 use crate::range_map::{Range, RangeMap};
 
@@ -8,27 +9,36 @@ use fxhash::FxHashMap;
 
 /// Deterministic finite automate, parameterized on values of accepting states.
 #[derive(Debug)]
-pub struct DFA<A> {
+pub struct DFA<T, A> {
     // Indexed by `StateIdx`
-    states: Vec<State<A>>,
+    states: Vec<State<T, A>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StateIdx(usize);
 
+impl StateIdx {
+    fn map<F>(&self, f: F) -> StateIdx
+    where
+        F: Fn(usize) -> usize,
+    {
+        StateIdx(f(self.0))
+    }
+}
+
 #[derive(Debug)]
-struct State<A> {
+struct State<T, A> {
     // Is this the initial state of a rule set? This is important as failure transitions in initial
     // states consumes the current character, but failure transitions in other states don't.
     initial: bool,
-    char_transitions: FxHashMap<char, StateIdx>,
-    range_transitions: RangeMap<StateIdx>,
-    fail_transition: Option<StateIdx>,
+    char_transitions: FxHashMap<char, T>,
+    range_transitions: RangeMap<T>,
+    fail_transition: Option<T>,
     accepting: Option<A>,
 }
 
-impl<A> State<A> {
-    fn new() -> State<A> {
+impl<T, A> State<T, A> {
+    fn new() -> State<T, A> {
         State {
             initial: false,
             char_transitions: Default::default(),
@@ -37,10 +47,16 @@ impl<A> State<A> {
             accepting: None,
         }
     }
+
+    fn has_no_transitions(&self) -> bool {
+        self.char_transitions.is_empty()
+            && self.range_transitions.is_empty()
+            && self.fail_transition.is_none()
+    }
 }
 
-impl<A> DFA<A> {
-    pub fn new() -> (DFA<A>, StateIdx) {
+impl<A> DFA<StateIdx, A> {
+    pub fn new() -> (DFA<StateIdx, A>, StateIdx) {
         let mut initial_state = State::new();
         initial_state.initial = true;
         (
@@ -99,13 +115,26 @@ impl<A> DFA<A> {
     }
 }
 
-impl<A> DFA<A> {
+impl<T, A> DFA<T, A> {
+    fn from_states(states: Vec<State<T, A>>) -> DFA<T, A> {
+        DFA { states }
+    }
+
+    fn into_state_indices(self) -> impl Iterator<Item = (StateIdx, State<T, A>)> {
+        self.states
+            .into_iter()
+            .enumerate()
+            .map(|(state_idx, state)| (StateIdx(state_idx), state))
+    }
+}
+
+impl<A> DFA<StateIdx, A> {
     /// Extend the current DFA with another DFA. The extended DFA's states will be renumbered. This
     /// does not add any transitions from the original DFA states to the extension. Accepting
     /// states of the extension is preserved.
     ///
     /// Returns initial state for the extension in the new DFA.
-    pub fn add_dfa(&mut self, other: DFA<A>) -> StateIdx {
+    pub fn add_dfa(&mut self, other: DFA<StateIdx, A>) -> StateIdx {
         let n_current_states = self.states.len();
 
         for State {
@@ -151,7 +180,7 @@ impl<A> DFA<A> {
     }
 }
 
-impl<A> DFA<A> {
+impl<A> DFA<StateIdx, A> {
     #[cfg(test)]
     pub fn simulate(&self, chars: &mut dyn Iterator<Item = char>) -> Option<&A> {
         let mut state = StateIdx(0);
@@ -198,7 +227,7 @@ impl Display for StateIdx {
     }
 }
 
-impl<A> Display for DFA<A> {
+impl<A> Display for DFA<StateIdx, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         for (state_idx, state) in self.states.iter().enumerate() {
             let State {
