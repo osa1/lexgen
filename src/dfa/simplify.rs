@@ -10,9 +10,9 @@ pub enum Trans<A> {
 
 /// Removes accepting states with no transitions, makes the transitions to those states accepting.
 // TODO: We need to turn RHSs into identifiers by introducing functions for user actions
-pub fn simplify<A: Clone>(
+pub fn simplify<A: Clone, K>(
     dfa: DFA<StateIdx, A>,
-    dfa_state_indices: &mut FxHashMap<String, StateIdx>,
+    dfa_state_indices: &mut FxHashMap<K, StateIdx>,
 ) -> DFA<Trans<A>, A> {
     let mut empty_states: Vec<(StateIdx, Option<A>)> = vec![];
     let mut non_empty_states: Vec<(StateIdx, State<StateIdx, A>)> = vec![];
