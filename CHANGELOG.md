@@ -1,3 +1,14 @@
+# Unreleased
+
+- Accepting states without transitions are now simplified in compile time and
+  semantic actions of such states are inlined in the states that make a
+  transition to such accepting states. In Lua 5.1 lexer this reduces a
+  benchmark's runtime by 14.9%. (#7)
+
+  Note that this potentially duplicates a lot of code in the generated code
+  when some states have large semantic action codes and lots of incoming edges
+  in the DFA. However in practice I haven't observed this yet. (#8)
+
 # 2021/05/30: 0.4.0
 
 - lexgen now comes with a set of built-in regular expressions for matching
