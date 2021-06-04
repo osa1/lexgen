@@ -1,5 +1,4 @@
 use super::{State, StateIdx, DFA};
-use crate::range_map::Range;
 
 use fxhash::FxHashMap;
 

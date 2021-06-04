@@ -27,7 +27,7 @@ use quote::{quote, ToTokens};
 const MAX_GUARD_SIZE: usize = 9;
 
 pub fn reify(
-    dfa: DFA<Trans<Option<RuleRhs>>, Option<RuleRhs>>,
+    dfa: DFA<Trans<RuleRhs>, RuleRhs>,
     user_state_type: Option<syn::Type>,
     user_error_type: Option<syn::Type>,
     user_error_type_lifetimes: &[syn::Lifetime],
@@ -256,7 +256,7 @@ fn generate_switch(
 
 /// Generate arms of `match self.state { ... }` of a DFA.
 fn generate_state_arms(
-    dfa: DFA<Trans<Option<RuleRhs>>, Option<RuleRhs>>,
+    dfa: DFA<Trans<RuleRhs>, RuleRhs>,
     handle_type_name: &syn::Ident,
     action_enum_name: &syn::Ident,
     user_error_type: Option<&syn::Type>,
@@ -330,12 +330,13 @@ fn generate_state_arms(
         } else if let Some(rhs) = accepting {
             // Non-initial, accepting state
             let action = match rhs {
-                None => quote!({
+                RuleRhs::None => quote!({
                     self.state = self.initial_state;
                     continue;
                 }),
-                Some(rhs) => generate_semantic_action(
-                    &rhs,
+                RuleRhs::Rhs { expr, kind } => generate_semantic_action(
+                    &expr,
+                    kind,
                     handle_type_name,
                     action_enum_name,
                     user_error_type,
@@ -384,16 +385,17 @@ fn generate_state_arms(
                     self.state = #next;
                 }),
                 Some(Trans::Accept(action)) => match action {
-                    Some(rhs) => generate_semantic_action(
-                        rhs,
+                    RuleRhs::None => quote!({
+                        self.state = self.initial_state;
+                    }),
+                    RuleRhs::Rhs { expr, kind } => generate_semantic_action(
+                        expr,
+                        *kind,
                         handle_type_name,
                         action_enum_name,
                         user_error_type,
                         token_type,
                     ),
-                    None => quote!({
-                        self.state = self.initial_state;
-                    }),
                 },
             };
 
@@ -448,9 +450,9 @@ fn generate_state_arms(
 /// Generate arms for `match self.iter.peek().copied() { ... }`
 fn generate_state_char_arms(
     initial: bool,
-    char_transitions: FxHashMap<char, Trans<Option<RuleRhs>>>,
-    range_transitions: RangeMap<Trans<Option<RuleRhs>>>,
-    fail_transition: Option<Trans<Option<RuleRhs>>>,
+    char_transitions: FxHashMap<char, Trans<RuleRhs>>,
+    range_transitions: RangeMap<Trans<RuleRhs>>,
+    fail_transition: Option<Trans<RuleRhs>>,
     action: &TokenStream,
     search_tables: &mut SearchTableSet,
     handle_type_name: &syn::Ident,
@@ -468,16 +470,17 @@ fn generate_state_char_arms(
         match next {
             Trans::Accept(action) => {
                 let action_code = match action {
-                    Some(rhs) => generate_semantic_action(
-                        &rhs,
+                    RuleRhs::None => quote!({
+                        self.state = self.initial_state;
+                    }),
+                    RuleRhs::Rhs { expr, kind } => generate_semantic_action(
+                        &expr,
+                        kind,
                         handle_type_name,
                         action_enum_name,
                         user_error_type,
                         token_type,
                     ),
-                    None => quote!({
-                        self.state = self.initial_state;
-                    }),
                 };
                 state_char_arms.push(quote!(
                     #char => {
@@ -514,16 +517,17 @@ fn generate_state_char_arms(
             )),
             Trans::Accept(action) => {
                 let action_code = match action {
-                    Some(rhs) => generate_semantic_action(
-                        &rhs,
+                    RuleRhs::None => quote!({
+                        self.state = self.initial_state;
+                    }),
+                    RuleRhs::Rhs { expr, kind } => generate_semantic_action(
+                        &expr,
+                        kind,
                         handle_type_name,
                         action_enum_name,
                         user_error_type,
                         token_type,
                     ),
-                    None => quote!({
-                        self.state = self.initial_state;
-                    }),
                 };
                 let range_start = char::from_u32(range.start).unwrap();
                 let range_end = char::from_u32(range.end).unwrap();
@@ -577,16 +581,17 @@ fn generate_state_char_arms(
         }
         Some(Trans::Accept(action)) => {
             let action_code = match action {
-                Some(rhs) => generate_semantic_action(
-                    &rhs,
+                RuleRhs::None => quote!({
+                    self.state = self.initial_state;
+                }),
+                RuleRhs::Rhs { kind, expr } => generate_semantic_action(
+                    &expr,
+                    kind,
                     handle_type_name,
                     action_enum_name,
                     user_error_type,
                     token_type,
                 ),
-                None => quote!({
-                    self.state = self.initial_state;
-                }),
             };
             if initial {
                 quote!(_ => {
@@ -606,14 +611,13 @@ fn generate_state_char_arms(
 }
 
 fn generate_semantic_action(
-    rhs: &RuleRhs,
+    expr: &syn::Expr,
+    kind: RuleKind,
     handle_type_name: &syn::Ident,
     action_enum_name: &syn::Ident,
     user_error_type: Option<&syn::Type>,
     token_type: &syn::Type,
 ) -> TokenStream {
-    let RuleRhs { expr, kind } = rhs;
-
     match kind {
         RuleKind::Simple => quote!({
             let rhs: #token_type = #expr;

@@ -42,7 +42,7 @@ pub enum Rule {
 
 pub struct SingleRule {
     pub lhs: RegexOrFail,
-    pub rhs: Option<RuleRhs>,
+    pub rhs: RuleRhs,
 }
 
 #[derive(Debug)]
@@ -55,9 +55,9 @@ pub enum RegexOrFail {
 }
 
 #[derive(Clone)]
-pub struct RuleRhs {
-    pub expr: syn::Expr,
-    pub kind: RuleKind,
+pub enum RuleRhs {
+    None,
+    Rhs { expr: syn::Expr, kind: RuleKind },
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -244,18 +244,16 @@ impl Parse for RegexOrFail {
 impl Parse for SingleRule {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let lhs = RegexOrFail::parse(input)?;
-        if input.parse::<syn::token::Comma>().is_ok() {
-            Ok(SingleRule { lhs, rhs: None })
+
+        let rhs = if input.parse::<syn::token::Comma>().is_ok() {
+            RuleRhs::None
         } else if input.parse::<syn::token::FatArrow>().is_ok() {
             let expr = input.parse::<syn::Expr>()?;
             input.parse::<syn::token::Comma>()?;
-            Ok(SingleRule {
-                lhs,
-                rhs: Some(RuleRhs {
-                    expr,
-                    kind: RuleKind::Infallible,
-                }),
-            })
+            RuleRhs::Rhs {
+                expr,
+                kind: RuleKind::Infallible,
+            }
         } else if input.parse::<syn::token::Eq>().is_ok() {
             let kind = if input.peek(syn::token::Question) {
                 let _ = input.parse::<syn::token::Question>();
@@ -265,13 +263,12 @@ impl Parse for SingleRule {
             };
             let expr = input.parse::<syn::Expr>()?;
             input.parse::<syn::token::Comma>()?;
-            Ok(SingleRule {
-                lhs,
-                rhs: Some(RuleRhs { expr, kind }),
-            })
+            RuleRhs::Rhs { expr, kind }
         } else {
             panic!("Expected one of `,`, `=>`, `=?`, or `=` after a regex");
-        }
+        };
+
+        Ok(SingleRule { lhs, rhs })
     }
 }
 

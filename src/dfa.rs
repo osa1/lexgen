@@ -120,13 +120,6 @@ impl<T, A> DFA<T, A> {
         DFA { states }
     }
 
-    fn state_indices(&self) -> impl Iterator<Item = (StateIdx, &State<T, A>)> {
-        self.states
-            .iter()
-            .enumerate()
-            .map(|(state_idx, state)| (StateIdx(state_idx), state))
-    }
-
     fn into_state_indices(self) -> impl Iterator<Item = (StateIdx, State<T, A>)> {
         self.states
             .into_iter()
