@@ -330,9 +330,9 @@ fn generate_state_arms(
         } else if let Some(rhs) = accepting {
             // Non-initial, accepting state
             let action = match rhs {
-                RuleRhs::None => quote!({
+                RuleRhs::None => quote!(
                     self.state = self.initial_state;
-                }),
+                ),
                 RuleRhs::Rhs { expr, kind } => generate_semantic_action(
                     &expr,
                     kind,
@@ -344,7 +344,9 @@ fn generate_state_arms(
             };
 
             if char_transitions.is_empty() && range_transitions.is_empty() {
-                action
+                quote!({
+                    #action
+                })
             } else {
                 let state_char_arms = generate_state_char_arms(
                     initial,
@@ -376,16 +378,16 @@ fn generate_state_arms(
             // Non-initial, non-accepting state
             let error = make_lexer_error();
             let action = match &fail_transition {
-                None => quote!({
+                None => quote!(
                     return Some(Err(#error));
-                }),
-                Some(Trans::Trans(StateIdx(next))) => quote!({
+                ),
+                Some(Trans::Trans(StateIdx(next))) => quote!(
                     self.state = #next;
-                }),
+                ),
                 Some(Trans::Accept(action)) => match action {
-                    RuleRhs::None => quote!({
+                    RuleRhs::None => quote!(
                         self.state = self.initial_state;
-                    }),
+                    ),
                     RuleRhs::Rhs { expr, kind } => generate_semantic_action(
                         expr,
                         *kind,
@@ -412,9 +414,7 @@ fn generate_state_arms(
 
             let end_of_stream_action = if initial {
                 // In an initial state other than the state 0 we fail with "unexpected EOF"
-                quote!({
-                    return Some(Err(#error));
-                })
+                quote!(return Some(Err(#error));)
             } else {
                 // Otherwise we run the semantic action and go to initial state of the current DFA.
                 // Initial state will then fail.
@@ -422,7 +422,9 @@ fn generate_state_arms(
             };
 
             quote!(match self.iter.peek().copied() {
-                None => #end_of_stream_action,
+                None => {
+                    #end_of_stream_action
+                }
                 Some((char_idx, char)) => {
                     match char {
                         #(#state_char_arms,)*
@@ -468,9 +470,9 @@ fn generate_state_char_arms(
         match next {
             Trans::Accept(action) => {
                 let action_code = match action {
-                    RuleRhs::None => quote!({
+                    RuleRhs::None => quote!(
                         self.state = self.initial_state;
-                    }),
+                    ),
                     RuleRhs::Rhs { expr, kind } => generate_semantic_action(
                         &expr,
                         kind,
@@ -515,9 +517,9 @@ fn generate_state_char_arms(
             )),
             Trans::Accept(action) => {
                 let action_code = match action {
-                    RuleRhs::None => quote!({
+                    RuleRhs::None => quote!(
                         self.state = self.initial_state;
-                    }),
+                    ),
                     RuleRhs::Rhs { expr, kind } => generate_semantic_action(
                         &expr,
                         kind,
@@ -565,7 +567,9 @@ fn generate_state_char_arms(
 
     // Add default case
     let default_case = match fail_transition {
-        None => quote!(_ => #action),
+        None => quote!(_ => {
+            #action
+        }),
         Some(Trans::Trans(StateIdx(next_state))) => {
             if initial {
                 quote!(_ => {
@@ -579,9 +583,9 @@ fn generate_state_char_arms(
         }
         Some(Trans::Accept(action)) => {
             let action_code = match action {
-                RuleRhs::None => quote!({
+                RuleRhs::None => quote!(
                     self.state = self.initial_state;
-                }),
+                ),
                 RuleRhs::Rhs { kind, expr } => generate_semantic_action(
                     &expr,
                     kind,
@@ -598,7 +602,9 @@ fn generate_state_char_arms(
                     #action_code
                 })
             } else {
-                quote!(_ => #action_code)
+                quote!(_ => {
+                    #action_code
+                })
             }
         }
     };
@@ -608,6 +614,9 @@ fn generate_state_char_arms(
     state_char_arms
 }
 
+// NB. This function generates multiple statements but without enclosing `{...}`. Make sure to
+// generate braces in the use site. This is to avoid redundant `{...}` in some cases (allows
+// prepending/appending statements without creating new blocks).
 fn generate_semantic_action(
     expr: &syn::Expr,
     kind: RuleKind,
@@ -617,11 +626,11 @@ fn generate_semantic_action(
     token_type: &syn::Type,
 ) -> TokenStream {
     match kind {
-        RuleKind::Simple => quote!({
+        RuleKind::Simple => quote!(
             let rhs: #token_type = #expr;
             self.state = self.initial_state;
             return Some(Ok((self.current_match_start, rhs, self.current_match_end)));
-        }),
+        ),
 
         RuleKind::Fallible => {
             let user_error_type = match user_error_type {
@@ -631,7 +640,7 @@ fn generate_semantic_action(
                 ),
                 Some(user_error_type) => user_error_type,
             };
-            quote!({
+            quote!(
                 let rhs: fn(#handle_type_name<'_, 'input>) -> #action_enum_name<Result<#token_type, #user_error_type>> = #expr;
 
                 let str = &self.input[self.current_match_start..self.current_match_end];
@@ -663,10 +672,10 @@ fn generate_semantic_action(
                         });
                     }
                 }
-            })
+            )
         }
 
-        RuleKind::Infallible => quote!({
+        RuleKind::Infallible => quote!(
             let rhs: fn(#handle_type_name<'_, 'input>) -> #action_enum_name<#token_type> = #expr;
 
             let str = &self.input[self.current_match_start..self.current_match_end];
@@ -692,6 +701,6 @@ fn generate_semantic_action(
                     return Some(Ok((self.current_match_start, tok, self.current_match_end)));
                 }
             }
-        }),
+        ),
     }
 }
