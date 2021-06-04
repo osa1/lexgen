@@ -373,8 +373,7 @@ fn generate_state_arms(
                 })
             }
         } else {
-            // Non-initial, non-accepting state. In a non-accepting state we want to consume a
-            // character anyway so we can use `next` instead of `peek`.
+            // Non-initial, non-accepting state
             let error = make_lexer_error();
             let action = match &fail_transition {
                 None => quote!({
