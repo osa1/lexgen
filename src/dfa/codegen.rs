@@ -332,7 +332,6 @@ fn generate_state_arms(
             let action = match rhs {
                 RuleRhs::None => quote!({
                     self.state = self.initial_state;
-                    continue;
                 }),
                 RuleRhs::Rhs { expr, kind } => generate_semantic_action(
                     &expr,
@@ -646,7 +645,6 @@ fn generate_semantic_action(
                 match rhs(handle) {
                     #action_enum_name::Continue => {
                         self.state = self.initial_state;
-                        continue;
                     }
                     #action_enum_name::Return(res) => {
                         self.state = self.initial_state;
@@ -657,7 +655,6 @@ fn generate_semantic_action(
                     }
                     #action_enum_name::Switch(rule_set) => {
                         self.switch(rule_set);
-                        continue;
                     }
                     #action_enum_name::SwitchAndReturn(res, rule_set) => {
                         self.switch(rule_set);
@@ -683,7 +680,6 @@ fn generate_semantic_action(
             match rhs(handle) {
                 #action_enum_name::Continue => {
                     self.state = self.initial_state;
-                    continue;
                 }
                 #action_enum_name::Return(tok) => {
                     self.state = self.initial_state;
@@ -691,7 +687,6 @@ fn generate_semantic_action(
                 }
                 #action_enum_name::Switch(rule_set) => {
                     self.switch(rule_set);
-                    continue;
                 }
                 #action_enum_name::SwitchAndReturn(tok, rule_set) => {
                     self.switch(rule_set);
