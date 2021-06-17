@@ -48,6 +48,7 @@ pub fn simplify<A: Clone, K>(
                 range_transitions,
                 fail_transition,
                 accepting,
+                predecessors,
             } = state;
 
             let char_transitions = char_transitions
@@ -59,12 +60,25 @@ pub fn simplify<A: Clone, K>(
 
             let fail_transition = fail_transition.and_then(map_transition);
 
+            let predecessors = predecessors
+                .into_iter()
+                .map(|pred| match map_transition(pred) {
+                    Some(Trans::Trans(pred)) => pred,
+                    _ => {
+                        // This pass should only remove nodes without successors, so it's a bug if
+                        // we remove a predecessor
+                        panic!("Predecessor of a state is removed in simplification")
+                    }
+                })
+                .collect();
+
             State {
                 initial,
                 char_transitions,
                 range_transitions,
                 fail_transition,
                 accepting,
+                predecessors,
             }
         })
         .collect();

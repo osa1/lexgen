@@ -5,7 +5,7 @@ use crate::range_map::{Range, RangeMap};
 
 use std::convert::TryFrom;
 
-use fxhash::FxHashMap;
+use fxhash::{FxHashMap, FxHashSet};
 
 /// Deterministic finite automate, parameterized on values of accepting states.
 #[derive(Debug)]
@@ -29,12 +29,15 @@ impl StateIdx {
 #[derive(Debug)]
 struct State<T, A> {
     // Is this the initial state of a rule set? This is important as failure transitions in initial
-    // states consumes the current character, but failure transitions in other states don't.
+    // states consume the current character, but failure transitions in other states don't.
     initial: bool,
     char_transitions: FxHashMap<char, T>,
     range_transitions: RangeMap<T>,
     fail_transition: Option<T>,
     accepting: Option<A>,
+    // Predecessors of the state, used to inline code for a state with one predecessor in the
+    // predecessor's code
+    predecessors: FxHashSet<StateIdx>,
 }
 
 impl<T, A> State<T, A> {
@@ -45,6 +48,7 @@ impl<T, A> State<T, A> {
             range_transitions: Default::default(),
             fail_transition: None,
             accepting: None,
+            predecessors: Default::default(),
         }
     }
 
@@ -95,6 +99,8 @@ impl<A> DFA<StateIdx, A> {
             old,
             next
         );
+
+        self.states[next.0].predecessors.insert(state);
     }
 
     pub fn add_range_transition(
@@ -107,11 +113,14 @@ impl<A> DFA<StateIdx, A> {
         self.states[state.0]
             .range_transitions
             .insert(range_begin, range_end, next);
+
+        self.states[next.0].predecessors.insert(state);
     }
 
     pub fn add_fail_transition(&mut self, state: StateIdx, next: StateIdx) {
         assert!(self.states[state.0].fail_transition.is_none());
         self.states[state.0].fail_transition = Some(next);
+        self.states[next.0].predecessors.insert(state);
     }
 }
 
@@ -143,6 +152,7 @@ impl<A> DFA<StateIdx, A> {
             range_transitions,
             fail_transition,
             accepting,
+            predecessors,
         } in other.states
         {
             let mut new_char_transitions: FxHashMap<char, StateIdx> = Default::default();
@@ -167,12 +177,18 @@ impl<A> DFA<StateIdx, A> {
                 new_fail_transition = Some(StateIdx(next.0 + n_current_states));
             }
 
+            let predecessors = predecessors
+                .into_iter()
+                .map(|pred| StateIdx(pred.0 + n_current_states))
+                .collect();
+
             self.states.push(State {
                 initial,
                 char_transitions: new_char_transitions,
                 range_transitions: new_range_transitions,
                 fail_transition: new_fail_transition,
                 accepting,
+                predecessors,
             });
         }
 
@@ -236,6 +252,7 @@ impl<A> Display for DFA<StateIdx, A> {
                 range_transitions,
                 fail_transition,
                 accepting,
+                predecessors: _,
             } = state;
 
             if accepting.is_some() {
