@@ -1,8 +1,10 @@
+mod ctx;
 mod search_table;
+
+use ctx::CgCtx;
 
 use super::simplify::Trans;
 use super::{State, StateIdx, DFA};
-use search_table::SearchTableSet;
 
 use crate::ast::{RuleKind, RuleRhs};
 use crate::range_map::RangeMap;
@@ -30,56 +32,23 @@ pub fn reify(
     dfa: DFA<Trans<RuleRhs>, RuleRhs>,
     user_state_type: Option<syn::Type>,
     user_error_type: Option<syn::Type>,
-    user_error_type_lifetimes: &[syn::Lifetime],
-    rule_states: &FxHashMap<String, StateIdx>,
-    type_name: syn::Ident,
+    user_error_type_lifetimes: Vec<syn::Lifetime>,
+    rule_states: FxHashMap<String, StateIdx>,
+    lexer_name: syn::Ident,
     token_type: syn::Type,
     public: bool,
 ) -> TokenStream {
-    let user_state_type = user_state_type
-        .map(|ty| ty.into_token_stream())
-        .unwrap_or(quote!(()));
+    let rule_name_enum_name =
+        syn::Ident::new(&(lexer_name.to_string() + "Rule"), lexer_name.span());
 
-    let action_enum_name = syn::Ident::new(&(type_name.to_string() + "Action"), type_name.span());
-
-    let handle_type_name = syn::Ident::new(&(type_name.to_string() + "Handle"), type_name.span());
-
-    let mut search_tables = SearchTableSet::new();
-
-    let removed_states: Vec<StateIdx> = dfa
-        .states
-        .iter()
-        .enumerate()
-        .filter_map(|(state_idx, state)| {
-            if state.predecessors.len() == 1 {
-                Some(StateIdx(state_idx))
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    let match_arms = generate_state_arms(
-        dfa,
-        &handle_type_name,
-        &action_enum_name,
-        user_error_type.as_ref(),
-        &token_type,
-        &mut search_tables,
-        &removed_states,
-    );
-
-    let rule_name_enum_name = syn::Ident::new(&(type_name.to_string() + "Rule"), type_name.span());
     let rule_name_idents: Vec<syn::Ident> = rule_states
         .keys()
         .map(|rule_name| syn::Ident::new(rule_name, Span::call_site()))
         .collect();
 
-    let switch_method = generate_switch(&rule_name_enum_name, rule_states, &removed_states);
-
     let visibility = if public { quote!(pub) } else { quote!() };
 
-    let lexer_error_type = match user_error_type {
+    let lexer_error_type = match &user_error_type {
         None => quote!(
             #[derive(Debug, PartialEq, Eq, Clone, Copy)]
             #visibility struct LexerError {
@@ -94,6 +63,18 @@ pub fn reify(
             }
         ),
     };
+
+    let mut ctx = CgCtx::new(&dfa, lexer_name, token_type, user_error_type, rule_states);
+
+    let user_state_type = user_state_type
+        .map(|ty| ty.into_token_stream())
+        .unwrap_or(quote!(()));
+
+    let match_arms = generate_state_arms(&mut ctx, dfa);
+
+    let switch_method = generate_switch(&ctx, &rule_name_enum_name);
+
+    let search_tables = ctx.take_search_tables();
 
     let binary_search_fn = if search_tables.is_empty() {
         quote!()
@@ -133,9 +114,13 @@ pub fn reify(
         })
         .collect();
 
+    let action_type_name = ctx.action_type_name();
+    let handle_type_name = ctx.handle_type_name();
+    let lexer_name = ctx.lexer_name();
+    let token_type = ctx.token_type();
     quote!(
         // Possible outcomes of a user action
-        enum #action_enum_name<T> {
+        enum #action_type_name<T> {
             // User action did not return a token, continue with lexing
             Continue,
             // User action returned a token, return it
@@ -162,7 +147,7 @@ pub fn reify(
         }
 
         // The lexer type
-        #visibility struct #type_name<'input> {
+        #visibility struct #lexer_name<'input> {
             // Current lexer state
             state: usize,
             // Which lexer state to switch to on successful match
@@ -177,20 +162,20 @@ pub fn reify(
         #lexer_error_type
 
         impl<'lexer, 'input> #handle_type_name<'lexer, 'input> {
-            fn switch_and_return<T>(self, rule: #rule_name_enum_name, token: T) -> #action_enum_name<T> {
-                #action_enum_name::SwitchAndReturn(token, rule)
+            fn switch_and_return<T>(self, rule: #rule_name_enum_name, token: T) -> #action_type_name<T> {
+                #action_type_name::SwitchAndReturn(token, rule)
             }
 
-            fn return_<T>(self, token: T) -> #action_enum_name<T> {
-                #action_enum_name::Return(token)
+            fn return_<T>(self, token: T) -> #action_type_name<T> {
+                #action_type_name::Return(token)
             }
 
-            fn switch<T>(self, rule: #rule_name_enum_name) -> #action_enum_name<T> {
-                #action_enum_name::Switch(rule)
+            fn switch<T>(self, rule: #rule_name_enum_name) -> #action_type_name<T> {
+                #action_type_name::Switch(rule)
             }
 
-            fn continue_<T>(self) -> #action_enum_name<T> {
-                #action_enum_name::Continue
+            fn continue_<T>(self) -> #action_type_name<T> {
+                #action_type_name::Continue
             }
 
             fn state(&mut self) -> &mut #user_state_type {
@@ -206,13 +191,13 @@ pub fn reify(
             }
         }
 
-        impl<'input> #type_name<'input> {
+        impl<'input> #lexer_name<'input> {
             #visibility fn new(input: &'input str) -> Self {
                 Self::new_with_state(input, Default::default())
             }
 
             #visibility fn new_with_state(input: &'input str, user_state: #user_state_type) -> Self {
-                #type_name {
+                #lexer_name {
                     state: 0,
                     initial_state: 0,
                     user_state: Default::default(),
@@ -229,7 +214,7 @@ pub fn reify(
         #(#search_tables)*
         #binary_search_fn
 
-        impl<'input> Iterator for #type_name<'input> {
+        impl<'input> Iterator for #lexer_name<'input> {
             type Item = Result<(usize, #token_type, usize), LexerError<#(#user_error_type_lifetimes),*>>;
 
             fn next(&mut self) -> Option<Self::Item> {
@@ -244,15 +229,11 @@ pub fn reify(
     )
 }
 
-fn generate_switch(
-    enum_name: &syn::Ident,
-    rule_states: &FxHashMap<String, StateIdx>,
-    removed_states: &[StateIdx],
-) -> TokenStream {
+fn generate_switch(ctx: &CgCtx, enum_name: &syn::Ident) -> TokenStream {
     let mut arms: Vec<TokenStream> = vec![];
 
-    for (rule_name, state_idx) in rule_states.iter() {
-        let StateIdx(state_idx) = renumber_state(removed_states, *state_idx);
+    for (rule_name, state_idx) in ctx.rule_states().iter() {
+        let StateIdx(state_idx) = ctx.renumber_state(*state_idx);
         let rule_ident = syn::Ident::new(rule_name, Span::call_site());
         arms.push(quote!(
             #enum_name::#rule_ident =>
@@ -270,22 +251,8 @@ fn generate_switch(
     )
 }
 
-fn renumber_state(removed_states: &[StateIdx], state_idx: StateIdx) -> StateIdx {
-    match removed_states.binary_search(&state_idx) {
-        Ok(idx) | Err(idx) => state_idx.map(|state_idx| state_idx - idx),
-    }
-}
-
 /// Generate arms of `match self.state { ... }` of a DFA.
-fn generate_state_arms(
-    dfa: DFA<Trans<RuleRhs>, RuleRhs>,
-    handle_type_name: &syn::Ident,
-    action_enum_name: &syn::Ident,
-    user_error_type: Option<&syn::Type>,
-    token_type: &syn::Type,
-    search_tables: &mut SearchTableSet,
-    removed_states: &[StateIdx],
-) -> Vec<TokenStream> {
+fn generate_state_arms(ctx: &mut CgCtx, dfa: DFA<Trans<RuleRhs>, RuleRhs>) -> Vec<TokenStream> {
     let DFA { states } = dfa;
 
     let mut match_arms: Vec<TokenStream> = vec![];
@@ -297,20 +264,10 @@ fn generate_state_arms(
             continue;
         }
 
-        let state_code: TokenStream = generate_state_arm(
-            state_idx,
-            state,
-            &states,
-            handle_type_name,
-            action_enum_name,
-            user_error_type,
-            token_type,
-            search_tables,
-            &removed_states,
-        );
+        let state_code: TokenStream = generate_state_arm(ctx, state_idx, state, &states);
 
-        let StateIdx(state_idx) = renumber_state(&removed_states, StateIdx(state_idx));
-        let state_idx_pat = if state_idx == n_states - removed_states.len() - 1 {
+        let StateIdx(state_idx) = ctx.renumber_state(StateIdx(state_idx));
+        let state_idx_pat = if state_idx == n_states - ctx.n_inlined_states() - 1 {
             quote!(_)
         } else {
             quote!(#state_idx)
@@ -325,15 +282,10 @@ fn generate_state_arms(
 }
 
 fn generate_state_arm(
+    ctx: &mut CgCtx,
     state_idx: usize,
     state: &State<Trans<RuleRhs>, RuleRhs>,
     states: &[State<Trans<RuleRhs>, RuleRhs>],
-    handle_type_name: &syn::Ident,
-    action_enum_name: &syn::Ident,
-    user_error_type: Option<&syn::Type>,
-    token_type: &syn::Type,
-    search_tables: &mut SearchTableSet,
-    removed_states: &[StateIdx],
 ) -> TokenStream {
     let State {
         initial,
@@ -345,6 +297,7 @@ fn generate_state_arm(
     } = state;
 
     let make_lexer_error = || -> TokenStream {
+        let user_error_type = ctx.user_error_type();
         match user_error_type {
             None => quote!(LexerError {
                 char_idx: self.current_match_start
@@ -367,18 +320,13 @@ fn generate_state_arm(
         });
 
         let state_char_arms = generate_state_char_arms(
+            ctx,
             states,
             true,
             char_transitions,
             range_transitions,
             fail_transition.as_ref(),
             &action,
-            search_tables,
-            handle_type_name,
-            action_enum_name,
-            user_error_type,
-            token_type,
-            removed_states,
         );
 
         quote!(
@@ -399,14 +347,7 @@ fn generate_state_arm(
             RuleRhs::None => quote!(
                 self.state = self.initial_state;
             ),
-            RuleRhs::Rhs { expr, kind } => generate_semantic_action(
-                expr,
-                *kind,
-                handle_type_name,
-                action_enum_name,
-                user_error_type,
-                token_type,
-            ),
+            RuleRhs::Rhs { expr, kind } => generate_semantic_action(ctx, expr, *kind),
         };
 
         if char_transitions.is_empty() && range_transitions.is_empty() {
@@ -415,18 +356,13 @@ fn generate_state_arm(
             })
         } else {
             let state_char_arms = generate_state_char_arms(
+                ctx,
                 states,
                 *initial,
                 char_transitions,
                 range_transitions,
                 None,
                 &action,
-                search_tables,
-                handle_type_name,
-                action_enum_name,
-                user_error_type,
-                token_type,
-                removed_states,
             );
 
             quote!({
@@ -450,7 +386,7 @@ fn generate_state_arm(
                 return Some(Err(#error));
             ),
             Some(Trans::Trans(next)) => {
-                let StateIdx(next) = renumber_state(removed_states, *next);
+                let StateIdx(next) = ctx.renumber_state(*next);
                 quote!(
                     self.state = #next;
                 )
@@ -459,30 +395,18 @@ fn generate_state_arm(
                 RuleRhs::None => quote!(
                     self.state = self.initial_state;
                 ),
-                RuleRhs::Rhs { expr, kind } => generate_semantic_action(
-                    expr,
-                    *kind,
-                    handle_type_name,
-                    action_enum_name,
-                    user_error_type,
-                    token_type,
-                ),
+                RuleRhs::Rhs { expr, kind } => generate_semantic_action(ctx, expr, *kind),
             },
         };
 
         let state_char_arms = generate_state_char_arms(
+            ctx,
             states,
             *initial,
             char_transitions,
             range_transitions,
             fail_transition.as_ref(),
             &action,
-            search_tables,
-            handle_type_name,
-            action_enum_name,
-            user_error_type,
-            token_type,
-            removed_states,
         );
 
         let end_of_stream_action = if *initial {
@@ -509,18 +433,13 @@ fn generate_state_arm(
 
 /// Generate arms for `match self.iter.peek().copied() { ... }`
 fn generate_state_char_arms(
+    ctx: &mut CgCtx,
     states: &[State<Trans<RuleRhs>, RuleRhs>],
     initial: bool,
     char_transitions: &FxHashMap<char, Trans<RuleRhs>>,
     range_transitions: &RangeMap<Trans<RuleRhs>>,
     fail_transition: Option<&Trans<RuleRhs>>,
     fail_action: &TokenStream,
-    search_tables: &mut SearchTableSet,
-    handle_type_name: &syn::Ident,
-    action_enum_name: &syn::Ident,
-    user_error_type: Option<&syn::Type>,
-    token_type: &syn::Type,
-    removed_states: &[StateIdx],
 ) -> Vec<TokenStream> {
     // Arms of the `match` for the current character
     let mut state_char_arms: Vec<TokenStream> = vec![];
@@ -531,13 +450,7 @@ fn generate_state_char_arms(
     for (char, next) in char_transitions {
         match next {
             Trans::Accept(action) => {
-                let action_code = generate_rhs_code(
-                    &action,
-                    handle_type_name,
-                    action_enum_name,
-                    user_error_type,
-                    token_type,
-                );
+                let action_code = generate_rhs_code(ctx, &action);
                 state_char_arms.push(quote!(
                     #char => {
                         self.current_match_end += char.len_utf8();
@@ -554,19 +467,9 @@ fn generate_state_char_arms(
         let pat = quote!(#(#chars)|*);
 
         let next = if states[*next_state].predecessors.len() == 1 {
-            generate_state_arm(
-                *next_state,
-                &states[*next_state],
-                states,
-                handle_type_name,
-                action_enum_name,
-                user_error_type,
-                token_type,
-                search_tables,
-                removed_states,
-            )
+            generate_state_arm(ctx, *next_state, &states[*next_state], states)
         } else {
-            let StateIdx(next_state) = renumber_state(removed_states, StateIdx(*next_state));
+            let StateIdx(next_state) = ctx.renumber_state(StateIdx(*next_state));
             quote!(
                 self.state = #next_state;
             )
@@ -591,13 +494,7 @@ fn generate_state_char_arms(
                 char::try_from(range.end).unwrap(),
             )),
             Trans::Accept(action) => {
-                let action_code = generate_rhs_code(
-                    &action,
-                    handle_type_name,
-                    action_enum_name,
-                    user_error_type,
-                    token_type,
-                );
+                let action_code = generate_rhs_code(ctx, &action);
                 let range_start = char::from_u32(range.start).unwrap();
                 let range_end = char::from_u32(range.end).unwrap();
                 state_char_arms.push(quote!(
@@ -613,7 +510,7 @@ fn generate_state_char_arms(
 
     for (StateIdx(next_state), ranges) in state_ranges.into_iter() {
         let guard = if ranges.len() > MAX_GUARD_SIZE {
-            let binary_search_table_id = search_tables.add_table(ranges);
+            let binary_search_table_id = ctx.add_search_table(ranges);
 
             quote!(binary_search(x, &#binary_search_table_id))
         } else {
@@ -626,19 +523,9 @@ fn generate_state_char_arms(
         };
 
         let next = if states[next_state].predecessors.len() == 1 {
-            generate_state_arm(
-                next_state,
-                &states[next_state],
-                states,
-                handle_type_name,
-                action_enum_name,
-                user_error_type,
-                token_type,
-                search_tables,
-                removed_states,
-            )
+            generate_state_arm(ctx, next_state, &states[next_state], states)
         } else {
-            let StateIdx(next_state) = renumber_state(removed_states, StateIdx(next_state));
+            let StateIdx(next_state) = ctx.renumber_state(StateIdx(next_state));
             quote!(
                 self.state = #next_state;
             )
@@ -660,19 +547,9 @@ fn generate_state_char_arms(
         }),
         Some(Trans::Trans(StateIdx(next_state))) => {
             let next = if states[*next_state].predecessors.len() == 1 {
-                generate_state_arm(
-                    *next_state,
-                    &states[*next_state],
-                    states,
-                    handle_type_name,
-                    action_enum_name,
-                    user_error_type,
-                    token_type,
-                    search_tables,
-                    removed_states,
-                )
+                generate_state_arm(ctx, *next_state, &states[*next_state], states)
             } else {
-                let StateIdx(next_state) = renumber_state(removed_states, StateIdx(*next_state));
+                let StateIdx(next_state) = ctx.renumber_state(StateIdx(*next_state));
                 quote!(
                     self.state = #next_state;
                 )
@@ -691,13 +568,7 @@ fn generate_state_char_arms(
             }
         }
         Some(Trans::Accept(action)) => {
-            let action_code = generate_rhs_code(
-                &action,
-                handle_type_name,
-                action_enum_name,
-                user_error_type,
-                token_type,
-            );
+            let action_code = generate_rhs_code(ctx, &action);
             if initial {
                 quote!(_ => {
                     self.current_match_end += char.len_utf8();
@@ -719,39 +590,20 @@ fn generate_state_char_arms(
 
 // NB. Generates multiple states without enclosing `{...}`, see comments in
 // `generate_semantic_action`
-fn generate_rhs_code(
-    action: &RuleRhs,
-    handle_type_name: &syn::Ident,
-    action_enum_name: &syn::Ident,
-    user_error_type: Option<&syn::Type>,
-    token_type: &syn::Type,
-) -> TokenStream {
+fn generate_rhs_code(ctx: &CgCtx, action: &RuleRhs) -> TokenStream {
     match action {
         RuleRhs::None => quote!(
             self.state = self.initial_state;
         ),
-        RuleRhs::Rhs { kind, expr } => generate_semantic_action(
-            &expr,
-            *kind,
-            handle_type_name,
-            action_enum_name,
-            user_error_type,
-            token_type,
-        ),
+        RuleRhs::Rhs { kind, expr } => generate_semantic_action(ctx, &expr, *kind),
     }
 }
 
 // NB. This function generates multiple statements but without enclosing `{...}`. Make sure to
 // generate braces in the use site. This is to avoid redundant `{...}` in some cases (allows
 // prepending/appending statements without creating new blocks).
-fn generate_semantic_action(
-    expr: &syn::Expr,
-    kind: RuleKind,
-    handle_type_name: &syn::Ident,
-    action_enum_name: &syn::Ident,
-    user_error_type: Option<&syn::Type>,
-    token_type: &syn::Type,
-) -> TokenStream {
+fn generate_semantic_action(ctx: &CgCtx, expr: &syn::Expr, kind: RuleKind) -> TokenStream {
+    let token_type = ctx.token_type();
     match kind {
         RuleKind::Simple => quote!(
             let rhs: #token_type = #expr;
@@ -760,15 +612,18 @@ fn generate_semantic_action(
         ),
 
         RuleKind::Fallible => {
-            let user_error_type = match user_error_type {
+            let user_error_type = match ctx.user_error_type() {
                 None => panic!(
                     "Fallible rules can only be used with a user error type, \
                             declared with `type Error = ...;` syntax"
                 ),
                 Some(user_error_type) => user_error_type,
             };
+            let handle_type_name = ctx.handle_type_name();
+            let action_type_name = ctx.action_type_name();
             quote!(
-                let rhs: fn(#handle_type_name<'_, 'input>) -> #action_enum_name<Result<#token_type, #user_error_type>> = #expr;
+                let rhs: fn(#handle_type_name<'_, 'input>) ->
+                    #action_type_name<Result<#token_type, #user_error_type>> = #expr;
 
                 let str = &self.input[self.current_match_start..self.current_match_end];
                 let handle = #handle_type_name {
@@ -778,20 +633,20 @@ fn generate_semantic_action(
                 };
 
                 match rhs(handle) {
-                    #action_enum_name::Continue => {
+                    #action_type_name::Continue => {
                         self.state = self.initial_state;
                     }
-                    #action_enum_name::Return(res) => {
+                    #action_type_name::Return(res) => {
                         self.state = self.initial_state;
                         return Some(match res {
                             Ok(tok) => Ok((self.current_match_start, tok, self.current_match_end)),
                             Err(err) => Err(LexerError::UserError(err)),
                         });
                     }
-                    #action_enum_name::Switch(rule_set) => {
+                    #action_type_name::Switch(rule_set) => {
                         self.switch(rule_set);
                     }
-                    #action_enum_name::SwitchAndReturn(res, rule_set) => {
+                    #action_type_name::SwitchAndReturn(res, rule_set) => {
                         self.switch(rule_set);
                         return Some(match res {
                             Ok(tok) => Ok((self.current_match_start, tok, self.current_match_end)),
@@ -802,32 +657,36 @@ fn generate_semantic_action(
             )
         }
 
-        RuleKind::Infallible => quote!(
-            let rhs: fn(#handle_type_name<'_, 'input>) -> #action_enum_name<#token_type> = #expr;
+        RuleKind::Infallible => {
+            let handle_type_name = ctx.handle_type_name();
+            let action_type_name = ctx.action_type_name();
+            quote!(
+                let rhs: fn(#handle_type_name<'_, 'input>) -> #action_type_name<#token_type> = #expr;
 
-            let str = &self.input[self.current_match_start..self.current_match_end];
-            let handle = #handle_type_name {
-                iter: &mut self.iter,
-                match_: str,
-                user_state: &mut self.user_state,
-            };
+                let str = &self.input[self.current_match_start..self.current_match_end];
+                let handle = #handle_type_name {
+                    iter: &mut self.iter,
+                    match_: str,
+                    user_state: &mut self.user_state,
+                };
 
-            match rhs(handle) {
-                #action_enum_name::Continue => {
-                    self.state = self.initial_state;
+                match rhs(handle) {
+                    #action_type_name::Continue => {
+                        self.state = self.initial_state;
+                    }
+                    #action_type_name::Return(tok) => {
+                        self.state = self.initial_state;
+                        return Some(Ok((self.current_match_start, tok, self.current_match_end)));
+                    }
+                    #action_type_name::Switch(rule_set) => {
+                        self.switch(rule_set);
+                    }
+                    #action_type_name::SwitchAndReturn(tok, rule_set) => {
+                        self.switch(rule_set);
+                        return Some(Ok((self.current_match_start, tok, self.current_match_end)));
+                    }
                 }
-                #action_enum_name::Return(tok) => {
-                    self.state = self.initial_state;
-                    return Some(Ok((self.current_match_start, tok, self.current_match_end)));
-                }
-                #action_enum_name::Switch(rule_set) => {
-                    self.switch(rule_set);
-                }
-                #action_enum_name::SwitchAndReturn(tok, rule_set) => {
-                    self.switch(rule_set);
-                    return Some(Ok((self.current_match_start, tok, self.current_match_end)));
-                }
-            }
-        ),
+            )
+        }
     }
 }
