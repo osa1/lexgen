@@ -263,7 +263,8 @@ lexer! {
                         lexer.switch_and_return(LexerRule::Init, Token::String(StringToken::Raw(match_)))
                     }
                 } else {
-                    lexer.switch(LexerRule::String)
+                    lexer.state().long_string_closing_eqs = 0;
+                    lexer.continue_()
                 }
             },
 
@@ -449,8 +450,12 @@ fn lex_lua_comment() {
          +
          --[[test
          test]]+
+         --[===[
+         ]=]===]
+         +
         ",
     );
+    assert_eq!(ignore_pos(lexer.next()), Some(Ok(Token::Plus)));
     assert_eq!(ignore_pos(lexer.next()), Some(Ok(Token::Plus)));
     assert_eq!(ignore_pos(lexer.next()), Some(Ok(Token::Plus)));
     assert_eq!(ignore_pos(lexer.next()), None);
