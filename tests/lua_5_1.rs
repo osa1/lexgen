@@ -270,7 +270,7 @@ lexer! {
 
         _ =>
             |lexer|
-                lexer.switch(LexerRule::String),
+                lexer.switch(LexerRule::LongString),
     }
 
     rule String {
@@ -453,8 +453,13 @@ fn lex_lua_comment() {
          --[===[
          ]=]===]
          +
+         --[===[
+         ]
+         ]===]
+         +
         ",
     );
+    assert_eq!(ignore_pos(lexer.next()), Some(Ok(Token::Plus)));
     assert_eq!(ignore_pos(lexer.next()), Some(Ok(Token::Plus)));
     assert_eq!(ignore_pos(lexer.next()), Some(Ok(Token::Plus)));
     assert_eq!(ignore_pos(lexer.next()), Some(Ok(Token::Plus)));
