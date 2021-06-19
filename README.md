@@ -310,4 +310,4 @@ loop {
 ```
 
 [1]: https://github.com/osa1/lexgen/blob/main/tests/tests.rs
-[2]: https://github.com/osa1/lexgen/blob/main/examples/lua_5_1.rs
+[2]: https://github.com/osa1/lexgen/blob/main/tests/lua_5_1.rs

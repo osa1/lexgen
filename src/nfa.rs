@@ -127,7 +127,7 @@ impl<A> NFA<A> {
         assert!(not_exists, "add_empty_transition");
     }
 
-    pub fn make_state_accepting(&mut self, state: StateIdx, value: A) {
+    fn make_state_accepting(&mut self, state: StateIdx, value: A) {
         // TODO: Avoid overriding here?
         self.states[state.0].accepting = Some(value);
     }
