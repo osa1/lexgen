@@ -1,4 +1,4 @@
-# Unreleased
+# 2021/10/07: 0.5.0
 
 - Accepting states without transitions are now simplified in compile time and
   semantic actions of such states are inlined in the states that make a
