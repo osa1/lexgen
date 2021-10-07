@@ -12,6 +12,9 @@
 - DFA states with one predecessor are now inlined in the predecessor states.
   This reduces code size and improves runtime performance. (33547ec)
 
+- We now reset the current match after returning a token (with `return_` and
+  `switch_and_return`). (#11)
+
 # 2021/05/30: 0.4.0
 
 - lexgen now comes with a set of built-in regular expressions for matching
