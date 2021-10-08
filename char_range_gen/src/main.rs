@@ -15,7 +15,7 @@ fn generate_char_fn_ranges(f: fn(char) -> bool) -> Vec<(u32, u32)> {
     let mut ranges: Vec<(u32, u32)> = vec![];
     let mut current_range_start: Option<u32> = None;
 
-    for i in 0..=char::MAX as u32 {
+    for i in 0..=u32::from(char::MAX) {
         let c = match char::try_from(i) {
             Err(_) => continue,
             Ok(c) => c,
@@ -25,10 +25,8 @@ fn generate_char_fn_ranges(f: fn(char) -> bool) -> Vec<(u32, u32)> {
             if current_range_start.is_none() {
                 current_range_start = Some(i);
             }
-        } else {
-            if let Some(current_range_start) = current_range_start.take() {
-                ranges.push((current_range_start, i - 1));
-            }
+        } else if let Some(current_range_start) = current_range_start.take() {
+            ranges.push((current_range_start, i - 1));
         }
     }
 
@@ -55,7 +53,7 @@ ascii_fn!(is_ascii_punctuation);
 ascii_fn!(is_ascii_uppercase);
 ascii_fn!(is_ascii_whitespace);
 
-static FNS: [(fn(char) -> bool, &'static str); 20] = [
+static FNS: [(fn(char) -> bool, &str); 20] = [
     (char::is_alphabetic, "ALPHABETIC"),
     (char::is_alphanumeric, "ALPHANUMERIC"),
     (is_ascii, "ASCII"),
