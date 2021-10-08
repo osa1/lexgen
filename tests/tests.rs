@@ -2,6 +2,16 @@ use lexgen::lexer;
 
 use std::convert::TryFrom;
 
+fn ignore_pos<A, E>(ret: Option<Result<(usize, A, usize), E>>) -> Option<Result<A, E>> {
+    ret.map(|res| res.map(|(_, a, _)| a))
+}
+
+fn next<A, E>(
+    iter: &mut dyn Iterator<Item = Result<(usize, A, usize), E>>,
+) -> Option<Result<A, E>> {
+    ignore_pos(iter.next())
+}
+
 #[test]
 fn simple() {
     mod lexer {
@@ -319,16 +329,6 @@ fn rule_kind_fallible_with_lifetimes() {
         Some(Err(LexerError::UserError(UserError("blah"))))
     ));
     assert_eq!(lexer.next(), None);
-}
-
-fn ignore_pos<A, E>(ret: Option<Result<(usize, A, usize), E>>) -> Option<Result<A, E>> {
-    ret.map(|res| res.map(|(_, a, _)| a))
-}
-
-fn next<A, E>(
-    iter: &mut dyn Iterator<Item = Result<(usize, A, usize), E>>,
-) -> Option<Result<A, E>> {
-    ignore_pos(iter.next())
 }
 
 #[test]
