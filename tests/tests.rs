@@ -413,3 +413,26 @@ fn builtin_ascii() {
         assert_eq!(next(&mut lexer), Some(Ok(())));
     }
 }
+
+#[test]
+fn regex_syntax_precedence() {
+    lexer! {
+        Lexer -> &'input str;
+
+        // Alternation should have less binding power than concatenation
+        'a' 'b' | 'c'+ => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_(match_)
+        },
+    }
+
+    let mut lexer = Lexer::new("abab");
+    // `+` should not cover RHS of alternation
+    assert_eq!(next(&mut lexer), Some(Ok("ab")));
+    assert_eq!(next(&mut lexer), Some(Ok("ab")));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("ccc");
+    assert_eq!(next(&mut lexer), Some(Ok("ccc")));
+    assert_eq!(next(&mut lexer), None);
+}

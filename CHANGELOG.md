@@ -1,3 +1,7 @@
+# Unreleased
+
+- Fixed precedences of concatenation (juxtaposition) and alternation (`|`).
+
 # 2021/10/07: 0.5.0
 
 - Accepting states without transitions are now simplified in compile time and

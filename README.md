@@ -151,8 +151,15 @@ of rules. The syntax is:
 - `_` can only appear at the top-level (in the LHS of a rule) and matches when
   none of the other rules match.
 
-`*`, `+`, and `?` have the same binding power. `|` has the least binding power.
-You can use parenthesis for grouping, e.g. `('a' | 'b')*`
+Binding powers (precedences), from higher to lower:
+
+- `*`, `+`, `?`
+- Concatenation
+- `|`
+
+You can use parenthesis for grouping, e.g. `('a' | 'b')*`.
+
+Example: `'a' 'b' | 'c'+` is the same as `(('a' 'b') | ('c'+))`.
 
 ## Built-in regular expressions
 
