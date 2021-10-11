@@ -1,5 +1,9 @@
 use lexgen::lexer;
 
+fn ignore_pos<A, E>(ret: Option<Result<(usize, A, usize), E>>) -> Option<Result<A, E>> {
+    ret.map(|res| res.map(|(_, a, _)| a))
+}
+
 #[test]
 fn failure_confusion_1() {
     // The bug: in the lexer below, when the input is "\\\"", the first backslash would be pushed
@@ -181,6 +185,28 @@ fn continue_confusion_2() {
     assert!(matches!(lexer.next(), Some(Err(_))));
 }
 
-fn ignore_pos<A, E>(ret: Option<Result<(usize, A, usize), E>>) -> Option<Result<A, E>> {
-    ret.map(|res| res.map(|(_, a, _)| a))
+#[test]
+fn return_should_reset_match() {
+    lexer! {
+        Lexer -> &'input str;
+
+        rule Init {
+            "aaa" => |lexer| {
+                let match_ = lexer.match_();
+                lexer.switch_and_return(LexerRule::State1, match_)
+            },
+        }
+
+        rule State1 {
+            "bbb" => |lexer| {
+                let match_ = lexer.match_();
+                lexer.switch_and_return(LexerRule::Init, match_)
+            },
+        }
+    }
+
+    let mut lexer = Lexer::new("aaabbb");
+    assert_eq!(ignore_pos(lexer.next()), Some(Ok("aaa")));
+    assert_eq!(ignore_pos(lexer.next()), Some(Ok("bbb")));
+    assert_eq!(ignore_pos(lexer.next()), None);
 }

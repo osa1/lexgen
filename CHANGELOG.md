@@ -1,5 +1,9 @@
 # Unreleased
 
+- Fixed precedences of concatenation (juxtaposition) and alternation (`|`).
+
+# 2021/10/07: 0.5.0
+
 - Accepting states without transitions are now simplified in compile time and
   semantic actions of such states are inlined in the states that make a
   transition to such accepting states. In Lua 5.1 lexer this reduces a
@@ -11,6 +15,9 @@
 
 - DFA states with one predecessor are now inlined in the predecessor states.
   This reduces code size and improves runtime performance. (33547ec)
+
+- We now reset the current match after returning a token (with `return_` and
+  `switch_and_return`). (#11)
 
 # 2021/05/30: 0.4.0
 

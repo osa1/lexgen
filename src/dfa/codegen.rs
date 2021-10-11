@@ -608,7 +608,9 @@ fn generate_semantic_action(ctx: &CgCtx, expr: &syn::Expr, kind: RuleKind) -> To
         RuleKind::Simple => quote!(
             let rhs: #token_type = #expr;
             self.state = self.initial_state;
-            return Some(Ok((self.current_match_start, rhs, self.current_match_end)));
+            let match_start = self.current_match_start;
+            self.current_match_start = self.current_match_end;
+            return Some(Ok((match_start, rhs, self.current_match_end)));
         ),
 
         RuleKind::Fallible => {
@@ -676,14 +678,18 @@ fn generate_semantic_action(ctx: &CgCtx, expr: &syn::Expr, kind: RuleKind) -> To
                     }
                     #action_type_name::Return(tok) => {
                         self.state = self.initial_state;
-                        return Some(Ok((self.current_match_start, tok, self.current_match_end)));
+                        let match_start = self.current_match_start;
+                        self.current_match_start = self.current_match_end;
+                        return Some(Ok((match_start, tok, self.current_match_end)));
                     }
                     #action_type_name::Switch(rule_set) => {
                         self.switch(rule_set);
                     }
                     #action_type_name::SwitchAndReturn(tok, rule_set) => {
                         self.switch(rule_set);
-                        return Some(Ok((self.current_match_start, tok, self.current_match_end)));
+                        let match_start = self.current_match_start;
+                        self.current_match_start = self.current_match_end;
+                        return Some(Ok((match_start, tok, self.current_match_end)));
                     }
                 }
             )

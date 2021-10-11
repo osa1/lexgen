@@ -147,38 +147,65 @@ pub enum CharOrRange {
 /// RHSs), or `;` (used in let bindings)
 impl Parse for Regex {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut re = parse_regex_1(input)?;
-
-        while !(input.peek(syn::token::FatArrow)
-            || input.peek(syn::token::Eq)
-            || input.peek(syn::token::Comma)
-            || input.peek(syn::token::Semi)
-            || input.is_empty())
-        {
-            if input.peek(syn::token::Star) {
-                let _ = input.parse::<syn::token::Star>()?;
-                re = Regex::ZeroOrMore(Box::new(re));
-            } else if input.peek(syn::token::Question) {
-                let _ = input.parse::<syn::token::Question>()?;
-                re = Regex::ZeroOrOne(Box::new(re));
-            } else if input.peek(syn::token::Add) {
-                let _ = input.parse::<syn::token::Add>()?;
-                re = Regex::OneOrMore(Box::new(re));
-            } else if input.peek(syn::token::Or) {
-                let _ = input.parse::<syn::token::Or>()?;
-                let re2 = Regex::parse(input)?;
-                re = Regex::Or(Box::new(re), Box::new(re2));
-            } else {
-                let re2 = Regex::parse(input)?;
-                re = Regex::Concat(Box::new(re), Box::new(re2));
-            }
-        }
-
-        Ok(re)
+        parse_regex_0(input)
     }
 }
 
+// re_0 -> re_1 | re_1 `|` re_1 (alternation)
+fn parse_regex_0(input: ParseStream) -> syn::Result<Regex> {
+    let mut re = parse_regex_1(input)?;
+
+    while input.peek(syn::token::Or) {
+        let _ = input.parse::<syn::token::Or>()?;
+        let re2 = parse_regex_1(input)?;
+        re = Regex::Or(Box::new(re), Box::new(re2)); // left associative
+    }
+
+    Ok(re)
+}
+
+// re_1 -> re_2 | re_2 re_2
 fn parse_regex_1(input: ParseStream) -> syn::Result<Regex> {
+    let mut re = parse_regex_2(input)?;
+
+    // Parse concatenations
+    while input.peek(syn::token::Paren)
+        || input.peek(syn::token::Dollar)
+        || input.peek(syn::LitChar)
+        || input.peek(syn::LitStr)
+        || input.peek(syn::token::Bracket)
+    {
+        let re2 = parse_regex_2(input)?;
+        re = Regex::Concat(Box::new(re), Box::new(re2)); // left associative
+    }
+
+    Ok(re)
+}
+
+// re_2 -> re_3 | re_3* | re_3? | re_3+
+fn parse_regex_2(input: ParseStream) -> syn::Result<Regex> {
+    let mut re = parse_regex_3(input)?;
+
+    loop {
+        if input.peek(syn::token::Star) {
+            let _ = input.parse::<syn::token::Star>()?;
+            re = Regex::ZeroOrMore(Box::new(re));
+        } else if input.peek(syn::token::Question) {
+            let _ = input.parse::<syn::token::Question>()?;
+            re = Regex::ZeroOrOne(Box::new(re));
+        } else if input.peek(syn::token::Add) {
+            let _ = input.parse::<syn::token::Add>()?;
+            re = Regex::OneOrMore(Box::new(re));
+        } else {
+            break;
+        }
+    }
+
+    Ok(re)
+}
+
+// re_3 -> ( re_0 ) | $x | 'x' | "..." | [...]
+fn parse_regex_3(input: ParseStream) -> syn::Result<Regex> {
     if input.peek(syn::token::Paren) {
         let parenthesized;
         syn::parenthesized!(parenthesized in input);

@@ -2,6 +2,16 @@ use lexgen::lexer;
 
 use std::convert::TryFrom;
 
+fn ignore_pos<A, E>(ret: Option<Result<(usize, A, usize), E>>) -> Option<Result<A, E>> {
+    ret.map(|res| res.map(|(_, a, _)| a))
+}
+
+fn next<A, E>(
+    iter: &mut dyn Iterator<Item = Result<(usize, A, usize), E>>,
+) -> Option<Result<A, E>> {
+    ignore_pos(iter.next())
+}
+
 #[test]
 fn simple() {
     mod lexer {
@@ -321,16 +331,6 @@ fn rule_kind_fallible_with_lifetimes() {
     assert_eq!(lexer.next(), None);
 }
 
-fn ignore_pos<A, E>(ret: Option<Result<(usize, A, usize), E>>) -> Option<Result<A, E>> {
-    ret.map(|res| res.map(|(_, a, _)| a))
-}
-
-fn next<A, E>(
-    iter: &mut dyn Iterator<Item = Result<(usize, A, usize), E>>,
-) -> Option<Result<A, E>> {
-    ignore_pos(iter.next())
-}
-
 #[test]
 fn overlapping_ranges() {
     lexer! {
@@ -412,4 +412,27 @@ fn builtin_ascii() {
         let mut lexer = Lexer::new(&str);
         assert_eq!(next(&mut lexer), Some(Ok(())));
     }
+}
+
+#[test]
+fn regex_syntax_precedence() {
+    lexer! {
+        Lexer -> &'input str;
+
+        // Alternation should have less binding power than concatenation
+        'a' 'b' | 'c'+ => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_(match_)
+        },
+    }
+
+    let mut lexer = Lexer::new("abab");
+    // `+` should not cover RHS of alternation
+    assert_eq!(next(&mut lexer), Some(Ok("ab")));
+    assert_eq!(next(&mut lexer), Some(Ok("ab")));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("ccc");
+    assert_eq!(next(&mut lexer), Some(Ok("ccc")));
+    assert_eq!(next(&mut lexer), None);
 }
