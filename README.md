@@ -203,17 +203,33 @@ XID_Continue]:
 
 ## Rule syntax
 
-A rule is just a `<regex> => <user action>,`. `<regex>` is as described above.
-`<user action>` is any Rust code with type `fn(LexerHandle) -> LexerAction`.
-More on these types below.
+- `<regex> => <user action>,`: `<regex>` syntax is as described above. `<user
+  action>` is any Rust code with type `fn(LexerHandle) ->
+  LexerAction<LexerReturn>`. More on `LexerHandle` and `LexerAction` types
+  below. `LexerReturn` is the type declared at the beginning of the lexer with
+  `Lexer -> LexerReturn;`.
 
-An alternative syntax without a right-hand side, `<regex>,`, can be used when
-the user action is just "continue". (more on user actions below)
+- `<regex> =>? <user action>,`: fallible actions. This syntax is similar to the
+  syntax above, except `<user action>` has type `fn(LexerHandle) ->
+  LexerAction<Result<Token, UserError>>`. When using rules of this kind, the
+  error type needs to be declared at the beginning of the lexer with the `type
+  Error = UserError;` syntax.
 
-## Handle, rule, and action types
+  When a rule of this kind returns an error, the error is returned to the
+  caller of the lexer's `next` method.
 
-The `lexer` macro generates three types with names derived from the lexer name
-specified by the user. If the lexer name is `Lexer`, then these types are:
+- `<regex>,`: Syntactic sugar for `<regex> => |lexer| lexer.continue_(),`.
+  Useful for skipping whitespace.
+
+- `<regex> = <token>,`: Syntactic sugar for `<regex> => |lexer|
+  lexer.return_(<token>),`. Useful for matching keywords, punctuation
+  (operators) and delimiters (parens, brackets).
+
+## Handle, rule, error, and action types
+
+The `lexer` macro generates a few types with names derived from the lexer name
+and type specified by the user. If the lexer type is declared as `Lexer(State)
+-> Token` at the beginning of lexer, the generated types are:
 
 - `LexerAction`: this is the type returned by user actions. You don't need to
   worry about the detail of this type as the handle type has methods for
