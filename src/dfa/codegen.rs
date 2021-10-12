@@ -455,7 +455,7 @@ fn generate_fail_transition(
     }
 }
 
-/// Generate arms for `match self.iter.peek().copied() { ... }`
+/// Generate arms for `match char { ... }`
 fn generate_state_char_arms(
     ctx: &mut CgCtx,
     states: &[State<Trans<RuleRhs>, RuleRhs>],
