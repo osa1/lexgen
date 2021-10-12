@@ -296,15 +296,17 @@ fn generate_state_arm(
         predecessors: _,
     } = state;
 
+    let error_type_is_enum = ctx.user_error_type().is_some();
+
     let make_lexer_error = || -> TokenStream {
-        let user_error_type = ctx.user_error_type();
-        match user_error_type {
-            None => quote!(LexerError {
+        if error_type_is_enum {
+            quote!(LexerError::LexerError {
                 char_idx: self.current_match_start
-            }),
-            Some(_) => quote!(LexerError::LexerError {
+            })
+        } else {
+            quote!(LexerError {
                 char_idx: self.current_match_start
-            }),
+            })
         }
     };
 
@@ -314,19 +316,22 @@ fn generate_state_arm(
         // Initial state. Difference from other states is we return `None` when the
         // stream ends. In non-initial states EOS (end-of-stream) returns the last (longest)
         // match, or fails (error).
-        let error = make_lexer_error();
-        let action = quote!({
-            return Some(Err(#error));
-        });
+
+        // Fail with an error if we don't have a fail transition
+        let fail_action = fail_transition
+            .as_ref()
+            .map(|fail_transition| generate_transition(ctx, states, *initial, fail_transition))
+            .unwrap_or_else(|| {
+                let error = make_lexer_error();
+                quote!({ return Some(Err(#error)) })
+            });
 
         let state_char_arms = generate_state_char_arms(
             ctx,
             states,
-            true,
             char_transitions,
             range_transitions,
-            fail_transition.as_ref(),
-            &action,
+            &fail_action,
         );
 
         quote!(
@@ -343,27 +348,15 @@ fn generate_state_arm(
         )
     } else if let Some(rhs) = accepting {
         // Non-initial, accepting state
-        let action = match rhs {
-            RuleRhs::None => quote!(
-                self.state = self.initial_state;
-            ),
-            RuleRhs::Rhs { expr, kind } => generate_semantic_action(ctx, expr, *kind),
-        };
+        let action = generate_rhs_code(ctx, rhs);
 
         if char_transitions.is_empty() && range_transitions.is_empty() {
             quote!({
                 #action
             })
         } else {
-            let state_char_arms = generate_state_char_arms(
-                ctx,
-                states,
-                *initial,
-                char_transitions,
-                range_transitions,
-                None,
-                &action,
-            );
+            let state_char_arms =
+                generate_state_char_arms(ctx, states, char_transitions, range_transitions, &action);
 
             quote!({
                 match self.iter.peek().copied() {
@@ -380,42 +373,30 @@ fn generate_state_arm(
         }
     } else {
         // Non-initial, non-accepting state
-        let error = make_lexer_error();
-        let action = match &fail_transition {
-            None => quote!(
-                return Some(Err(#error));
-            ),
-            Some(Trans::Trans(next)) => {
-                let StateIdx(next) = ctx.renumber_state(*next);
-                quote!(
-                    self.state = #next;
-                )
-            }
-            Some(Trans::Accept(action)) => match action {
-                RuleRhs::None => quote!(
-                    self.state = self.initial_state;
-                ),
-                RuleRhs::Rhs { expr, kind } => generate_semantic_action(ctx, expr, *kind),
-            },
-        };
+        let fail_action = fail_transition
+            .as_ref()
+            .map(|fail_transition| generate_transition(ctx, states, *initial, fail_transition))
+            .unwrap_or_else(|| {
+                let error = make_lexer_error();
+                quote!(return Some(Err(#error)))
+            });
 
         let state_char_arms = generate_state_char_arms(
             ctx,
             states,
-            *initial,
             char_transitions,
             range_transitions,
-            fail_transition.as_ref(),
-            &action,
+            &fail_action,
         );
 
         let end_of_stream_action = if *initial {
             // In an initial state other than the state 0 we fail with "unexpected EOF"
+            let error = make_lexer_error();
             quote!(return Some(Err(#error));)
         } else {
             // Otherwise we run the semantic action and go to initial state of the current DFA.
             // Initial state will then fail.
-            action
+            fail_action
         };
 
         quote!(match self.iter.peek().copied() {
@@ -431,14 +412,55 @@ fn generate_state_arm(
     }
 }
 
+fn generate_transition(
+    ctx: &mut CgCtx,
+    states: &[State<Trans<RuleRhs>, RuleRhs>],
+    initial: bool,
+    trans: &Trans<RuleRhs>,
+) -> TokenStream {
+    match trans {
+        Trans::Trans(StateIdx(next_state)) => {
+            let next = if states[*next_state].predecessors.len() == 1 {
+                generate_state_arm(ctx, *next_state, &states[*next_state], states)
+            } else {
+                let StateIdx(next_state) = ctx.renumber_state(StateIdx(*next_state));
+                quote!(
+                    self.state = #next_state;
+                )
+            };
+
+            if initial {
+                quote!(
+                    self.current_match_end += char.len_utf8();
+                    let _ = self.iter.next();
+                    #next
+                )
+            } else {
+                quote!(#next)
+            }
+        }
+
+        Trans::Accept(action) => {
+            let action_code = generate_rhs_code(ctx, &action);
+            if initial {
+                quote!(
+                    self.current_match_end += char.len_utf8();
+                    let _ = self.iter.next();
+                    #action_code
+                )
+            } else {
+                quote!(#action_code)
+            }
+        }
+    }
+}
+
 /// Generate arms for `match self.iter.peek().copied() { ... }`
 fn generate_state_char_arms(
     ctx: &mut CgCtx,
     states: &[State<Trans<RuleRhs>, RuleRhs>],
-    initial: bool,
     char_transitions: &FxHashMap<char, Trans<RuleRhs>>,
     range_transitions: &RangeMap<Trans<RuleRhs>>,
-    fail_transition: Option<&Trans<RuleRhs>>,
     fail_action: &TokenStream,
 ) -> Vec<TokenStream> {
     // Arms of the `match` for the current character
@@ -540,50 +562,7 @@ fn generate_state_char_arms(
         ));
     }
 
-    // Add default case
-    let default_case = match fail_transition {
-        None => quote!(_ => {
-            #fail_action
-        }),
-        Some(Trans::Trans(StateIdx(next_state))) => {
-            let next = if states[*next_state].predecessors.len() == 1 {
-                generate_state_arm(ctx, *next_state, &states[*next_state], states)
-            } else {
-                let StateIdx(next_state) = ctx.renumber_state(StateIdx(*next_state));
-                quote!(
-                    self.state = #next_state;
-                )
-            };
-
-            if initial {
-                quote!(_ => {
-                    self.current_match_end += char.len_utf8();
-                    let _ = self.iter.next();
-                    #next
-                })
-            } else {
-                quote!(_ => {
-                    #next
-                })
-            }
-        }
-        Some(Trans::Accept(action)) => {
-            let action_code = generate_rhs_code(ctx, &action);
-            if initial {
-                quote!(_ => {
-                    self.current_match_end += char.len_utf8();
-                    let _ = self.iter.next();
-                    #action_code
-                })
-            } else {
-                quote!(_ => {
-                    #action_code
-                })
-            }
-        }
-    };
-
-    state_char_arms.push(default_case);
+    state_char_arms.push(quote!(_ => { #fail_action }));
 
     state_char_arms
 }
