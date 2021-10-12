@@ -320,7 +320,7 @@ fn generate_state_arm(
         // Fail with an error if we don't have a fail transition
         let fail_action = fail_transition
             .as_ref()
-            .map(|fail_transition| generate_fail_transition(ctx, states, *initial, fail_transition))
+            .map(|fail_transition| generate_fail_transition(ctx, states, true, fail_transition))
             .unwrap_or_else(|| {
                 let error = make_lexer_error();
                 quote!({ return Some(Err(#error)) })
@@ -347,7 +347,7 @@ fn generate_state_arm(
             }
         )
     } else if let Some(rhs) = accepting {
-        // Non-initial, accepting state
+        // Accepting state
         let action = generate_rhs_code(ctx, rhs);
 
         if char_transitions.is_empty() && range_transitions.is_empty() {
@@ -372,7 +372,7 @@ fn generate_state_arm(
             })
         }
     } else {
-        // Non-initial, non-accepting state
+        // Non-accepting state
         let fail_action = fail_transition
             .as_ref()
             .map(|fail_transition| generate_fail_transition(ctx, states, *initial, fail_transition))
@@ -394,8 +394,8 @@ fn generate_state_arm(
             let error = make_lexer_error();
             quote!(return Some(Err(#error));)
         } else {
-            // Otherwise we run the semantic action and go to initial state of the current DFA.
-            // Initial state will then fail.
+            // Otherwise we run the fail action and go to initial state of the current DFA. Initial
+            // state will then fail.
             fail_action
         };
 
