@@ -320,7 +320,7 @@ fn generate_state_arm(
         // Fail with an error if we don't have a fail transition
         let fail_action = fail_transition
             .as_ref()
-            .map(|fail_transition| generate_transition(ctx, states, *initial, fail_transition))
+            .map(|fail_transition| generate_fail_transition(ctx, states, *initial, fail_transition))
             .unwrap_or_else(|| {
                 let error = make_lexer_error();
                 quote!({ return Some(Err(#error)) })
@@ -375,7 +375,7 @@ fn generate_state_arm(
         // Non-initial, non-accepting state
         let fail_action = fail_transition
             .as_ref()
-            .map(|fail_transition| generate_transition(ctx, states, *initial, fail_transition))
+            .map(|fail_transition| generate_fail_transition(ctx, states, *initial, fail_transition))
             .unwrap_or_else(|| {
                 let error = make_lexer_error();
                 quote!(return Some(Err(#error)))
@@ -412,7 +412,7 @@ fn generate_state_arm(
     }
 }
 
-fn generate_transition(
+fn generate_fail_transition(
     ctx: &mut CgCtx,
     states: &[State<Trans<RuleRhs>, RuleRhs>],
     initial: bool,
@@ -436,7 +436,7 @@ fn generate_transition(
                     #next
                 )
             } else {
-                quote!(#next)
+                next
             }
         }
 
@@ -449,7 +449,7 @@ fn generate_transition(
                     #action_code
                 )
             } else {
-                quote!(#action_code)
+                action_code
             }
         }
     }
