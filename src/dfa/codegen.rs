@@ -420,23 +420,13 @@ fn generate_fail_transition(
 ) -> TokenStream {
     match trans {
         Trans::Trans(StateIdx(next_state)) => {
-            let next = if states[*next_state].predecessors.len() == 1 {
+            if states[*next_state].predecessors.len() == 1 {
                 generate_state_arm(ctx, *next_state, &states[*next_state], states)
             } else {
                 let StateIdx(next_state) = ctx.renumber_state(StateIdx(*next_state));
                 quote!(
                     self.state = #next_state;
                 )
-            };
-
-            if initial {
-                quote!(
-                    self.current_match_end += char.len_utf8();
-                    let _ = self.iter.next();
-                    #next
-                )
-            } else {
-                next
             }
         }
 
