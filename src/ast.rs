@@ -41,12 +41,12 @@ pub enum Rule {
 }
 
 pub struct SingleRule {
-    pub lhs: RegexOrFail,
+    pub lhs: RuleLhs,
     pub rhs: RuleRhs,
 }
 
 #[derive(Debug)]
-pub enum RegexOrFail {
+pub enum RuleLhs {
     Regex(Regex),
 
     /// An `_` as the LHS of a rule. This rule only matches when none of the other rules in the
@@ -258,19 +258,19 @@ impl Parse for CharOrRange {
     }
 }
 
-impl Parse for RegexOrFail {
+impl Parse for RuleLhs {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         if input.parse::<syn::token::Underscore>().is_ok() {
-            Ok(RegexOrFail::Fail)
+            Ok(RuleLhs::Fail)
         } else {
-            Ok(RegexOrFail::Regex(input.parse::<Regex>()?))
+            Ok(RuleLhs::Regex(input.parse::<Regex>()?))
         }
     }
 }
 
 impl Parse for SingleRule {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let lhs = RegexOrFail::parse(input)?;
+        let lhs = RuleLhs::parse(input)?;
 
         let rhs = if input.parse::<syn::token::Comma>().is_ok() {
             RuleRhs::None
