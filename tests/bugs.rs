@@ -1,8 +1,7 @@
-use lexgen::lexer;
+mod test_utils;
 
-fn ignore_pos<A, E>(ret: Option<Result<(usize, A, usize), E>>) -> Option<Result<A, E>> {
-    ret.map(|res| res.map(|(_, a, _)| a))
-}
+use lexgen::lexer;
+use test_utils::next;
 
 #[test]
 fn failure_confusion_1() {
@@ -41,12 +40,12 @@ fn failure_confusion_1() {
     }
 
     let mut lexer = Lexer::new("test\"");
-    assert_eq!(ignore_pos(lexer.next()), Some(Ok("test".to_owned())));
-    assert_eq!(ignore_pos(lexer.next()), None);
+    assert_eq!(next(&mut lexer), Some(Ok("test".to_owned())));
+    assert_eq!(next(&mut lexer), None);
 
     let mut lexer = Lexer::new("\\\"\"");
-    assert_eq!(ignore_pos(lexer.next()), Some(Ok("\"".to_owned())));
-    assert_eq!(ignore_pos(lexer.next()), None);
+    assert_eq!(next(&mut lexer), Some(Ok("\"".to_owned())));
+    assert_eq!(next(&mut lexer), None);
 }
 
 #[test]
@@ -206,7 +205,7 @@ fn return_should_reset_match() {
     }
 
     let mut lexer = Lexer::new("aaabbb");
-    assert_eq!(ignore_pos(lexer.next()), Some(Ok("aaa")));
-    assert_eq!(ignore_pos(lexer.next()), Some(Ok("bbb")));
-    assert_eq!(ignore_pos(lexer.next()), None);
+    assert_eq!(next(&mut lexer), Some(Ok("aaa")));
+    assert_eq!(next(&mut lexer), Some(Ok("bbb")));
+    assert_eq!(next(&mut lexer), None);
 }
