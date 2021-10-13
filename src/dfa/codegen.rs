@@ -358,7 +358,7 @@ fn generate_state_arm(
             let state_char_arms =
                 generate_state_char_arms(ctx, states, char_transitions, range_transitions, &action);
 
-            quote!({
+            quote!(
                 match self.iter.peek().copied() {
                     None => {
                         #action
@@ -369,7 +369,7 @@ fn generate_state_arm(
                         }
                     }
                 }
-            })
+            )
         }
     } else {
         // Non-accepting state
