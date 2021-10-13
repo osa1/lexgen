@@ -278,7 +278,7 @@ impl<A> Display for DFA<StateIdx, A> {
 
             for (char, next) in char_transitions.iter() {
                 if !first {
-                    write!(f, "     ")?;
+                    write!(f, "      ")?;
                 } else {
                     first = false;
                 }
