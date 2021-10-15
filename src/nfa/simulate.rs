@@ -51,29 +51,7 @@ impl<A: std::fmt::Debug> NFA<A> {
                 char_idx = match_start + char_idx_;
                 println!("char = {:?}, states = {:?}", char, states);
 
-                let mut next_states: FxHashSet<StateIdx> = Default::default();
-
-                for state in &states {
-                    // Char transitions
-                    if let Some(char_nexts) = self.states[state.0].char_transitions.get(&char) {
-                        next_states.extend(char_nexts.into_iter());
-                        for (range, range_nexts) in &self.states[state.0].range_transitions {
-                            if char >= range.0 && char <= range.1 {
-                                next_states.extend(range_nexts.into_iter());
-                            }
-                        }
-                    }
-
-                    // Range transitions
-                    for ((range_begin, range_end), nexts) in &self.states[state.0].range_transitions
-                    {
-                        if char >= *range_begin && char <= *range_end {
-                            next_states.extend(nexts.into_iter());
-                        }
-                    }
-                }
-
-                states = self.compute_state_closure(&mut next_states);
+                states = next(self, &states, char);
 
                 println!("next states = {:?}", states);
 
@@ -144,6 +122,31 @@ impl<A: std::fmt::Debug> NFA<A> {
 
         values
     }
+}
+
+fn next<A>(nfa: &NFA<A>, states: &FxHashSet<StateIdx>, char: char) -> FxHashSet<StateIdx> {
+    let mut next_states: FxHashSet<StateIdx> = Default::default();
+
+    for state in states {
+        // Char transitions
+        if let Some(char_nexts) = nfa.states[state.0].char_transitions.get(&char) {
+            next_states.extend(char_nexts.into_iter());
+            for (range, range_nexts) in &nfa.states[state.0].range_transitions {
+                if char >= range.0 && char <= range.1 {
+                    next_states.extend(range_nexts.into_iter());
+                }
+            }
+        }
+
+        // Range transitions
+        for ((range_begin, range_end), nexts) in &nfa.states[state.0].range_transitions {
+            if char >= *range_begin && char <= *range_end {
+                next_states.extend(nexts.into_iter());
+            }
+        }
+    }
+
+    nfa.compute_state_closure(&next_states)
 }
 
 #[test]
