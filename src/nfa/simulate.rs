@@ -148,7 +148,7 @@ impl<A: std::fmt::Debug> NFA<A> {
 
 #[test]
 fn simulate_backtracking() {
-    use crate::ast::{CharOrRange, CharSet, Regex, Var};
+    use crate::ast::Regex;
 
     let mut nfa: NFA<usize> = NFA::new();
 
@@ -183,7 +183,7 @@ fn simulate_backtracking() {
             Value::Value {
                 value: &2,
                 matched_str: "a",
-            }
+            },
         ]
     );
 
@@ -192,6 +192,39 @@ fn simulate_backtracking() {
         vec![Value::Value {
             value: &1,
             matched_str: "aab",
-        },]
+        }]
+    );
+}
+
+#[test]
+fn issue_16() {
+    use crate::ast::Regex;
+
+    let mut nfa: NFA<usize> = NFA::new();
+
+    nfa.add_regex(&Default::default(), &Regex::String("xyzxyz".to_owned()), 1);
+    nfa.add_regex(&Default::default(), &Regex::String("xyz".to_owned()), 2);
+    nfa.add_regex(&Default::default(), &Regex::String("xya".to_owned()), 3);
+
+    assert_eq!(
+        nfa.simulate_2("xyzxya"),
+        vec![
+            Value::Value {
+                value: &2,
+                matched_str: "xyz"
+            },
+            Value::Value {
+                value: &3,
+                matched_str: "xya",
+            },
+        ]
+    );
+
+    assert_eq!(
+        nfa.simulate_2("xyzxyz"),
+        vec![Value::Value {
+            value: &1,
+            matched_str: "xyzxyz"
+        }]
     );
 }
