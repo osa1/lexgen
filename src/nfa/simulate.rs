@@ -1,6 +1,6 @@
 use super::{StateIdx, NFA};
 
-use fxhash::FxHashSet;
+use fxhash::FxHashSet as Set;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Value<'input, A> {
@@ -22,7 +22,7 @@ impl<A: std::fmt::Debug> NFA<A> {
         // Match stack. When stuck, we pop the longest match from this & backtrack.
         let mut matches: Vec<Match<&'a A>> = vec![];
 
-        let mut states: FxHashSet<StateIdx> = Default::default();
+        let mut states: Set<StateIdx> = Default::default();
         states.insert(StateIdx(0));
         states = self.compute_state_closure(&states);
 
@@ -124,8 +124,8 @@ impl<A: std::fmt::Debug> NFA<A> {
     }
 }
 
-fn next<A>(nfa: &NFA<A>, states: &FxHashSet<StateIdx>, char: char) -> FxHashSet<StateIdx> {
-    let mut next_states: FxHashSet<StateIdx> = Default::default();
+fn next<A>(nfa: &NFA<A>, states: &Set<StateIdx>, char: char) -> Set<StateIdx> {
+    let mut next_states: Set<StateIdx> = Default::default();
 
     for state in states {
         // Char transitions
