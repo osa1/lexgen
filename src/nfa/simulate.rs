@@ -44,7 +44,7 @@ impl<A: std::fmt::Debug> NFA<A> {
         // Where the current match starts
         let mut match_start: usize = 0;
 
-        let mut char_idx: usize;
+        let mut char_idx: usize = 0;
 
         'outer: loop {
             while let Some((char_idx_, char)) = char_indices.next() {
@@ -59,7 +59,7 @@ impl<A: std::fmt::Debug> NFA<A> {
 
                 // If we're stuck we need to backtrack with the longest match
                 if states.is_empty() {
-                    println!("stuck!");
+                    println!("stuck! matches={:?}", matches);
                     match matches.pop() {
                         None => {
                             // We're stuck and can't backtrack, raise an error
@@ -97,25 +97,36 @@ impl<A: std::fmt::Debug> NFA<A> {
             }
 
             // Reached EOF without errors, accept longest match
-            // TODO: What happens if `matches` is empty?
-            if let Some(longest_match) = matches.pop() {
-                println!("Accepting longest match");
-                values.push(Value::Value {
-                    value: longest_match.value,
-                    matched_str: &input[longest_match.match_start..longest_match.match_end],
-                });
+            println!(
+                "Reached EOF, match_start={}, matches={:?}, values={:?}",
+                match_start, matches, values
+            );
 
-                if longest_match.match_end == input.len() {
-                    break 'outer;
-                } else {
-                    println!("backtrack!");
-                    // Backtrack
-                    match_start = longest_match.match_end;
-                    char_indices = input[match_start..].char_indices().peekable();
-                    matches.clear();
-                    // Restart state machine
-                    states.insert(StateIdx(0));
-                    states = self.compute_state_closure(&states);
+            match matches.pop() {
+                Some(longest_match) => {
+                    println!("Accepting longest match");
+                    values.push(Value::Value {
+                        value: longest_match.value,
+                        matched_str: &input[longest_match.match_start..longest_match.match_end],
+                    });
+
+                    if longest_match.match_end == input.len() {
+                        break 'outer;
+                    } else {
+                        println!("backtrack!");
+                        // Backtrack
+                        match_start = longest_match.match_end;
+                        char_indices = input[match_start..].char_indices().peekable();
+                        matches.clear();
+                        // Restart state machine
+                        states.insert(StateIdx(0));
+                        states = self.compute_state_closure(&states);
+                    }
+                }
+                None => {
+                    // We're stuck and can't backtrack, raise an error
+                    values.push(Value::Error { loc: char_idx });
+                    return values;
                 }
             }
         }
@@ -229,5 +240,33 @@ fn issue_16() {
             value: &1,
             matched_str: "xyzxyz"
         }]
+    );
+}
+
+#[test]
+fn stuck_1() {
+    let nfa: NFA<usize> = NFA::new();
+    assert_eq!(nfa.simulate_2("a"), vec![Value::Error { loc: 0 }]);
+}
+
+#[test]
+fn stuck_2() {
+    use crate::ast::Regex;
+
+    let mut nfa: NFA<usize> = NFA::new();
+
+    nfa.add_regex(&Default::default(), &Regex::String("ab".to_owned()), 1);
+
+    println!("NFA=\n{}", nfa);
+
+    assert_eq!(
+        nfa.simulate_2("aba"),
+        vec![
+            Value::Value {
+                value: &1,
+                matched_str: "ab"
+            },
+            Value::Error { loc: 2 },
+        ]
     );
 }
