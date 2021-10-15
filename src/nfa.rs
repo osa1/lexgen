@@ -1,3 +1,5 @@
+pub mod simulate;
+
 use crate::ast::{Regex, Var};
 use crate::display::HashSetDisplay;
 use crate::regex_to_nfa;
