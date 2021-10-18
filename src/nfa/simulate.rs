@@ -94,6 +94,7 @@ impl<A: std::fmt::Debug + Copy> NFA<A> {
                                 match_start,
                                 match_end: char_idx + char.len_utf8(),
                             });
+                            break;
                         }
                     }
                 }
