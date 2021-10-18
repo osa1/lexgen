@@ -51,7 +51,7 @@ impl<A: std::fmt::Debug + Copy> NFA<A> {
         let mut match_start: usize = 0;
 
         // Index of current character in input string
-        let mut char_idx: usize = 0;
+        let mut char_idx;
 
         'outer: loop {
             while let Some((char_idx_, char)) = char_indices.next() {
@@ -66,7 +66,7 @@ impl<A: std::fmt::Debug + Copy> NFA<A> {
                             // We're stuck and can't backtrack, raise an error
                             return SimulationOutput {
                                 values,
-                                error: Some(Error { loc: char_idx }),
+                                error: Some(Error { loc: match_start }),
                             };
                         }
                         Some(last_match) => {
@@ -123,7 +123,7 @@ impl<A: std::fmt::Debug + Copy> NFA<A> {
                     // We're stuck and can't backtrack, raise an error
                     return SimulationOutput {
                         values,
-                        error: Some(Error { loc: char_idx }),
+                        error: Some(Error { loc: match_start }),
                     };
                 }
             }
