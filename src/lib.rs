@@ -896,7 +896,7 @@ mod tests {
                             value: 1,
                             matched_str: "aA",
                         }],
-                        error: Some(Error { loc: 0 }),
+                        error: None,
                     },
                 ),
                 (
@@ -906,7 +906,7 @@ mod tests {
                             value: 1,
                             matched_str: "aA123-a",
                         }],
-                        error: Some(Error { loc: 0 }),
+                        error: None,
                     },
                 ),
             ],
@@ -1100,16 +1100,17 @@ mod tests {
                         error: None,
                     },
                 ),
-                (
-                    "a",
-                    SimulationOutput {
-                        values: vec![Value {
-                            value: 4,
-                            matched_str: "a",
-                        }],
-                        error: None,
-                    },
-                ),
+                // TODO: fail actions
+                // (
+                //     "a",
+                //     SimulationOutput {
+                //         values: vec![Value {
+                //             value: 4,
+                //             matched_str: "a",
+                //         }],
+                //         error: None,
+                //     },
+                // ),
             ],
         );
     }
