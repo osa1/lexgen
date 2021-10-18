@@ -86,8 +86,11 @@ impl<A: std::fmt::Debug + Copy> NFA<A> {
                         }
                     }
                 } else {
-                    // Check for accepting states
-                    for state in &states {
+                    // Check for accepting states. Sort states to pick the one that comes first in
+                    // the program.
+                    let mut states_sorted: Vec<StateIdx> = states.iter().copied().collect();
+                    states_sorted.sort();
+                    for state in states_sorted {
                         if let Some(value) = self.states[state.0].accepting {
                             last_match = Some(Match {
                                 value,
