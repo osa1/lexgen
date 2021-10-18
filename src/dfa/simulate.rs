@@ -1,12 +1,7 @@
 use super::{StateIdx, DFA};
 
+pub use crate::nfa::simulate::{Error, Value};
 use crate::range_map::Range;
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum Value<'input, A> {
-    Value { value: A, matched_str: &'input str },
-    Error { loc: usize },
-}
 
 #[derive(Debug)]
 struct Match<A> {
@@ -17,7 +12,7 @@ struct Match<A> {
 
 impl<A: Copy> DFA<StateIdx, A> {
     // TODO: Return (Vec<Value>, Option<Error>)
-    pub fn simulate_2<'input>(&self, input: &'input str) -> Vec<Value<'input, A>> {
+    pub fn simulate_2<'input>(&self, input: &'input str) -> (Vec<Value<'input, A>>, Option<Error>) {
         let mut values: Vec<Value<'input, A>> = vec![];
 
         // Current state
@@ -43,8 +38,7 @@ impl<A: Copy> DFA<StateIdx, A> {
                         match last_match.take() {
                             None => {
                                 // We're stuck and can't backtrack, raise an error
-                                values.push(Value::Error { loc: char_idx });
-                                return values;
+                                return (values, Some(Error { loc: char_idx }));
                             }
                             Some(last_match) => {
                                 // Backtrack to the previous accepting state
@@ -52,7 +46,7 @@ impl<A: Copy> DFA<StateIdx, A> {
                                 char_indices = input[match_start..].char_indices();
 
                                 // Accept the previous match
-                                values.push(Value::Value {
+                                values.push(Value {
                                     value: last_match.value,
                                     matched_str: &input
                                         [last_match.match_start..last_match.match_end],
@@ -81,7 +75,7 @@ impl<A: Copy> DFA<StateIdx, A> {
             // Reached EOF without errors, accept current match
             match last_match.take() {
                 Some(last_match) => {
-                    values.push(Value::Value {
+                    values.push(Value {
                         value: last_match.value,
                         matched_str: &input[last_match.match_start..last_match.match_end],
                     });
@@ -99,13 +93,12 @@ impl<A: Copy> DFA<StateIdx, A> {
                 }
                 None => {
                     // We're stuck and can't backtrack, raise an error
-                    values.push(Value::Error { loc: char_idx });
-                    return values;
+                    return (values, Some(Error { loc: char_idx }));
                 }
             }
         }
 
-        values
+        (values, None)
     }
 }
 
@@ -147,24 +140,30 @@ fn issue_16() {
 
     assert_eq!(
         dfa.simulate_2("xyzxya"),
-        vec![
-            Value::Value {
-                value: 2,
-                matched_str: "xyz"
-            },
-            Value::Value {
-                value: 3,
-                matched_str: "xya",
-            },
-        ]
+        (
+            vec![
+                Value {
+                    value: 2,
+                    matched_str: "xyz"
+                },
+                Value {
+                    value: 3,
+                    matched_str: "xya",
+                },
+            ],
+            None
+        )
     );
 
     assert_eq!(
         dfa.simulate_2("xyzxyz"),
-        vec![Value::Value {
-            value: 1,
-            matched_str: "xyzxyz"
-        }]
+        (
+            vec![Value {
+                value: 1,
+                matched_str: "xyzxyz"
+            }],
+            None
+        )
     );
 }
 
@@ -174,7 +173,7 @@ fn stuck_1() {
 
     let nfa: NFA<usize> = NFA::new();
     let dfa: DFA<StateIdx, usize> = crate::nfa_to_dfa::nfa_to_dfa(&nfa);
-    assert_eq!(dfa.simulate_2("a"), vec![Value::Error { loc: 0 }]);
+    assert_eq!(dfa.simulate_2("a"), (vec![], Some(Error { loc: 0 })));
 }
 
 #[test]
@@ -190,13 +189,13 @@ fn stuck_2() {
 
     assert_eq!(
         dfa.simulate_2("aba"),
-        vec![
-            Value::Value {
+        (
+            vec![Value {
                 value: 1,
                 matched_str: "ab"
-            },
-            Value::Error { loc: 2 },
-        ]
+            }],
+            Some(Error { loc: 2 })
+        )
     );
 }
 
@@ -214,12 +213,12 @@ fn stuck_3() {
 
     assert_eq!(
         dfa.simulate_2("aaabb"),
-        vec![
-            Value::Value {
+        (
+            vec![Value {
                 value: 1,
                 matched_str: "aaab"
-            },
-            Value::Error { loc: 4 },
-        ]
+            },],
+            Some(Error { loc: 4 }),
+        )
     );
 }
