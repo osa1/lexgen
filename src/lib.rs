@@ -177,7 +177,7 @@ mod tests {
 
     use fxhash::FxHashMap;
 
-    fn test_simulate<A: Clone + std::fmt::Debug + Eq>(
+    fn test_simulate<A: Copy + std::fmt::Debug + Eq>(
         nfa: &NFA<A>,
         test_cases: Vec<(&str, Option<A>)>,
     ) {

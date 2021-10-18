@@ -13,6 +13,12 @@ pub struct Error {
     pub loc: usize,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct SimulationOutput<'input, A> {
+    pub values: Vec<Value<'input, A>>,
+    pub error: Option<Error>,
+}
+
 #[derive(Debug)]
 struct Match<A> {
     value: A,
@@ -21,7 +27,7 @@ struct Match<A> {
 }
 
 impl<A: std::fmt::Debug + Copy> NFA<A> {
-    pub fn simulate_2<'input>(&self, input: &'input str) -> (Vec<Value<'input, A>>, Option<Error>) {
+    pub fn simulate_2<'input>(&self, input: &'input str) -> SimulationOutput<'input, A> {
         let mut values: Vec<Value<'input, A>> = vec![];
 
         // If we skipped an accepting state because we were able to make progress with the next
@@ -58,7 +64,10 @@ impl<A: std::fmt::Debug + Copy> NFA<A> {
                     match last_match.take() {
                         None => {
                             // We're stuck and can't backtrack, raise an error
-                            return (values, Some(Error { loc: char_idx }));
+                            return SimulationOutput {
+                                values,
+                                error: Some(Error { loc: char_idx }),
+                            };
                         }
                         Some(last_match) => {
                             // Backtrack to the previous accepting state
@@ -112,12 +121,18 @@ impl<A: std::fmt::Debug + Copy> NFA<A> {
                 }
                 None => {
                     // We're stuck and can't backtrack, raise an error
-                    return (values, Some(Error { loc: char_idx }));
+                    return SimulationOutput {
+                        values,
+                        error: Some(Error { loc: char_idx }),
+                    };
                 }
             }
         }
 
-        (values, None)
+        SimulationOutput {
+            values,
+            error: None,
+        }
     }
 }
 
@@ -167,19 +182,19 @@ fn simulate_backtracking() {
 
     assert_eq!(
         nfa.simulate_2("a"),
-        (
-            vec![Value {
+        SimulationOutput {
+            values: vec![Value {
                 value: 2,
                 matched_str: "a"
             }],
-            None
-        )
+            error: None,
+        }
     );
 
     assert_eq!(
         nfa.simulate_2("aa"),
-        (
-            vec![
+        SimulationOutput {
+            values: vec![
                 Value {
                     value: 2,
                     matched_str: "a",
@@ -189,19 +204,19 @@ fn simulate_backtracking() {
                     matched_str: "a",
                 },
             ],
-            None
-        )
+            error: None
+        }
     );
 
     assert_eq!(
         nfa.simulate_2("aab"),
-        (
-            vec![Value {
+        SimulationOutput {
+            values: vec![Value {
                 value: 1,
                 matched_str: "aab",
             }],
-            None
-        )
+            error: None
+        }
     );
 }
 
@@ -217,8 +232,8 @@ fn issue_16() {
 
     assert_eq!(
         nfa.simulate_2("xyzxya"),
-        (
-            vec![
+        SimulationOutput {
+            values: vec![
                 Value {
                     value: 2,
                     matched_str: "xyz"
@@ -228,26 +243,32 @@ fn issue_16() {
                     matched_str: "xya",
                 },
             ],
-            None
-        )
+            error: None
+        }
     );
 
     assert_eq!(
         nfa.simulate_2("xyzxyz"),
-        (
-            vec![Value {
+        SimulationOutput {
+            values: vec![Value {
                 value: 1,
                 matched_str: "xyzxyz"
             }],
-            None
-        )
+            error: None
+        }
     );
 }
 
 #[test]
 fn stuck_1() {
     let nfa: NFA<usize> = NFA::new();
-    assert_eq!(nfa.simulate_2("a"), (vec![], Some(Error { loc: 0 })));
+    assert_eq!(
+        nfa.simulate_2("a"),
+        SimulationOutput {
+            values: vec![],
+            error: Some(Error { loc: 0 })
+        }
+    );
 }
 
 #[test]
@@ -262,13 +283,13 @@ fn stuck_2() {
 
     assert_eq!(
         nfa.simulate_2("aba"),
-        (
-            vec![Value {
+        SimulationOutput {
+            values: vec![Value {
                 value: 1,
                 matched_str: "ab"
             },],
-            Some(Error { loc: 2 })
-        )
+            error: Some(Error { loc: 2 })
+        }
     );
 }
 
@@ -285,12 +306,12 @@ fn stuck_3() {
 
     assert_eq!(
         nfa.simulate_2("aaabb"),
-        (
-            vec![Value {
+        SimulationOutput {
+            values: vec![Value {
                 value: 1,
                 matched_str: "aaab"
             }],
-            Some(Error { loc: 4 })
-        )
+            error: Some(Error { loc: 4 })
+        }
     );
 }
