@@ -1,3 +1,4 @@
+#[cfg(test)]
 pub mod simulate;
 
 use crate::ast::{Regex, Var};
@@ -152,51 +153,6 @@ impl<A> NFA<A> {
     fn next_empty_states(&self, state: StateIdx) -> &FxHashSet<StateIdx> {
         let state = &self.states[state.0];
         &state.empty_transitions
-    }
-}
-
-impl<A: std::fmt::Debug> NFA<A> {
-    #[cfg(test)]
-    pub fn simulate(&self, chars: &mut dyn Iterator<Item = char>) -> Option<&A> {
-        let mut states: FxHashSet<StateIdx> = Default::default();
-        states.insert(StateIdx(0));
-        states = self.compute_state_closure(&states);
-
-        for char in chars {
-            println!("states before = {:?}", states);
-            println!("char = {}", char);
-
-            let mut next_states: FxHashSet<StateIdx> = Default::default();
-
-            for state in &states {
-                if let Some(char_nexts) = self.states[state.0].char_transitions.get(&char) {
-                    next_states.extend(char_nexts.into_iter());
-                    for (range, range_nexts) in &self.states[state.0].range_transitions {
-                        if char >= range.0 && char <= range.1 {
-                            next_states.extend(range_nexts.into_iter());
-                        }
-                    }
-                }
-                for ((range_begin, range_end), nexts) in &self.states[state.0].range_transitions {
-                    if char >= *range_begin && char <= *range_end {
-                        next_states.extend(nexts.into_iter());
-                    }
-                }
-            }
-
-            states = self.compute_state_closure(&mut next_states);
-            println!("states after = {:?}", states);
-        }
-
-        let mut states: Vec<StateIdx> = states.into_iter().collect();
-        states.sort();
-
-        let accept_value = states
-            .into_iter()
-            .filter_map(|s| self.states[s.0].accepting.as_ref())
-            .next();
-
-        accept_value.or(self.fail.as_ref())
     }
 }
 

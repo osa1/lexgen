@@ -27,7 +27,7 @@ struct Match<A> {
 }
 
 impl<A: std::fmt::Debug + Copy> NFA<A> {
-    pub fn simulate_2<'input>(&self, input: &'input str) -> SimulationOutput<'input, A> {
+    pub fn simulate<'input>(&self, input: &'input str) -> SimulationOutput<'input, A> {
         let mut values: Vec<Value<'input, A>> = vec![];
 
         // If we skipped an accepting state because we were able to make progress with the next
@@ -181,7 +181,7 @@ fn simulate_backtracking() {
     println!("NFA=\n{}", nfa);
 
     assert_eq!(
-        nfa.simulate_2("a"),
+        nfa.simulate("a"),
         SimulationOutput {
             values: vec![Value {
                 value: 2,
@@ -192,7 +192,7 @@ fn simulate_backtracking() {
     );
 
     assert_eq!(
-        nfa.simulate_2("aa"),
+        nfa.simulate("aa"),
         SimulationOutput {
             values: vec![
                 Value {
@@ -209,7 +209,7 @@ fn simulate_backtracking() {
     );
 
     assert_eq!(
-        nfa.simulate_2("aab"),
+        nfa.simulate("aab"),
         SimulationOutput {
             values: vec![Value {
                 value: 1,
@@ -231,7 +231,7 @@ fn issue_16() {
     nfa.add_regex(&Default::default(), &Regex::String("xya".to_owned()), 3);
 
     assert_eq!(
-        nfa.simulate_2("xyzxya"),
+        nfa.simulate("xyzxya"),
         SimulationOutput {
             values: vec![
                 Value {
@@ -248,7 +248,7 @@ fn issue_16() {
     );
 
     assert_eq!(
-        nfa.simulate_2("xyzxyz"),
+        nfa.simulate("xyzxyz"),
         SimulationOutput {
             values: vec![Value {
                 value: 1,
@@ -263,7 +263,7 @@ fn issue_16() {
 fn stuck_1() {
     let nfa: NFA<usize> = NFA::new();
     assert_eq!(
-        nfa.simulate_2("a"),
+        nfa.simulate("a"),
         SimulationOutput {
             values: vec![],
             error: Some(Error { loc: 0 })
@@ -282,7 +282,7 @@ fn stuck_2() {
     println!("NFA=\n{}", nfa);
 
     assert_eq!(
-        nfa.simulate_2("aba"),
+        nfa.simulate("aba"),
         SimulationOutput {
             values: vec![Value {
                 value: 1,
@@ -305,7 +305,7 @@ fn stuck_3() {
     println!("NFA=\n{}", nfa);
 
     assert_eq!(
-        nfa.simulate_2("aaabb"),
+        nfa.simulate("aaabb"),
         SimulationOutput {
             values: vec![Value {
                 value: 1,

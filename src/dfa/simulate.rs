@@ -11,8 +11,7 @@ struct Match<A> {
 }
 
 impl<A: Copy> DFA<StateIdx, A> {
-    // TODO: Return (Vec<Value>, Option<Error>)
-    pub fn simulate_2<'input>(&self, input: &'input str) -> SimulationOutput<'input, A> {
+    pub fn simulate<'input>(&self, input: &'input str) -> SimulationOutput<'input, A> {
         let mut values: Vec<Value<'input, A>> = vec![];
 
         // Current state
@@ -148,7 +147,7 @@ fn issue_16() {
     let dfa: DFA<StateIdx, usize> = crate::nfa_to_dfa::nfa_to_dfa(&nfa);
 
     assert_eq!(
-        dfa.simulate_2("xyzxya"),
+        dfa.simulate("xyzxya"),
         SimulationOutput {
             values: vec![
                 Value {
@@ -165,7 +164,7 @@ fn issue_16() {
     );
 
     assert_eq!(
-        dfa.simulate_2("xyzxyz"),
+        dfa.simulate("xyzxyz"),
         SimulationOutput {
             values: vec![Value {
                 value: 1,
@@ -183,7 +182,7 @@ fn stuck_1() {
     let nfa: NFA<usize> = NFA::new();
     let dfa: DFA<StateIdx, usize> = crate::nfa_to_dfa::nfa_to_dfa(&nfa);
     assert_eq!(
-        dfa.simulate_2("a"),
+        dfa.simulate("a"),
         SimulationOutput {
             values: vec![],
             error: Some(Error { loc: 0 })
@@ -203,7 +202,7 @@ fn stuck_2() {
     let dfa: DFA<StateIdx, usize> = crate::nfa_to_dfa::nfa_to_dfa(&nfa);
 
     assert_eq!(
-        dfa.simulate_2("aba"),
+        dfa.simulate("aba"),
         SimulationOutput {
             values: vec![Value {
                 value: 1,
@@ -227,7 +226,7 @@ fn stuck_3() {
     let dfa: DFA<StateIdx, usize> = crate::nfa_to_dfa::nfa_to_dfa(&nfa);
 
     assert_eq!(
-        dfa.simulate_2("aaabb"),
+        dfa.simulate("aaabb"),
         SimulationOutput {
             values: vec![Value {
                 value: 1,
