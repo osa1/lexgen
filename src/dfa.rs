@@ -1,5 +1,6 @@
 pub mod codegen;
 pub mod simplify;
+pub mod simulate;
 
 use crate::range_map::{Range, RangeMap};
 

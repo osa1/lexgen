@@ -15,9 +15,9 @@ struct Match<A> {
     match_end: usize,
 }
 
-impl<A: std::fmt::Debug> NFA<A> {
-    pub fn simulate_2<'a, 'input>(&'a self, input: &'input str) -> Vec<Value<'input, &'a A>> {
-        let mut values: Vec<Value<'input, &'a A>> = vec![];
+impl<A: std::fmt::Debug + Copy> NFA<A> {
+    pub fn simulate_2<'input>(&self, input: &'input str) -> Vec<Value<'input, A>> {
+        let mut values: Vec<Value<'input, A>> = vec![];
 
         // If we skipped an accepting state because we were able to make progress with the next
         // character, this state holds the previous match. If we get stuck we return this match.
@@ -28,7 +28,7 @@ impl<A: std::fmt::Debug> NFA<A> {
         // - a
         //
         // in an input like "aaaa".
-        let mut last_match: Option<Match<&A>> = None;
+        let mut last_match: Option<Match<A>> = None;
 
         let mut states: Set<StateIdx> = Default::default();
         states.insert(StateIdx(0));
@@ -75,7 +75,7 @@ impl<A: std::fmt::Debug> NFA<A> {
                 } else {
                     // Check for accepting states
                     for state in &states {
-                        if let Some(value) = self.states[state.0].accepting.as_ref() {
+                        if let Some(value) = self.states[state.0].accepting {
                             last_match = Some(Match {
                                 value,
                                 match_start,
@@ -165,7 +165,7 @@ fn simulate_backtracking() {
     assert_eq!(
         nfa.simulate_2("a"),
         vec![Value::Value {
-            value: &2,
+            value: 2,
             matched_str: "a"
         }]
     );
@@ -174,11 +174,11 @@ fn simulate_backtracking() {
         nfa.simulate_2("aa"),
         vec![
             Value::Value {
-                value: &2,
+                value: 2,
                 matched_str: "a",
             },
             Value::Value {
-                value: &2,
+                value: 2,
                 matched_str: "a",
             },
         ]
@@ -187,7 +187,7 @@ fn simulate_backtracking() {
     assert_eq!(
         nfa.simulate_2("aab"),
         vec![Value::Value {
-            value: &1,
+            value: 1,
             matched_str: "aab",
         }]
     );
@@ -207,11 +207,11 @@ fn issue_16() {
         nfa.simulate_2("xyzxya"),
         vec![
             Value::Value {
-                value: &2,
+                value: 2,
                 matched_str: "xyz"
             },
             Value::Value {
-                value: &3,
+                value: 3,
                 matched_str: "xya",
             },
         ]
@@ -220,7 +220,7 @@ fn issue_16() {
     assert_eq!(
         nfa.simulate_2("xyzxyz"),
         vec![Value::Value {
-            value: &1,
+            value: 1,
             matched_str: "xyzxyz"
         }]
     );
@@ -246,7 +246,7 @@ fn stuck_2() {
         nfa.simulate_2("aba"),
         vec![
             Value::Value {
-                value: &1,
+                value: 1,
                 matched_str: "ab"
             },
             Value::Error { loc: 2 },
@@ -269,7 +269,7 @@ fn stuck_3() {
         nfa.simulate_2("aaabb"),
         vec![
             Value::Value {
-                value: &1,
+                value: 1,
                 matched_str: "aaab"
             },
             Value::Error { loc: 4 },
