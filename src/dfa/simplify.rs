@@ -32,7 +32,7 @@ pub fn simplify<K>(
         *t = t.map(|i| i - idx);
     }
 
-    let mut map_transition = |t: StateIdx| -> Option<Trans> {
+    let map_transition = |t: StateIdx| -> Option<Trans> {
         match empty_states.binary_search_by(|(state_idx, _action)| state_idx.cmp(&t)) {
             Ok(idx) => empty_states[idx].1.clone().map(Trans::Accept),
             Err(idx) => Some(Trans::Trans(t.map(|i| i - idx))),
@@ -56,9 +56,9 @@ pub fn simplify<K>(
                 .filter_map(|(char, next)| map_transition(next).map(|next| (char, next)))
                 .collect();
 
-            let range_transitions = range_transitions.filter_map(&mut map_transition);
+            let range_transitions = range_transitions.filter_map(map_transition);
 
-            let fail_transition = fail_transition.and_then(&mut map_transition);
+            let fail_transition = fail_transition.and_then(map_transition);
 
             let predecessors = predecessors
                 .into_iter()
