@@ -1,7 +1,13 @@
 use crate::ast::RuleKind;
 
 pub struct SemanticActionTable {
-    table: Vec<(syn::Expr, RuleKind)>,
+    table: Vec<SemanticAction>,
+}
+
+pub struct SemanticAction {
+    pub expr: syn::Expr,
+    pub kind: RuleKind,
+    pub use_count: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -14,11 +20,23 @@ impl SemanticActionTable {
 
     pub fn add(&mut self, expr: syn::Expr, kind: RuleKind) -> SemanticActionIdx {
         let idx = self.table.len();
-        self.table.push((expr, kind));
+        self.table.push(SemanticAction {
+            expr,
+            kind,
+            use_count: 0,
+        });
         SemanticActionIdx(idx)
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (SemanticActionIdx, &(syn::Expr, RuleKind))> {
+    pub fn record_use(&mut self, idx: SemanticActionIdx) {
+        self.table[idx.0].use_count += 1;
+    }
+
+    pub fn get_num_uses(&self, idx: SemanticActionIdx) -> usize {
+        self.table[idx.0].use_count
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (SemanticActionIdx, &SemanticAction)> {
         self.table
             .iter()
             .enumerate()

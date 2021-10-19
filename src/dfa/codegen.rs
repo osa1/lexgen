@@ -8,7 +8,7 @@ use super::{State, StateIdx, DFA};
 
 use crate::ast::{RuleKind, RuleRhs};
 use crate::range_map::RangeMap;
-use crate::semantic_action_table::{SemanticActionIdx, SemanticActionTable};
+use crate::semantic_action_table::{SemanticAction, SemanticActionIdx, SemanticActionTable};
 
 use std::convert::TryFrom;
 
@@ -30,7 +30,7 @@ use quote::{quote, ToTokens};
 const MAX_GUARD_SIZE: usize = 9;
 
 pub fn reify(
-    dfa: DFA<Trans<RuleRhs<SemanticActionIdx>>, RuleRhs<SemanticActionIdx>>,
+    dfa: DFA<Trans, RuleRhs<SemanticActionIdx>>,
     semantic_actions: SemanticActionTable,
     user_state_type: Option<syn::Type>,
     user_error_type: Option<syn::Type>,
@@ -284,7 +284,7 @@ fn generate_switch(ctx: &CgCtx, enum_name: &syn::Ident) -> TokenStream {
 /// Generate arms of `match self.state { ... }` of a DFA.
 fn generate_state_arms(
     ctx: &mut CgCtx,
-    dfa: DFA<Trans<RuleRhs<SemanticActionIdx>>, RuleRhs<SemanticActionIdx>>,
+    dfa: DFA<Trans, RuleRhs<SemanticActionIdx>>,
 ) -> Vec<TokenStream> {
     let DFA { states } = dfa;
 
@@ -317,8 +317,8 @@ fn generate_state_arms(
 fn generate_state_arm(
     ctx: &mut CgCtx,
     state_idx: usize,
-    state: &State<Trans<RuleRhs<SemanticActionIdx>>, RuleRhs<SemanticActionIdx>>,
-    states: &[State<Trans<RuleRhs<SemanticActionIdx>>, RuleRhs<SemanticActionIdx>>],
+    state: &State<Trans, RuleRhs<SemanticActionIdx>>,
+    states: &[State<Trans, RuleRhs<SemanticActionIdx>>],
 ) -> TokenStream {
     let State {
         initial,
@@ -447,9 +447,9 @@ fn generate_state_arm(
 
 fn generate_fail_transition(
     ctx: &mut CgCtx,
-    states: &[State<Trans<RuleRhs<SemanticActionIdx>>, RuleRhs<SemanticActionIdx>>],
+    states: &[State<Trans, RuleRhs<SemanticActionIdx>>],
     initial: bool,
-    trans: &Trans<RuleRhs<SemanticActionIdx>>,
+    trans: &Trans,
 ) -> TokenStream {
     match trans {
         Trans::Trans(StateIdx(next_state)) => {
@@ -481,9 +481,9 @@ fn generate_fail_transition(
 /// Generate arms for `match char { ... }`
 fn generate_state_char_arms(
     ctx: &mut CgCtx,
-    states: &[State<Trans<RuleRhs<SemanticActionIdx>>, RuleRhs<SemanticActionIdx>>],
-    char_transitions: &FxHashMap<char, Trans<RuleRhs<SemanticActionIdx>>>,
-    range_transitions: &RangeMap<Trans<RuleRhs<SemanticActionIdx>>>,
+    states: &[State<Trans, RuleRhs<SemanticActionIdx>>],
+    char_transitions: &FxHashMap<char, Trans>,
+    range_transitions: &RangeMap<Trans>,
     fail_action: &TokenStream,
 ) -> Vec<TokenStream> {
     // Arms of the `match` for the current character
@@ -663,7 +663,13 @@ fn generate_semantic_action_fns(ctx: &CgCtx) -> TokenStream {
 
     let fns: Vec<TokenStream> = ctx
         .iter_semantic_actions()
-        .map(|(idx, (expr, kind))| {
+        .filter_map(|(idx, SemanticAction { expr, kind, use_count })| {
+            // TODO
+            // if *use_count == 1 {
+            //     // Inlined, no need for semantic action fn
+            //     return None;
+            // }
+
             let ident = idx.symbol();
             let rhs = match kind {
                 RuleKind::Simple =>
@@ -683,10 +689,10 @@ fn generate_semantic_action_fns(ctx: &CgCtx) -> TokenStream {
                         quote!(#expr)
                     },
             };
-            quote!(
+            Some(quote!(
                 static #ident: for<'input> fn(#handle_type_name<'_, 'input>) -> #result_type =
                     #rhs;
-            )
+            ))
         })
         .collect();
 

@@ -54,7 +54,7 @@ pub enum RuleLhs {
     Fail,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum RuleRhs<Rhs> {
     None,
     Rhs { expr: Rhs, kind: RuleKind },
