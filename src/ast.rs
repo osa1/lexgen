@@ -10,15 +10,15 @@ pub struct Var(pub String);
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Builtin(pub String);
 
-pub struct Lexer {
+pub struct Lexer<Rhs> {
     pub public: bool,
     pub type_name: syn::Ident,
     pub user_state_type: Option<syn::Type>,
     pub token_type: syn::Type,
-    pub rules: Vec<Rule>,
+    pub rules: Vec<Rule<Rhs>>,
 }
 
-pub enum Rule {
+pub enum Rule<Rhs> {
     /// `let <ident> = <regex>;`
     Binding { var: Var, re: Regex },
 
@@ -33,16 +33,16 @@ pub enum Rule {
     /// A list of named rules at the top level: `rule <Ident> { <rules> },`
     RuleSet {
         name: syn::Ident,
-        rules: Vec<SingleRule>,
+        rules: Vec<SingleRule<Rhs>>,
     },
 
     /// Set of rules without a name
-    UnnamedRules { rules: Vec<SingleRule> },
+    UnnamedRules { rules: Vec<SingleRule<Rhs>> },
 }
 
-pub struct SingleRule {
+pub struct SingleRule<Rhs> {
     pub lhs: RuleLhs,
-    pub rhs: RuleRhs,
+    pub rhs: Rhs,
 }
 
 #[derive(Debug)]
@@ -54,7 +54,7 @@ pub enum RuleLhs {
     Fail,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum RuleRhs {
     None,
     Rhs { expr: syn::Expr, kind: RuleKind },
@@ -64,14 +64,16 @@ pub enum RuleRhs {
 pub enum RuleKind {
     /// Defined with `=`. RHS is not passed a `LexerHandle`, returns `Token`.
     Simple,
+
     /// Defined with `=?`. RHS is passed a `LexerHandle`, returns `LexerAction<Result<Token,
     /// Error>>`.
     Fallible,
+
     /// Defined with `=>`. RHS is passed a `LexerHandle`, returns `LexerAction<Token>`
     Infallible,
 }
 
-impl fmt::Debug for Lexer {
+impl<Rhs: fmt::Debug> fmt::Debug for Lexer<Rhs> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Lexer")
             .field("public", &self.public)
@@ -82,7 +84,7 @@ impl fmt::Debug for Lexer {
     }
 }
 
-impl fmt::Debug for Rule {
+impl<Rhs: fmt::Debug> fmt::Debug for Rule<Rhs> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Rule::Binding { var, re } => f
@@ -108,7 +110,7 @@ impl fmt::Debug for Rule {
     }
 }
 
-impl fmt::Debug for SingleRule {
+impl<Rhs: fmt::Debug> fmt::Debug for SingleRule<Rhs> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SingleRule")
             .field("lhs", &self.lhs)
@@ -268,7 +270,7 @@ impl Parse for RuleLhs {
     }
 }
 
-impl Parse for SingleRule {
+impl Parse for SingleRule<RuleRhs> {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let lhs = RuleLhs::parse(input)?;
 
@@ -299,7 +301,7 @@ impl Parse for SingleRule {
     }
 }
 
-impl Parse for Rule {
+impl Parse for Rule<RuleRhs> {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         if input.peek(syn::token::Let) {
             // Let binding
@@ -362,7 +364,7 @@ impl Parse for Rule {
     }
 }
 
-impl Parse for Lexer {
+impl Parse for Lexer<RuleRhs> {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let public = input.parse::<syn::token::Pub>().is_ok();
         let type_name = input.parse::<syn::Ident>()?;

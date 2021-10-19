@@ -325,6 +325,58 @@ fn rule_kind_fallible_with_lifetimes() {
 }
 
 #[test]
+fn rule_kind_mix() {
+    #[derive(Debug, PartialEq, Eq)]
+    enum Token {
+        Int(i64),
+        A,
+        Other,
+    }
+
+    #[derive(Debug, PartialEq, Eq)]
+    struct UserError<'input>(&'input str);
+
+    lexer! {
+        Lexer -> Token;
+
+        type Error<'input> = UserError<'input>;
+
+        // simple with skip
+        [' ' '\t' '\n'],
+
+        // simple with token
+        "A" = Token::A,
+
+        // fallible
+        ['a'-'z' '0'-'9']+ =? |lexer| {
+            let match_ = lexer.match_();
+            match str::parse(match_) {
+                Ok(i) => lexer.return_(Ok(Token::Int(i))),
+                Err(_) => lexer.return_(Err(UserError(match_))),
+            }
+        },
+
+        // infallible
+        ['-' '_'] => |lexer| {
+            lexer.return_(Token::Other)
+        },
+    }
+
+    let mut lexer = Lexer::new("123 blah");
+    assert_eq!(lexer.next(), Some(Ok((0, Token::Int(123), 3))));
+    assert!(matches!(
+        lexer.next(),
+        Some(Err(LexerError::UserError(UserError("blah"))))
+    ));
+    assert_eq!(lexer.next(), None);
+
+    let mut lexer = Lexer::new("A -");
+    assert_eq!(lexer.next(), Some(Ok((0, Token::A, 1))));
+    assert_eq!(lexer.next(), Some(Ok((2, Token::Other, 3))));
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
 fn overlapping_ranges() {
     lexer! {
         Lexer -> usize;

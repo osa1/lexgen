@@ -44,9 +44,9 @@ impl<A> RangeMap<A> {
         self.iter().next().is_none()
     }
 
-    pub fn filter_map<F, B>(self, f: F) -> RangeMap<B>
+    pub fn filter_map<F, B>(self, mut f: F) -> RangeMap<B>
     where
-        F: Fn(A) -> Option<B>,
+        F: FnMut(A) -> Option<B>,
     {
         RangeMap {
             ranges: self
@@ -55,7 +55,7 @@ impl<A> RangeMap<A> {
                 .map(|Range { start, end, values }| Range {
                     start,
                     end,
-                    values: values.into_iter().filter_map(&f).collect(),
+                    values: values.into_iter().filter_map(&mut f).collect(),
                 })
                 .collect(),
         }

@@ -3,11 +3,15 @@ use super::StateIdx;
 use super::DFA;
 use crate::ast::RuleRhs;
 use crate::dfa::simplify::Trans;
+use crate::semantic_action_table::{SemanticActionIdx, SemanticActionTable};
 
 use fxhash::FxHashMap;
 
 /// Code generation state
 pub struct CgCtx {
+    /// Maps semantic action indices to expressions. Used to generate semantic action functions.
+    semantic_action_table: SemanticActionTable,
+
     /// Name of the lexer: `MyLexer` in `lexer! { MyLexer -> MyToken; }`
     lexer_name: syn::Ident,
 
@@ -49,7 +53,8 @@ struct CgState {
 
 impl CgCtx {
     pub fn new(
-        dfa: &DFA<Trans<RuleRhs>, RuleRhs>,
+        dfa: &DFA<Trans, SemanticActionIdx>,
+        semantic_action_table: SemanticActionTable,
         lexer_name: syn::Ident,
         token_type: syn::Type,
         user_error_type: Option<syn::Type>,
@@ -75,6 +80,7 @@ impl CgCtx {
             .collect();
 
         CgCtx {
+            semantic_action_table,
             lexer_name,
             token_type,
             user_error_type,
@@ -129,5 +135,9 @@ impl CgCtx {
 
     pub fn rule_states(&self) -> &FxHashMap<String, StateIdx> {
         &self.rule_states
+    }
+
+    pub fn iter_semantic_actions(&self) -> impl Iterator<Item = (SemanticActionIdx, &RuleRhs)> {
+        self.semantic_action_table.iter()
     }
 }
