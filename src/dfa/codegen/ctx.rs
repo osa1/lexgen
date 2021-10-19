@@ -1,8 +1,9 @@
 use super::search_table::SearchTableSet;
 use super::StateIdx;
 use super::DFA;
+use crate::ast::RuleRhs;
 use crate::dfa::simplify::Trans;
-use crate::semantic_action_table::{SemanticAction, SemanticActionIdx, SemanticActionTable};
+use crate::semantic_action_table::{SemanticActionIdx, SemanticActionTable};
 
 use fxhash::FxHashMap;
 
@@ -136,9 +137,7 @@ impl CgCtx {
         &self.rule_states
     }
 
-    pub fn iter_semantic_actions(
-        &self,
-    ) -> impl Iterator<Item = (SemanticActionIdx, &SemanticAction)> {
+    pub fn iter_semantic_actions(&self) -> impl Iterator<Item = (SemanticActionIdx, &RuleRhs)> {
         self.semantic_action_table.iter()
     }
 }

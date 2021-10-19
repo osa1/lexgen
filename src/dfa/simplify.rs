@@ -1,5 +1,5 @@
 use super::{State, StateIdx, DFA};
-use crate::semantic_action_table::{SemanticActionIdx, SemanticActionTable};
+use crate::semantic_action_table::SemanticActionIdx;
 
 use fxhash::FxHashMap;
 
@@ -13,7 +13,6 @@ pub enum Trans {
 pub fn simplify<K>(
     dfa: DFA<StateIdx, SemanticActionIdx>,
     dfa_state_indices: &mut FxHashMap<K, StateIdx>,
-    semantic_action_table: &mut SemanticActionTable,
 ) -> DFA<Trans, SemanticActionIdx> {
     let mut empty_states: Vec<(StateIdx, Option<SemanticActionIdx>)> = vec![];
     let mut non_empty_states: Vec<(StateIdx, State<StateIdx, SemanticActionIdx>)> = vec![];
@@ -35,10 +34,7 @@ pub fn simplify<K>(
 
     let mut map_transition = |t: StateIdx| -> Option<Trans> {
         match empty_states.binary_search_by(|(state_idx, _action)| state_idx.cmp(&t)) {
-            Ok(idx) => empty_states[idx].1.clone().map(|rhs| {
-                semantic_action_table.record_use(rhs);
-                Trans::Accept(rhs)
-            }),
+            Ok(idx) => empty_states[idx].1.clone().map(Trans::Accept),
             Err(idx) => Some(Trans::Trans(t.map(|i| i - idx))),
         }
     };

@@ -8,7 +8,7 @@ use super::{State, StateIdx, DFA};
 
 use crate::ast::{RuleKind, RuleRhs};
 use crate::range_map::RangeMap;
-use crate::semantic_action_table::{SemanticAction, SemanticActionIdx, SemanticActionTable};
+use crate::semantic_action_table::{SemanticActionIdx, SemanticActionTable};
 
 use std::convert::TryFrom;
 
@@ -655,13 +655,7 @@ fn generate_semantic_action_fns(ctx: &CgCtx) -> TokenStream {
 
     let fns: Vec<TokenStream> = ctx
         .iter_semantic_actions()
-        .filter_map(|(idx, SemanticAction { action, use_count })| {
-            // TODO
-            // if *use_count == 1 {
-            //     // Inlined, no need for semantic action fn
-            //     return None;
-            // }
-
+        .filter_map(|(idx, action)| {
             let ident = idx.symbol();
 
             let rhs = match action {
