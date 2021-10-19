@@ -26,12 +26,12 @@ impl SemanticActionTable {
         SemanticActionIdx(idx)
     }
 
-    pub fn get(&self, idx: SemanticActionIdx) -> &SemanticAction {
-        &self.table[idx.0]
-    }
-
     pub fn record_use(&mut self, idx: SemanticActionIdx) {
         self.table[idx.0].use_count += 1;
+    }
+
+    pub fn get_num_uses(&self, idx: SemanticActionIdx) -> usize {
+        self.table[idx.0].use_count
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (SemanticActionIdx, &SemanticAction)> {

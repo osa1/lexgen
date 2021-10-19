@@ -141,8 +141,4 @@ impl CgCtx {
     ) -> impl Iterator<Item = (SemanticActionIdx, &SemanticAction)> {
         self.semantic_action_table.iter()
     }
-
-    pub fn semantic_action(&self, idx: SemanticActionIdx) -> &SemanticAction {
-        self.semantic_action_table.get(idx)
-    }
 }
