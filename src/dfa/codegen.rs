@@ -196,18 +196,29 @@ pub fn reify(
 
             user_state: #user_state_type,
 
+            // User-provided input string. Does not change after initialization.
             input: &'input_ str,
 
-            // Start index of `iter`
+            // Start index of `iter`. We update this as we backtrack and update `iter`.
             iter_byte_idx: usize,
 
+            // Character iterator. `Peekable` is used in the handler's `peek` method. Note that we
+            // can't use byte index returned by this directly, as we re-initialize this field when
+            // backtracking. Add `iter_byte_idx` to the byte index before using. When resetting,
+            // update `iter_byte_idx`.
             iter: std::iter::Peekable<std::str::CharIndices<'input_>>,
 
+            // Where does the current match start. Byte index in `input`.
             current_match_start: usize,
 
+            // Where does the current match end (exclusive). Byte index in `input`.
             current_match_end: usize,
 
-            previous_match: Option<(usize, #semantic_action_fn_type, usize)>,
+            // If we skipped an accepting state, this holds the triple:
+            // - Skipped match start (byte index in `input`)
+            // - Semantic action (a function name)
+            // - Skipped match end (exclusive, byte index in `input`)
+            last_match: Option<(usize, #semantic_action_fn_type, usize)>,
         }
 
         #lexer_error_type
@@ -257,7 +268,7 @@ pub fn reify(
                     iter: input.char_indices().peekable(),
                     current_match_start: 0,
                     current_match_end: 0,
-                    previous_match: None,
+                    last_match: None,
                 }
             }
 
@@ -368,7 +379,7 @@ fn generate_state_arm(
         let error = make_lexer_error();
         let action = generate_semantic_action_call(ctx, &quote!(semantic_action));
         quote!({
-            match self.previous_match.take() {
+            match self.last_match.take() {
                 None => return Some(Err(#error)),
                 Some((match_start, semantic_action, match_end)) => {
                     self.current_match_start = match_start;
@@ -431,7 +442,7 @@ fn generate_state_arm(
 
             // TODO: Braces can be removed in some cases
             quote!({
-                self.previous_match =
+                self.last_match =
                     Some((self.current_match_start, #semantic_fn, self.current_match_end));
 
                 match self.iter.peek().copied() {
