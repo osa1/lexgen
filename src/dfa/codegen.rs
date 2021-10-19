@@ -656,6 +656,7 @@ fn generate_semantic_action_call(ctx: &CgCtx, action_fn: &TokenStream) -> TokenS
 
     quote!(
         let str = &self.input[self.current_match_start..self.current_match_end];
+
         let handle = #handle_type_name {
             iter: &mut self.iter,
             match_: str,
