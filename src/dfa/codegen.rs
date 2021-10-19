@@ -661,31 +661,27 @@ fn generate_semantic_action_fns(ctx: &CgCtx) -> TokenStream {
         Some(user_error_type) => quote!(#action_type_name<Result<#token_type, #user_error_type>>),
     };
 
-    // If we have a user error specified, then map simple and infallible rules to `Result<tok,
-    // error>`
-    let map_token = if user_error_type.is_some() {
-        quote!(res.map_token(|tok: #token_type| Ok(tok)))
-    } else {
-        quote!(res)
-    };
-
     let fns: Vec<TokenStream> = ctx
         .iter_semantic_actions()
         .map(|(idx, (expr, kind))| {
             let ident = idx.symbol();
             let rhs = match kind {
                 RuleKind::Simple =>
-                    quote!(|__handle: #handle_type_name| {
-                        let res = __handle.return_(#expr);
-                        #map_token
-                    }),
+                    if user_error_type.is_some() {
+                        quote!(|__handle: #handle_type_name| __handle.return_(#expr).map_token(Ok))
+                    } else {
+                        quote!(|__handle: #handle_type_name| __handle.return_(#expr))
+                    },
                 RuleKind::Fallible => quote!(#expr),
                 RuleKind::Infallible =>
-                    quote!(|__handle: #handle_type_name| {
-                        let semantic_action: for<'input> fn(#handle_type_name<'_, 'input>) -> #action_type_name<#token_type> = #expr;
-                        let res = semantic_action(__handle);
-                        #map_token
-                    }),
+                    if user_error_type.is_some() {
+                        quote!(|__handle: #handle_type_name| {
+                            let semantic_action: for<'input> fn(#handle_type_name<'_, 'input>) -> #action_type_name<#token_type> = #expr;
+                            semantic_action(__handle).map_token(Ok)
+                        })
+                    } else {
+                        quote!(#expr)
+                    },
             };
             quote!(
                 static #ident: for<'input> fn(#handle_type_name<'_, 'input>) -> #result_type =
