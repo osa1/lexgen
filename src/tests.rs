@@ -1,5 +1,5 @@
 use crate::ast::{CharOrRange, CharSet, Regex, Var};
-use crate::nfa::simulate::{Error, SimulationOutput, Value};
+use crate::nfa::simulate::{ErrorLoc, Matches};
 use crate::nfa::NFA;
 use crate::nfa_to_dfa::nfa_to_dfa;
 
@@ -7,26 +7,26 @@ use fxhash::FxHashMap;
 
 fn test_simulate<'input, A: Copy + std::fmt::Debug + Eq>(
     nfa: &NFA<A>,
-    test_cases: Vec<(&'input str, SimulationOutput<'input, A>)>,
+    test_cases: Vec<(&'input str, Matches<'input, A>, Option<ErrorLoc>)>,
 ) {
     println!("NFA=\n{}", nfa);
-
-    for (str, expected) in &test_cases {
-        assert_eq!(
-            &nfa.simulate(str),
-            expected,
-            "NFA simulation failed for string: {:?}",
-            str
-        );
-    }
 
     let dfa = nfa_to_dfa(nfa);
 
     println!("DFA=\n{}", dfa);
 
-    for (str, expected) in &test_cases {
+    for (str, expected_matches, expected_error) in test_cases {
+        let expected = (expected_matches, expected_error);
+
         assert_eq!(
-            &dfa.simulate(str),
+            &nfa.simulate(str),
+            &expected,
+            "NFA simulation failed for string: {:?}",
+            str
+        );
+
+        assert_eq!(
+            dfa.simulate(str),
             expected,
             "DFA simulation failed for string: {:?}",
             str
@@ -35,44 +35,83 @@ fn test_simulate<'input, A: Copy + std::fmt::Debug + Eq>(
 }
 
 #[test]
+fn simulate_backtracking() {
+    let mut nfa: NFA<usize> = NFA::new();
+
+    nfa.add_regex(
+        &Default::default(),
+        &Regex::Concat(
+            Box::new(Regex::OneOrMore(Box::new(Regex::Char('a')))),
+            Box::new(Regex::Char('b')),
+        ),
+        1,
+    );
+
+    nfa.add_regex(&Default::default(), &Regex::Char('a'), 2);
+
+    test_simulate(
+        &nfa,
+        vec![
+            ("a", vec![("a", 2)], None),
+            ("aa", vec![("a", 2), ("a", 2)], None),
+            ("aab", vec![("aab", 1)], None),
+        ],
+    );
+}
+
+#[test]
+fn issue_16() {
+    let mut nfa: NFA<usize> = NFA::new();
+
+    nfa.add_regex(&Default::default(), &Regex::String("xyzxyz".to_owned()), 1);
+    nfa.add_regex(&Default::default(), &Regex::String("xyz".to_owned()), 2);
+    nfa.add_regex(&Default::default(), &Regex::String("xya".to_owned()), 3);
+
+    test_simulate(
+        &nfa,
+        vec![
+            ("xyzxya", vec![("xyz", 2), ("xya", 3)], None),
+            ("xyzxyz", vec![("xyzxyz", 1)], None),
+        ],
+    );
+}
+
+#[test]
+fn stuck_1() {
+    let nfa: NFA<usize> = NFA::new();
+    test_simulate(&nfa, vec![("a", vec![], Some(0))]);
+}
+
+#[test]
+fn stuck_2() {
+    let mut nfa: NFA<usize> = NFA::new();
+
+    nfa.add_regex(&Default::default(), &Regex::String("ab".to_owned()), 1);
+
+    test_simulate(&nfa, vec![("aba", vec![("ab", 1)], Some(2))]);
+}
+
+#[test]
+fn stuck_3() {
+    let mut nfa: NFA<usize> = NFA::new();
+
+    nfa.add_regex(&Default::default(), &Regex::String("aaab".to_owned()), 1);
+    nfa.add_regex(&Default::default(), &Regex::String("a".to_owned()), 2);
+
+    test_simulate(&nfa, vec![("aaabb", vec![("aaab", 1)], Some(4))]);
+}
+
+#[test]
 fn simulate_char() {
     let re = Regex::Char('a');
     let mut nfa: NFA<usize> = NFA::new();
     nfa.add_regex(&Default::default(), &re, 1);
+
     test_simulate(
         &nfa,
         vec![
-            // TODO: EOF handling
-            // (
-            //     "",
-            //     SimulationOutput {
-            //         values: vec![],
-            //         error: None,
-            //     },
-            // ),
-            (
-                "aa",
-                SimulationOutput {
-                    values: vec![
-                        Value {
-                            value: 1,
-                            matched_str: "a",
-                        },
-                        Value {
-                            value: 1,
-                            matched_str: "a",
-                        },
-                    ],
-                    error: None,
-                },
-            ),
-            (
-                "b",
-                SimulationOutput {
-                    values: vec![],
-                    error: Some(Error { loc: 0 }),
-                },
-            ),
+            ("aa", vec![("a", 1), ("a", 1)], None),
+            ("b", vec![], Some(0)),
         ],
     );
 }
@@ -82,44 +121,13 @@ fn simulate_string() {
     let re = Regex::String("ab".to_owned());
     let mut nfa: NFA<usize> = NFA::new();
     nfa.add_regex(&Default::default(), &re, 1);
+
     test_simulate(
         &nfa,
         vec![
-            // TODO
-            // (
-            //     "",
-            //     SimulationOutput {
-            //         values: vec![],
-            //         error: None,
-            //     },
-            // ),
-            (
-                "a",
-                SimulationOutput {
-                    values: vec![],
-                    error: Some(Error { loc: 0 }),
-                },
-            ),
-            (
-                "ab",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "ab",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "abc",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "ab",
-                    }],
-                    error: Some(Error { loc: 2 }),
-                },
-            ),
+            ("a", vec![], Some(0)),
+            ("ab", vec![("ab", 1)], None),
+            ("abc", vec![("ab", 1)], Some(2)),
         ],
     );
 }
@@ -132,69 +140,14 @@ fn simulate_char_set_char() {
     ]));
     let mut nfa: NFA<usize> = NFA::new();
     nfa.add_regex(&Default::default(), &re, 1);
+
     test_simulate(
         &nfa,
         vec![
-            // TODO
-            // (
-            //     "",
-            //     SimulationOutput {
-            //         values: vec![],
-            //         error: None,
-            //     }
-            // ),
-            (
-                "a",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "a",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "b",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "b",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "ab",
-                SimulationOutput {
-                    values: vec![
-                        Value {
-                            value: 1,
-                            matched_str: "a",
-                        },
-                        Value {
-                            value: 1,
-                            matched_str: "b",
-                        },
-                    ],
-                    error: None,
-                },
-            ),
-            (
-                "ba",
-                SimulationOutput {
-                    values: vec![
-                        Value {
-                            value: 1,
-                            matched_str: "b",
-                        },
-                        Value {
-                            value: 1,
-                            matched_str: "a",
-                        },
-                    ],
-                    error: None,
-                },
-            ),
+            ("a", vec![("a", 1)], None),
+            ("b", vec![("b", 1)], None),
+            ("ab", vec![("a", 1), ("b", 1)], None),
+            ("ba", vec![("b", 1), ("a", 1)], None),
         ],
     );
 }
@@ -208,81 +161,10 @@ fn simulate_char_set_range() {
     ]));
     let mut nfa: NFA<usize> = NFA::new();
     nfa.add_regex(&Default::default(), &re, 1);
+
     test_simulate(
         &nfa,
-        vec![
-            // TODO
-            // (
-            //     "",
-            //     None
-            // ),
-            (
-                "a",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "a",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "b",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "b",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "0",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "0",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "1",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "1",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "9",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "9",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "ba",
-                SimulationOutput {
-                    values: vec![
-                        Value {
-                            value: 1,
-                            matched_str: "b",
-                        },
-                        Value {
-                            value: 1,
-                            matched_str: "a",
-                        },
-                    ],
-                    error: None,
-                },
-            ),
-        ],
+        vec![("ab09", vec![("a", 1), ("b", 1), ("0", 1), ("9", 1)], None)],
     );
 }
 
@@ -291,44 +173,15 @@ fn simulate_zero_or_more() {
     let re = Regex::ZeroOrMore(Box::new(Regex::Char('a')));
     let mut nfa: NFA<usize> = NFA::new();
     nfa.add_regex(&Default::default(), &re, 1);
+
     test_simulate(
         &nfa,
         vec![
             // TODO
-            // (
-            //     "",
-            //     Some(())
-            // ),
-            (
-                "a",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "a",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "aa",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "aa",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "aab",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "aa",
-                    }],
-                    error: Some(Error { loc: 2 }),
-                },
-            ),
+            // ("", vec![], None),
+            ("a", vec![("a", 1)], None),
+            ("aa", vec![("aa", 1)], None),
+            ("aab", vec![("aa", 1)], Some(2)),
         ],
     );
 }
@@ -338,44 +191,14 @@ fn simulate_one_or_more() {
     let re = Regex::OneOrMore(Box::new(Regex::Char('a')));
     let mut nfa: NFA<usize> = NFA::new();
     nfa.add_regex(&Default::default(), &re, 1);
+
     test_simulate(
         &nfa,
         vec![
-            // TODO
-            // (
-            //     "",
-            //     None
-            // ),
-            (
-                "a",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "a",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "aa",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "aa",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "aab",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "aa",
-                    }],
-                    error: Some(Error { loc: 2 }),
-                },
-            ),
+            ("", vec![], Some(0)),
+            ("a", vec![("a", 1)], None),
+            ("aa", vec![("aa", 1)], None),
+            ("aab", vec![("aa", 1)], Some(2)),
         ],
     );
 }
@@ -385,40 +208,15 @@ fn simulate_zero_or_one() {
     let re = Regex::ZeroOrOne(Box::new(Regex::Char('a')));
     let mut nfa: NFA<usize> = NFA::new();
     nfa.add_regex(&Default::default(), &re, 1);
+
     test_simulate(
         &nfa,
         vec![
             // TODO
-            // (
-            //     "",
-            //     None
-            // ),
-            (
-                "a",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "a",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "aa",
-                SimulationOutput {
-                    values: vec![
-                        Value {
-                            value: 1,
-                            matched_str: "a",
-                        },
-                        Value {
-                            value: 1,
-                            matched_str: "a",
-                        },
-                    ],
-                    error: None,
-                },
-            ),
+            // ("", vec![], Some(0)),
+            ("a", vec![("a", 1)], None),
+            ("aa", vec![("a", 1), ("a", 1)], None),
+            ("aab", vec![("a", 1), ("a", 1)], Some(2)),
         ],
     );
 }
@@ -428,41 +226,13 @@ fn simulate_concat() {
     let re = Regex::Concat(Box::new(Regex::Char('a')), Box::new(Regex::Char('b')));
     let mut nfa: NFA<usize> = NFA::new();
     nfa.add_regex(&Default::default(), &re, 1);
+
     test_simulate(
         &nfa,
         vec![
-            // TODO
-            // (
-            //     "",
-            //     None
-            // ),
-            (
-                "a",
-                SimulationOutput {
-                    values: vec![],
-                    error: Some(Error { loc: 0 }),
-                },
-            ),
-            (
-                "ab",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "ab",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "aba",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "ab",
-                    }],
-                    error: Some(Error { loc: 2 }),
-                },
-            ),
+            ("a", vec![], Some(0)),
+            ("ab", vec![("ab", 1)], None),
+            ("aba", vec![("ab", 1)], Some(2)),
         ],
     );
 }
@@ -472,50 +242,13 @@ fn simulate_or() {
     let re = Regex::Or(Box::new(Regex::Char('a')), Box::new(Regex::Char('b')));
     let mut nfa: NFA<usize> = NFA::new();
     nfa.add_regex(&Default::default(), &re, 1);
+
     test_simulate(
         &nfa,
         vec![
-            // TODO
-            // (
-            //     "",
-            //     None
-            // ),
-            (
-                "a",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "a",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "b",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "b",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "ab",
-                SimulationOutput {
-                    values: vec![
-                        Value {
-                            value: 1,
-                            matched_str: "a",
-                        },
-                        Value {
-                            value: 1,
-                            matched_str: "b",
-                        },
-                    ],
-                    error: None,
-                },
-            ),
+            ("a", vec![("a", 1)], None),
+            ("b", vec![("b", 1)], None),
+            ("ab", vec![("a", 1), ("b", 1)], None),
         ],
     );
 }
@@ -528,44 +261,13 @@ fn simulate_or_one_or_more_char() {
     );
     let mut nfa: NFA<usize> = NFA::new();
     nfa.add_regex(&Default::default(), &re, 1);
+
     test_simulate(
         &nfa,
         vec![
-            // TODO
-            // (
-            //     "",
-            //     None
-            // ),
-            (
-                "a",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "a",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "b",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "b",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "aa",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "aa",
-                    }],
-                    error: None,
-                },
-            ),
+            ("a", vec![("a", 1)], None),
+            ("b", vec![("b", 1)], None),
+            ("aa", vec![("aa", 1)], None),
         ],
     );
 }
@@ -577,43 +279,19 @@ fn simulate_multiple_accepting_states_1() {
     let mut nfa: NFA<usize> = NFA::new();
     nfa.add_regex(&Default::default(), &re1, 1);
     nfa.add_regex(&Default::default(), &re2, 2);
+
     test_simulate(
         &nfa,
         vec![
-            (
-                "aaaa",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "aaaa",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "aaab",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 2,
-                        matched_str: "aaab",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "aaac",
-                SimulationOutput {
-                    values: vec![],
-                    error: Some(Error { loc: 0 }),
-                },
-            ),
+            ("aaaa", vec![("aaaa", 1)], None),
+            ("aaab", vec![("aaab", 2)], None),
+            ("aaac", vec![], Some(0)),
         ],
     );
 }
 
 #[test]
 fn multiple_accepting_states_2() {
-    // Same test case as `nfa::test::or_one_or_more_char`
     let re1 = Regex::Or(
         Box::new(Regex::OneOrMore(Box::new(Regex::Char('a')))),
         Box::new(Regex::Char('b')),
@@ -622,57 +300,14 @@ fn multiple_accepting_states_2() {
     let mut nfa: NFA<usize> = NFA::new();
     nfa.add_regex(&Default::default(), &re1, 1);
     nfa.add_regex(&Default::default(), &re2, 2);
+
     test_simulate(
         &nfa,
         vec![
-            (
-                "b",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "b",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "a",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "a",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "aa",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "aa",
-                    }],
-                    error: None,
-                },
-            ),
-            // TODO: EOF handling
-            // (
-            //     "",
-            //     SimulationOutput {
-            //         values: vec![],
-            //         error: None,
-            //     },
-            // ),
-            (
-                "0",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 2,
-                        matched_str: "0",
-                    }],
-                    error: None,
-                },
-            ),
+            ("b", vec![("b", 1)], None),
+            ("a", vec![("a", 1)], None),
+            ("aa", vec![("aa", 1)], None),
+            ("0", vec![("0", 2)], None),
         ],
     );
 }
@@ -706,36 +341,9 @@ fn simulate_variables() {
     test_simulate(
         &nfa,
         vec![
-            (
-                "a",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "a",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "aA",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "aA",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "aA123-a",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "aA123-a",
-                    }],
-                    error: None,
-                },
-            ),
+            ("a", vec![("a", 1)], None),
+            ("aA", vec![("aA", 1)], None),
+            ("aA123-a", vec![("aA123-a", 1)], None),
         ],
     );
 }
@@ -753,28 +361,7 @@ fn zero_or_more_concat_confusion_1() {
 
     test_simulate(
         &nfa,
-        vec![
-            (
-                "a",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "a",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "aa",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "aa",
-                    }],
-                    error: None,
-                },
-            ),
-        ],
+        vec![("a", vec![("a", 1)], None), ("aa", vec![("aa", 1)], None)],
     );
 }
 
@@ -792,26 +379,8 @@ fn zero_or_more_concat_confusion_2() {
     test_simulate(
         &nfa,
         vec![
-            (
-                "ab",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "ab",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "aab",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "aab",
-                    }],
-                    error: None,
-                },
-            ),
+            ("ab", vec![("ab", 1)], None),
+            ("aab", vec![("aab", 1)], None),
         ],
     );
 }
@@ -833,33 +402,9 @@ fn zero_or_more_concat_confusion_3() {
     test_simulate(
         &nfa,
         vec![
-            (
-                "a",
-                SimulationOutput {
-                    values: vec![],
-                    error: Some(Error { loc: 0 }),
-                },
-            ),
-            (
-                "aa",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "aa",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "aaa",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "aaa",
-                    }],
-                    error: None,
-                },
-            ),
+            ("a", vec![], Some(0)),
+            ("aa", vec![("aa", 1)], None),
+            ("aaa", vec![("aaa", 1)], None),
         ],
     );
 }
@@ -873,25 +418,7 @@ fn simulate_fail() {
 
     test_simulate(
         &nfa,
-        vec![
-            (
-                "a",
-                SimulationOutput {
-                    values: vec![],
-                    error: Some(Error { loc: 0 }),
-                },
-            ),
-            (
-                "ab",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "ab",
-                    }],
-                    error: None,
-                },
-            ),
-        ],
+        vec![("a", vec![], Some(0)), ("ab", vec![("ab", 1)], None)],
     );
 }
 
@@ -907,37 +434,8 @@ fn simulate_multiple_accepting_states_3() {
     test_simulate(
         &nfa,
         vec![
-            (
-                "aaa",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "aaa",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "aa",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 3,
-                        matched_str: "aa",
-                    }],
-                    error: None,
-                },
-            ),
-            // TODO: fail actions
-            // (
-            //     "a",
-            //     SimulationOutput {
-            //         values: vec![Value {
-            //             value: 4,
-            //             matched_str: "a",
-            //         }],
-            //         error: None,
-            //     },
-            // ),
+            ("aaa", vec![("aaa", 1)], None),
+            ("aa", vec![("aa", 3)], None),
         ],
     );
 }
@@ -957,28 +455,7 @@ fn range_and_char_confusion() {
 
     test_simulate(
         &nfa,
-        vec![
-            (
-                "ab",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "ab",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "ac",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 2,
-                        matched_str: "ac",
-                    }],
-                    error: None,
-                },
-            ),
-        ],
+        vec![("ab", vec![("ab", 1)], None), ("ac", vec![("ac", 2)], None)],
     );
 }
 
@@ -1005,27 +482,6 @@ fn overlapping_ranges() {
 
     test_simulate(
         &nfa,
-        vec![
-            (
-                "a1",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 1,
-                        matched_str: "a1",
-                    }],
-                    error: None,
-                },
-            ),
-            (
-                "a2",
-                SimulationOutput {
-                    values: vec![Value {
-                        value: 2,
-                        matched_str: "a2",
-                    }],
-                    error: None,
-                },
-            ),
-        ],
+        vec![("a1", vec![("a1", 1)], None), ("a2", vec![("a2", 2)], None)],
     );
 }

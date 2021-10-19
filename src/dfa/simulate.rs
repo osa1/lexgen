@@ -1,24 +1,17 @@
 use super::{StateIdx, DFA};
 
-pub use crate::nfa::simulate::{Error, SimulationOutput, Value};
+pub use crate::nfa::simulate::{ErrorLoc, Matches};
 use crate::range_map::Range;
 
-#[derive(Debug)]
-struct Match<A> {
-    value: A,
-    match_start: usize,
-    match_end: usize,
-}
-
 impl<A: Copy> DFA<StateIdx, A> {
-    pub fn simulate<'input>(&self, input: &'input str) -> SimulationOutput<'input, A> {
-        let mut values: Vec<Value<'input, A>> = vec![];
+    pub fn simulate<'input>(&self, input: &'input str) -> (Matches<'input, A>, Option<ErrorLoc>) {
+        let mut values: Matches<'input, A> = vec![];
 
         // Current state
         let mut state = StateIdx(0);
 
         // See comments for the same variable in NFA simulation
-        let mut last_match: Option<Match<A>> = None;
+        let mut last_match: Option<(usize, A, usize)> = None;
 
         let mut char_indices = input.char_indices();
 
@@ -37,22 +30,18 @@ impl<A: Copy> DFA<StateIdx, A> {
                         match last_match.take() {
                             None => {
                                 // We're stuck and can't backtrack, raise an error
-                                return SimulationOutput {
-                                    values,
-                                    error: Some(Error { loc: match_start }),
-                                };
+                                return (values, Some(match_start));
                             }
-                            Some(last_match) => {
+                            Some((last_match_start, last_match_value, last_match_end)) => {
                                 // Backtrack to the previous accepting state
-                                match_start = last_match.match_end;
+                                match_start = last_match_end;
                                 char_indices = input[match_start..].char_indices();
 
                                 // Accept the previous match
-                                values.push(Value {
-                                    value: last_match.value,
-                                    matched_str: &input
-                                        [last_match.match_start..last_match.match_end],
-                                });
+                                values.push((
+                                    &input[last_match_start..last_match_end],
+                                    last_match_value,
+                                ));
 
                                 // Restart state machine
                                 state = StateIdx(0);
@@ -64,11 +53,7 @@ impl<A: Copy> DFA<StateIdx, A> {
 
                         // Check for accepting state
                         if let Some(value) = self.states[state.0].accepting {
-                            last_match = Some(Match {
-                                value,
-                                match_start,
-                                match_end: char_idx + char.len_utf8(),
-                            });
+                            last_match = Some((match_start, value, char_idx + char.len_utf8()));
                         }
                     }
                 }
@@ -76,17 +61,14 @@ impl<A: Copy> DFA<StateIdx, A> {
 
             // Reached EOF without errors, accept current match
             match last_match.take() {
-                Some(last_match) => {
-                    values.push(Value {
-                        value: last_match.value,
-                        matched_str: &input[last_match.match_start..last_match.match_end],
-                    });
+                Some((last_match_start, last_match_value, last_match_end)) => {
+                    values.push((&input[last_match_start..last_match_end], last_match_value));
 
-                    if last_match.match_end == input.len() {
+                    if last_match_end == input.len() {
                         break 'outer;
                     } else {
                         // Backtrack
-                        match_start = last_match.match_end;
+                        match_start = last_match_end;
                         char_indices = input[match_start..].char_indices();
 
                         // Restart state machine
@@ -95,18 +77,12 @@ impl<A: Copy> DFA<StateIdx, A> {
                 }
                 None => {
                     // We're stuck and can't backtrack, raise an error
-                    return SimulationOutput {
-                        values,
-                        error: Some(Error { loc: match_start }),
-                    };
+                    return (values, Some(match_start));
                 }
             }
         }
 
-        SimulationOutput {
-            values,
-            error: None,
-        }
+        (values, None)
     }
 }
 
@@ -131,108 +107,4 @@ fn next<A>(dfa: &DFA<StateIdx, A>, state: StateIdx, char: char) -> Option<StateI
     }
 
     return None;
-}
-
-#[test]
-fn issue_16() {
-    use crate::ast::Regex;
-    use crate::nfa::NFA;
-
-    let mut nfa: NFA<usize> = NFA::new();
-
-    nfa.add_regex(&Default::default(), &Regex::String("xyzxyz".to_owned()), 1);
-    nfa.add_regex(&Default::default(), &Regex::String("xyz".to_owned()), 2);
-    nfa.add_regex(&Default::default(), &Regex::String("xya".to_owned()), 3);
-
-    let dfa: DFA<StateIdx, usize> = crate::nfa_to_dfa::nfa_to_dfa(&nfa);
-
-    assert_eq!(
-        dfa.simulate("xyzxya"),
-        SimulationOutput {
-            values: vec![
-                Value {
-                    value: 2,
-                    matched_str: "xyz"
-                },
-                Value {
-                    value: 3,
-                    matched_str: "xya",
-                },
-            ],
-            error: None
-        }
-    );
-
-    assert_eq!(
-        dfa.simulate("xyzxyz"),
-        SimulationOutput {
-            values: vec![Value {
-                value: 1,
-                matched_str: "xyzxyz"
-            }],
-            error: None
-        }
-    );
-}
-
-#[test]
-fn stuck_1() {
-    use crate::nfa::NFA;
-
-    let nfa: NFA<usize> = NFA::new();
-    let dfa: DFA<StateIdx, usize> = crate::nfa_to_dfa::nfa_to_dfa(&nfa);
-    assert_eq!(
-        dfa.simulate("a"),
-        SimulationOutput {
-            values: vec![],
-            error: Some(Error { loc: 0 })
-        }
-    );
-}
-
-#[test]
-fn stuck_2() {
-    use crate::ast::Regex;
-    use crate::nfa::NFA;
-
-    let mut nfa: NFA<usize> = NFA::new();
-
-    nfa.add_regex(&Default::default(), &Regex::String("ab".to_owned()), 1);
-
-    let dfa: DFA<StateIdx, usize> = crate::nfa_to_dfa::nfa_to_dfa(&nfa);
-
-    assert_eq!(
-        dfa.simulate("aba"),
-        SimulationOutput {
-            values: vec![Value {
-                value: 1,
-                matched_str: "ab"
-            }],
-            error: Some(Error { loc: 2 })
-        }
-    );
-}
-
-#[test]
-fn stuck_3() {
-    use crate::ast::Regex;
-    use crate::nfa::NFA;
-
-    let mut nfa: NFA<usize> = NFA::new();
-
-    nfa.add_regex(&Default::default(), &Regex::String("aaab".to_owned()), 1);
-    nfa.add_regex(&Default::default(), &Regex::String("a".to_owned()), 2);
-
-    let dfa: DFA<StateIdx, usize> = crate::nfa_to_dfa::nfa_to_dfa(&nfa);
-
-    assert_eq!(
-        dfa.simulate("aaabb"),
-        SimulationOutput {
-            values: vec![Value {
-                value: 1,
-                matched_str: "aaab"
-            }],
-            error: Some(Error { loc: 4 }),
-        }
-    );
 }
