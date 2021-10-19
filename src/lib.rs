@@ -9,8 +9,10 @@ mod dfa;
 mod display;
 mod nfa;
 mod nfa_to_dfa;
+mod number_semantic_actions;
 mod range_map;
 mod regex_to_nfa;
+mod semantic_action_table;
 
 use ast::{Lexer, Regex, Rule, RuleLhs, RuleRhs, SingleRule, Var};
 use dfa::{StateIdx as DfaStateIdx, DFA};
@@ -30,14 +32,14 @@ pub fn lexer(input: TokenStream) -> TokenStream {
         user_state_type,
         token_type,
         rules: top_level_rules,
-    } = syn::parse_macro_input!(input as Lexer);
+    } = syn::parse_macro_input!(input as Lexer<syn::Expr>);
 
     // Maps DFA names to their initial states in the final DFA
     let mut dfas: FxHashMap<String, dfa::StateIdx> = Default::default();
 
     let mut bindings: FxHashMap<Var, Regex> = Default::default();
 
-    let mut dfa: Option<DFA<DfaStateIdx, RuleRhs>> = None;
+    let mut dfa: Option<DFA<DfaStateIdx, RuleRhs<syn::Expr>>> = None;
 
     let mut user_error_type: Option<syn::Type> = None;
     let mut user_error_lifetimes: Vec<syn::Lifetime> = vec![];
@@ -61,7 +63,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                     if dfa.is_some() {
                         panic!("\"Init\" rule set can only be defined once");
                     }
-                    let mut nfa: NFA<RuleRhs> = NFA::new();
+                    let mut nfa: NFA<RuleRhs<syn::Expr>> = NFA::new();
                     for SingleRule { lhs, rhs } in rules {
                         match lhs {
                             RuleLhs::Regex(re) => nfa.add_regex(&bindings, &re, rhs),
@@ -85,7 +87,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                         None => panic!("First rule set should be named \"Init\""),
                         Some(dfa) => dfa,
                     };
-                    let mut nfa: NFA<RuleRhs> = NFA::new();
+                    let mut nfa: NFA<RuleRhs<syn::Expr>> = NFA::new();
 
                     for SingleRule { lhs, rhs } in rules {
                         match lhs {
@@ -115,7 +117,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                     );
                 }
 
-                let mut nfa: NFA<RuleRhs> = NFA::new();
+                let mut nfa: NFA<RuleRhs<syn::Expr>> = NFA::new();
                 for SingleRule { lhs, rhs } in rules {
                     match lhs {
                         RuleLhs::Regex(re) => nfa.add_regex(&bindings, &re, rhs),

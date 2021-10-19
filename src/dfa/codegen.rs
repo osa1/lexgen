@@ -29,7 +29,7 @@ use quote::{quote, ToTokens};
 const MAX_GUARD_SIZE: usize = 9;
 
 pub fn reify(
-    dfa: DFA<Trans<RuleRhs>, RuleRhs>,
+    dfa: DFA<Trans<RuleRhs<syn::Expr>>, RuleRhs<syn::Expr>>,
     user_state_type: Option<syn::Type>,
     user_error_type: Option<syn::Type>,
     user_error_type_lifetimes: Vec<syn::Lifetime>,
@@ -252,7 +252,10 @@ fn generate_switch(ctx: &CgCtx, enum_name: &syn::Ident) -> TokenStream {
 }
 
 /// Generate arms of `match self.state { ... }` of a DFA.
-fn generate_state_arms(ctx: &mut CgCtx, dfa: DFA<Trans<RuleRhs>, RuleRhs>) -> Vec<TokenStream> {
+fn generate_state_arms(
+    ctx: &mut CgCtx,
+    dfa: DFA<Trans<RuleRhs<syn::Expr>>, RuleRhs<syn::Expr>>,
+) -> Vec<TokenStream> {
     let DFA { states } = dfa;
 
     let mut match_arms: Vec<TokenStream> = vec![];
@@ -284,8 +287,8 @@ fn generate_state_arms(ctx: &mut CgCtx, dfa: DFA<Trans<RuleRhs>, RuleRhs>) -> Ve
 fn generate_state_arm(
     ctx: &mut CgCtx,
     state_idx: usize,
-    state: &State<Trans<RuleRhs>, RuleRhs>,
-    states: &[State<Trans<RuleRhs>, RuleRhs>],
+    state: &State<Trans<RuleRhs<syn::Expr>>, RuleRhs<syn::Expr>>,
+    states: &[State<Trans<RuleRhs<syn::Expr>>, RuleRhs<syn::Expr>>],
 ) -> TokenStream {
     let State {
         initial,
@@ -414,9 +417,9 @@ fn generate_state_arm(
 
 fn generate_fail_transition(
     ctx: &mut CgCtx,
-    states: &[State<Trans<RuleRhs>, RuleRhs>],
+    states: &[State<Trans<RuleRhs<syn::Expr>>, RuleRhs<syn::Expr>>],
     initial: bool,
-    trans: &Trans<RuleRhs>,
+    trans: &Trans<RuleRhs<syn::Expr>>,
 ) -> TokenStream {
     match trans {
         Trans::Trans(StateIdx(next_state)) => {
@@ -448,9 +451,9 @@ fn generate_fail_transition(
 /// Generate arms for `match char { ... }`
 fn generate_state_char_arms(
     ctx: &mut CgCtx,
-    states: &[State<Trans<RuleRhs>, RuleRhs>],
-    char_transitions: &FxHashMap<char, Trans<RuleRhs>>,
-    range_transitions: &RangeMap<Trans<RuleRhs>>,
+    states: &[State<Trans<RuleRhs<syn::Expr>>, RuleRhs<syn::Expr>>],
+    char_transitions: &FxHashMap<char, Trans<RuleRhs<syn::Expr>>>,
+    range_transitions: &RangeMap<Trans<RuleRhs<syn::Expr>>>,
     fail_action: &TokenStream,
 ) -> Vec<TokenStream> {
     // Arms of the `match` for the current character
@@ -559,7 +562,7 @@ fn generate_state_char_arms(
 
 // NB. Generates multiple states without enclosing `{...}`, see comments in
 // `generate_semantic_action`
-fn generate_rhs_code(ctx: &CgCtx, action: &RuleRhs) -> TokenStream {
+fn generate_rhs_code(ctx: &CgCtx, action: &RuleRhs<syn::Expr>) -> TokenStream {
     match action {
         RuleRhs::None => quote!(
             self.state = self.initial_state;

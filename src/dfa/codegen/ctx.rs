@@ -49,7 +49,7 @@ struct CgState {
 
 impl CgCtx {
     pub fn new(
-        dfa: &DFA<Trans<RuleRhs>, RuleRhs>,
+        dfa: &DFA<Trans<RuleRhs<syn::Expr>>, RuleRhs<syn::Expr>>,
         lexer_name: syn::Ident,
         token_type: syn::Type,
         user_error_type: Option<syn::Type>,

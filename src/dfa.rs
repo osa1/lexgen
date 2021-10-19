@@ -4,6 +4,7 @@ pub mod simplify;
 use crate::range_map::{Range, RangeMap};
 
 use std::convert::TryFrom;
+use std::iter::{FromIterator, IntoIterator};
 
 use fxhash::{FxHashMap, FxHashSet};
 
@@ -27,7 +28,7 @@ impl StateIdx {
 }
 
 #[derive(Debug)]
-struct State<T, A> {
+pub struct State<T, A> {
     // Is this the initial state of a rule set? This is important as failure transitions in initial
     // states consume the current character, but failure transitions in other states don't.
     initial: bool,
@@ -56,6 +57,28 @@ impl<T, A> State<T, A> {
         self.char_transitions.is_empty()
             && self.range_transitions.is_empty()
             && self.fail_transition.is_none()
+    }
+
+    pub fn map_semantic_action<B, F>(self, f: F) -> State<T, B>
+    where
+        F: FnMut(A) -> B,
+    {
+        let State {
+            initial,
+            char_transitions,
+            range_transitions,
+            fail_transition,
+            accepting,
+            predecessors,
+        } = self;
+        State {
+            initial,
+            char_transitions,
+            range_transitions,
+            fail_transition,
+            accepting: accepting.map(f),
+            predecessors,
+        }
     }
 }
 
@@ -129,11 +152,25 @@ impl<T, A> DFA<T, A> {
         DFA { states }
     }
 
-    fn into_state_indices(self) -> impl Iterator<Item = (StateIdx, State<T, A>)> {
+    pub fn into_state_indices(self) -> impl Iterator<Item = (StateIdx, State<T, A>)> {
         self.states
             .into_iter()
             .enumerate()
             .map(|(state_idx, state)| (StateIdx(state_idx), state))
+    }
+}
+
+impl<T, A> FromIterator<(StateIdx, State<T, A>)> for DFA<T, A> {
+    fn from_iter<I>(iter: I) -> Self
+    where
+        I: IntoIterator<Item = (StateIdx, State<T, A>)>,
+    {
+        let mut states: Vec<(StateIdx, State<T, A>)> = iter.into_iter().collect();
+        states.sort_by_key(|&(state_idx, _)| state_idx);
+
+        DFA {
+            states: states.into_iter().map(|(_, state)| state).collect(),
+        }
     }
 }
 
