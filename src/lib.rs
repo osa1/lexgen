@@ -156,10 +156,14 @@ pub fn lexer(input: TokenStream) -> TokenStream {
         );
     }
 
-    let dfa = dfa::simplify::simplify(dfa.unwrap(), &mut dfas);
+    let (dfa, semantic_action_table) =
+        number_semantic_actions::number_semantic_actions(dfa.unwrap());
+
+    let dfa = dfa::simplify::simplify(dfa, &mut dfas);
 
     dfa::codegen::reify(
         dfa,
+        semantic_action_table,
         user_state_type,
         user_error_type,
         user_error_lifetimes,

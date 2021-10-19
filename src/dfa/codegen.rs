@@ -8,6 +8,7 @@ use super::{State, StateIdx, DFA};
 
 use crate::ast::{RuleKind, RuleRhs};
 use crate::range_map::RangeMap;
+use crate::semantic_action_table::{SemanticActionIdx, SemanticActionTable};
 
 use std::convert::TryFrom;
 
@@ -29,7 +30,8 @@ use quote::{quote, ToTokens};
 const MAX_GUARD_SIZE: usize = 9;
 
 pub fn reify(
-    dfa: DFA<Trans<RuleRhs<syn::Expr>>, RuleRhs<syn::Expr>>,
+    dfa: DFA<Trans<RuleRhs<SemanticActionIdx>>, RuleRhs<SemanticActionIdx>>,
+    semantic_actions: SemanticActionTable,
     user_state_type: Option<syn::Type>,
     user_error_type: Option<syn::Type>,
     user_error_type_lifetimes: Vec<syn::Lifetime>,
@@ -64,7 +66,14 @@ pub fn reify(
         ),
     };
 
-    let mut ctx = CgCtx::new(&dfa, lexer_name, token_type, user_error_type, rule_states);
+    let mut ctx = CgCtx::new(
+        &dfa,
+        semantic_actions,
+        lexer_name,
+        token_type,
+        user_error_type,
+        rule_states,
+    );
 
     let user_state_type = user_state_type
         .map(|ty| ty.into_token_stream())
@@ -113,6 +122,8 @@ pub fn reify(
             )
         })
         .collect();
+
+    let semantic_action_fns = generate_semantic_action_fns(&ctx);
 
     let action_type_name = ctx.action_type_name();
     let handle_type_name = ctx.handle_type_name();
@@ -213,6 +224,7 @@ pub fn reify(
 
         #(#search_tables)*
         #binary_search_fn
+        #semantic_action_fns
 
         impl<'input> Iterator for #lexer_name<'input> {
             type Item = Result<(usize, #token_type, usize), LexerError<#(#user_error_type_lifetimes),*>>;
@@ -254,7 +266,7 @@ fn generate_switch(ctx: &CgCtx, enum_name: &syn::Ident) -> TokenStream {
 /// Generate arms of `match self.state { ... }` of a DFA.
 fn generate_state_arms(
     ctx: &mut CgCtx,
-    dfa: DFA<Trans<RuleRhs<syn::Expr>>, RuleRhs<syn::Expr>>,
+    dfa: DFA<Trans<RuleRhs<SemanticActionIdx>>, RuleRhs<SemanticActionIdx>>,
 ) -> Vec<TokenStream> {
     let DFA { states } = dfa;
 
@@ -287,8 +299,8 @@ fn generate_state_arms(
 fn generate_state_arm(
     ctx: &mut CgCtx,
     state_idx: usize,
-    state: &State<Trans<RuleRhs<syn::Expr>>, RuleRhs<syn::Expr>>,
-    states: &[State<Trans<RuleRhs<syn::Expr>>, RuleRhs<syn::Expr>>],
+    state: &State<Trans<RuleRhs<SemanticActionIdx>>, RuleRhs<SemanticActionIdx>>,
+    states: &[State<Trans<RuleRhs<SemanticActionIdx>>, RuleRhs<SemanticActionIdx>>],
 ) -> TokenStream {
     let State {
         initial,
@@ -417,9 +429,9 @@ fn generate_state_arm(
 
 fn generate_fail_transition(
     ctx: &mut CgCtx,
-    states: &[State<Trans<RuleRhs<syn::Expr>>, RuleRhs<syn::Expr>>],
+    states: &[State<Trans<RuleRhs<SemanticActionIdx>>, RuleRhs<SemanticActionIdx>>],
     initial: bool,
-    trans: &Trans<RuleRhs<syn::Expr>>,
+    trans: &Trans<RuleRhs<SemanticActionIdx>>,
 ) -> TokenStream {
     match trans {
         Trans::Trans(StateIdx(next_state)) => {
@@ -451,9 +463,9 @@ fn generate_fail_transition(
 /// Generate arms for `match char { ... }`
 fn generate_state_char_arms(
     ctx: &mut CgCtx,
-    states: &[State<Trans<RuleRhs<syn::Expr>>, RuleRhs<syn::Expr>>],
-    char_transitions: &FxHashMap<char, Trans<RuleRhs<syn::Expr>>>,
-    range_transitions: &RangeMap<Trans<RuleRhs<syn::Expr>>>,
+    states: &[State<Trans<RuleRhs<SemanticActionIdx>>, RuleRhs<SemanticActionIdx>>],
+    char_transitions: &FxHashMap<char, Trans<RuleRhs<SemanticActionIdx>>>,
+    range_transitions: &RangeMap<Trans<RuleRhs<SemanticActionIdx>>>,
     fail_action: &TokenStream,
 ) -> Vec<TokenStream> {
     // Arms of the `match` for the current character
@@ -562,109 +574,86 @@ fn generate_state_char_arms(
 
 // NB. Generates multiple states without enclosing `{...}`, see comments in
 // `generate_semantic_action`
-fn generate_rhs_code(ctx: &CgCtx, action: &RuleRhs<syn::Expr>) -> TokenStream {
+fn generate_rhs_code(ctx: &CgCtx, action: &RuleRhs<SemanticActionIdx>) -> TokenStream {
     match action {
         RuleRhs::None => quote!(
             self.state = self.initial_state;
         ),
-        RuleRhs::Rhs { kind, expr } => generate_semantic_action(ctx, &expr, *kind),
+        RuleRhs::Rhs { kind: _, expr } => generate_semantic_action_call(ctx, *expr),
     }
 }
 
 // NB. This function generates multiple statements but without enclosing `{...}`. Make sure to
 // generate braces in the use site. This is to avoid redundant `{...}` in some cases (allows
 // prepending/appending statements without creating new blocks).
-fn generate_semantic_action(ctx: &CgCtx, expr: &syn::Expr, kind: RuleKind) -> TokenStream {
+fn generate_semantic_action_call(ctx: &CgCtx, expr: SemanticActionIdx) -> TokenStream {
+    let fn_ident = expr.symbol();
+    let handle_type_name = ctx.handle_type_name();
+    let action_type_name = ctx.action_type_name();
+    let has_user_error = ctx.user_error_type().is_some();
+
+    let map_res = if has_user_error {
+        quote!(match res {
+            Ok(tok) => Ok((self.current_match_start, tok, self.current_match_end)),
+            Err(err) => Err(LexerError::UserError(err)),
+        })
+    } else {
+        quote!(Ok((self.current_match_start, res, self.current_match_end)))
+    };
+
+    quote!(
+        let str = &self.input[self.current_match_start..self.current_match_end];
+        let handle = #handle_type_name {
+            iter: &mut self.iter,
+            match_: str,
+            user_state: &mut self.user_state,
+        };
+
+        match #fn_ident(handle) {
+            #action_type_name::Continue => {
+                self.state = self.initial_state;
+            }
+            #action_type_name::Return(res) => {
+                self.state = self.initial_state;
+                return Some(#map_res);
+            }
+            #action_type_name::Switch(rule_set) => {
+                self.switch(rule_set);
+            }
+            #action_type_name::SwitchAndReturn(res, rule_set) => {
+                self.switch(rule_set);
+                return Some(#map_res);
+            }
+        }
+    )
+}
+
+fn generate_semantic_action_fns(ctx: &CgCtx) -> TokenStream {
     let token_type = ctx.token_type();
-    match kind {
-        RuleKind::Simple => quote!(
-            let rhs: #token_type = #expr;
-            self.state = self.initial_state;
-            let match_start = self.current_match_start;
-            self.current_match_start = self.current_match_end;
-            return Some(Ok((match_start, rhs, self.current_match_end)));
-        ),
+    let user_error_type = ctx.user_error_type();
+    let handle_type_name = ctx.handle_type_name();
+    let action_type_name = ctx.action_type_name();
 
-        RuleKind::Fallible => {
-            let user_error_type = match ctx.user_error_type() {
-                None => panic!(
-                    "Fallible rules can only be used with a user error type, \
-                            declared with `type Error = ...;` syntax"
-                ),
-                Some(user_error_type) => user_error_type,
+    let result_type = match user_error_type {
+        None => quote!(#action_type_name<#token_type>),
+        Some(user_error_type) => quote!(#action_type_name<Result<#token_type, #user_error_type>>),
+    };
+
+    let fns: Vec<TokenStream> = ctx
+        .iter_semantic_actions()
+        .map(|(idx, (expr, kind))| {
+            let ident = idx.symbol();
+            let rhs = match kind {
+                RuleKind::Simple => quote!(|handle: #handle_type_name| { handle.return_(#expr) }),
+                RuleKind::Fallible => quote!(#expr),
+                RuleKind::Infallible => quote!(#expr),
             };
-            let handle_type_name = ctx.handle_type_name();
-            let action_type_name = ctx.action_type_name();
             quote!(
-                let rhs: fn(#handle_type_name<'_, 'input>) ->
-                    #action_type_name<Result<#token_type, #user_error_type>> = #expr;
-
-                let str = &self.input[self.current_match_start..self.current_match_end];
-                let handle = #handle_type_name {
-                    iter: &mut self.iter,
-                    match_: str,
-                    user_state: &mut self.user_state,
-                };
-
-                match rhs(handle) {
-                    #action_type_name::Continue => {
-                        self.state = self.initial_state;
-                    }
-                    #action_type_name::Return(res) => {
-                        self.state = self.initial_state;
-                        return Some(match res {
-                            Ok(tok) => Ok((self.current_match_start, tok, self.current_match_end)),
-                            Err(err) => Err(LexerError::UserError(err)),
-                        });
-                    }
-                    #action_type_name::Switch(rule_set) => {
-                        self.switch(rule_set);
-                    }
-                    #action_type_name::SwitchAndReturn(res, rule_set) => {
-                        self.switch(rule_set);
-                        return Some(match res {
-                            Ok(tok) => Ok((self.current_match_start, tok, self.current_match_end)),
-                            Err(err) => Err(LexerError::UserError(err)),
-                        });
-                    }
-                }
+                static #ident: for<'input> fn(#handle_type_name<'_, 'input>) -> #result_type =
+                    #rhs;
             )
-        }
+        })
+        .collect();
 
-        RuleKind::Infallible => {
-            let handle_type_name = ctx.handle_type_name();
-            let action_type_name = ctx.action_type_name();
-            quote!(
-                let rhs: fn(#handle_type_name<'_, 'input>) -> #action_type_name<#token_type> = #expr;
-
-                let str = &self.input[self.current_match_start..self.current_match_end];
-                let handle = #handle_type_name {
-                    iter: &mut self.iter,
-                    match_: str,
-                    user_state: &mut self.user_state,
-                };
-
-                match rhs(handle) {
-                    #action_type_name::Continue => {
-                        self.state = self.initial_state;
-                    }
-                    #action_type_name::Return(tok) => {
-                        self.state = self.initial_state;
-                        let match_start = self.current_match_start;
-                        self.current_match_start = self.current_match_end;
-                        return Some(Ok((match_start, tok, self.current_match_end)));
-                    }
-                    #action_type_name::Switch(rule_set) => {
-                        self.switch(rule_set);
-                    }
-                    #action_type_name::SwitchAndReturn(tok, rule_set) => {
-                        self.switch(rule_set);
-                        let match_start = self.current_match_start;
-                        self.current_match_start = self.current_match_end;
-                        return Some(Ok((match_start, tok, self.current_match_end)));
-                    }
-                }
-            )
-        }
-    }
+    quote!(#(#fns)*)
 }

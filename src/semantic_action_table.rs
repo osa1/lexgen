@@ -1,5 +1,7 @@
+use crate::ast::RuleKind;
+
 pub struct SemanticActionTable {
-    table: Vec<syn::Expr>,
+    table: Vec<(syn::Expr, RuleKind)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -10,13 +12,13 @@ impl SemanticActionTable {
         Self { table: vec![] }
     }
 
-    pub fn add(&mut self, expr: syn::Expr) -> SemanticActionIdx {
+    pub fn add(&mut self, expr: syn::Expr, kind: RuleKind) -> SemanticActionIdx {
         let idx = self.table.len();
-        self.table.push(expr);
+        self.table.push((expr, kind));
         SemanticActionIdx(idx)
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (SemanticActionIdx, &syn::Expr)> {
+    pub fn iter(&self) -> impl Iterator<Item = (SemanticActionIdx, &(syn::Expr, RuleKind))> {
         self.table
             .iter()
             .enumerate()

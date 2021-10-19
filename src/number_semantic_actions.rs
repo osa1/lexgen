@@ -10,7 +10,8 @@ pub fn number_semantic_actions<S>(
     let state_indices: DFA<S, RuleRhs<SemanticActionIdx>> = dfa
         .into_state_indices()
         .map(|(state_idx, state)| {
-            let state = state.map_semantic_action(|rhs| rhs.map_rhs(|rhs| tbl.add(rhs)));
+            let state =
+                state.map_semantic_action(|rhs| rhs.map_rhs(|rhs, kind| tbl.add(rhs, kind)));
             (state_idx, state)
         })
         .collect();

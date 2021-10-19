@@ -63,12 +63,12 @@ pub enum RuleRhs<Rhs> {
 impl<Rhs1> RuleRhs<Rhs1> {
     pub fn map_rhs<Rhs2, F>(self, mut f: F) -> RuleRhs<Rhs2>
     where
-        F: FnMut(Rhs1) -> Rhs2,
+        F: FnMut(Rhs1, RuleKind) -> Rhs2,
     {
         match self {
             RuleRhs::None => RuleRhs::None,
             RuleRhs::Rhs { expr, kind } => RuleRhs::Rhs {
-                expr: f(expr),
+                expr: f(expr, kind),
                 kind,
             },
         }
