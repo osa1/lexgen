@@ -594,11 +594,11 @@ fn generate_semantic_action_call(ctx: &CgCtx, expr: SemanticActionIdx) -> TokenS
 
     let map_res = if has_user_error {
         quote!(match res {
-            Ok(tok) => Ok((self.current_match_start, tok, self.current_match_end)),
+            Ok(tok) => Ok((match_start, tok, self.current_match_end)),
             Err(err) => Err(LexerError::UserError(err)),
         })
     } else {
-        quote!(Ok((self.current_match_start, res, self.current_match_end)))
+        quote!(Ok((match_start, res, self.current_match_end)))
     };
 
     quote!(
@@ -615,6 +615,8 @@ fn generate_semantic_action_call(ctx: &CgCtx, expr: SemanticActionIdx) -> TokenS
             }
             #action_type_name::Return(res) => {
                 self.state = self.initial_state;
+                let match_start = self.current_match_start;
+                self.current_match_start = self.current_match_end;
                 return Some(#map_res);
             }
             #action_type_name::Switch(rule_set) => {
@@ -622,6 +624,8 @@ fn generate_semantic_action_call(ctx: &CgCtx, expr: SemanticActionIdx) -> TokenS
             }
             #action_type_name::SwitchAndReturn(res, rule_set) => {
                 self.switch(rule_set);
+                let match_start = self.current_match_start;
+                self.current_match_start = self.current_match_end;
                 return Some(#map_res);
             }
         }
