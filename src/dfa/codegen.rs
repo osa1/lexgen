@@ -446,7 +446,7 @@ fn generate_fail_transition(
         }
 
         Trans::Accept(action) => {
-            let action_code = generate_rhs_code(ctx, &action);
+            let action_code = generate_rhs_code(ctx, action);
             if initial {
                 quote!(
                     self.current_match_end += char.len_utf8();
@@ -477,7 +477,7 @@ fn generate_state_char_arms(
     for (char, next) in char_transitions {
         match next {
             Trans::Accept(action) => {
-                let action_code = generate_rhs_code(ctx, &action);
+                let action_code = generate_rhs_code(ctx, action);
                 state_char_arms.push(quote!(
                     #char => {
                         self.current_match_end += char.len_utf8();
@@ -521,7 +521,7 @@ fn generate_state_char_arms(
                 char::try_from(range.end).unwrap(),
             )),
             Trans::Accept(action) => {
-                let action_code = generate_rhs_code(ctx, &action);
+                let action_code = generate_rhs_code(ctx, action);
                 let range_start = char::from_u32(range.start).unwrap();
                 let range_end = char::from_u32(range.end).unwrap();
                 state_char_arms.push(quote!(
