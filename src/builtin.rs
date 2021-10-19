@@ -25,7 +25,7 @@ pub enum BuiltinCharRange {
     XID_Continue,
 }
 
-pub static BUILTIN_RANGES: [(&'static str, BuiltinCharRange); 20] = [
+pub static BUILTIN_RANGES: [(&str, BuiltinCharRange); 20] = [
     ("alphabetic", BuiltinCharRange::Alphabetic),
     ("alphanumeric", BuiltinCharRange::Alphanumeric),
     ("ascii", BuiltinCharRange::Ascii),

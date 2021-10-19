@@ -715,7 +715,7 @@ fn generate_semantic_action_fns(ctx: &CgCtx) -> TokenStream {
 
     let fns: Vec<TokenStream> = ctx
         .iter_semantic_actions()
-        .filter_map(|(idx, action)| {
+        .map(|(idx, action)| {
             let ident = idx.symbol();
 
             let rhs = match action {
@@ -754,10 +754,10 @@ fn generate_semantic_action_fns(ctx: &CgCtx) -> TokenStream {
                 }
             };
 
-            Some(quote!(
+            quote!(
                 static #ident: for<'lexer, 'input> fn(#handle_type_name<'lexer, 'input>) -> #result_type =
                     #rhs;
-            ))
+            )
         })
         .collect();
 

@@ -26,7 +26,7 @@ pub fn simplify<K>(
     }
 
     for (_, t) in dfa_state_indices.iter_mut() {
-        let idx = match empty_states.binary_search_by(|(state_idx, _)| state_idx.cmp(&t)) {
+        let idx = match empty_states.binary_search_by(|(state_idx, _)| state_idx.cmp(t)) {
             Ok(idx) | Err(idx) => idx,
         };
         *t = t.map(|i| i - idx);
@@ -34,7 +34,7 @@ pub fn simplify<K>(
 
     let map_transition = |t: StateIdx| -> Option<Trans> {
         match empty_states.binary_search_by(|(state_idx, _action)| state_idx.cmp(&t)) {
-            Ok(idx) => empty_states[idx].1.clone().map(Trans::Accept),
+            Ok(idx) => empty_states[idx].1.map(Trans::Accept),
             Err(idx) => Some(Trans::Trans(t.map(|i| i - idx))),
         }
     };

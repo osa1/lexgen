@@ -82,7 +82,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                     // println!("DFA=\n{}", dfa_);
 
                     dfa = Some(dfa_);
-                    if let Some(_) = dfas.insert(name.to_string(), initial_state) {
+                    if dfas.insert(name.to_string(), initial_state).is_some() {
                         panic!("Rule set {:?} is defined multiple times", name.to_string());
                     }
                 } else {
@@ -105,7 +105,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                     // println!("DFA=\n{}", dfa_);
                     let dfa_idx = dfa.add_dfa(dfa_);
 
-                    if let Some(_) = dfas.insert(name.to_string(), dfa_idx) {
+                    if dfas.insert(name.to_string(), dfa_idx).is_some() {
                         panic!("Rule set {:?} is defined multiple times", name.to_string());
                     }
                 }
@@ -152,7 +152,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
     // println!("Final DFA=\n{}", dfa.as_ref().unwrap());
 
     // There should be a rule with name "Init"
-    if let None = dfas.get("Init") {
+    if dfas.get("Init").is_none() {
         panic!(
             "There should be a rule set named \"Init\". Current rules: {:?}",
             dfas.keys().collect::<Vec<&String>>()

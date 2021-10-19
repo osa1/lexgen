@@ -226,7 +226,7 @@ impl<A> Display for NFA<A> {
             }
         }
 
-        if let Some(_) = self.fail {
+        if self.fail.is_some() {
             writeln!(f, "*FAIL")?;
         }
 
