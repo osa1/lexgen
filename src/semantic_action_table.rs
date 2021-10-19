@@ -1,12 +1,11 @@
-use crate::ast::RuleKind;
+use crate::ast::RuleRhs;
 
 pub struct SemanticActionTable {
     table: Vec<SemanticAction>,
 }
 
 pub struct SemanticAction {
-    pub expr: syn::Expr,
-    pub kind: RuleKind,
+    pub action: RuleRhs,
     pub use_count: usize,
 }
 
@@ -18,11 +17,10 @@ impl SemanticActionTable {
         Self { table: vec![] }
     }
 
-    pub fn add(&mut self, expr: syn::Expr, kind: RuleKind) -> SemanticActionIdx {
+    pub fn add(&mut self, action: RuleRhs) -> SemanticActionIdx {
         let idx = self.table.len();
         self.table.push(SemanticAction {
-            expr,
-            kind,
+            action,
             use_count: 0,
         });
         SemanticActionIdx(idx)

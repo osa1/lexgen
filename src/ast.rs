@@ -42,7 +42,7 @@ pub enum Rule<Rhs> {
 
 pub struct SingleRule<Rhs> {
     pub lhs: RuleLhs,
-    pub rhs: RuleRhs<Rhs>,
+    pub rhs: Rhs,
 }
 
 #[derive(Debug)]
@@ -55,24 +55,9 @@ pub enum RuleLhs {
 }
 
 #[derive(Debug, Clone)]
-pub enum RuleRhs<Rhs> {
+pub enum RuleRhs {
     None,
-    Rhs { expr: Rhs, kind: RuleKind },
-}
-
-impl<Rhs1> RuleRhs<Rhs1> {
-    pub fn map_rhs<Rhs2, F>(self, mut f: F) -> RuleRhs<Rhs2>
-    where
-        F: FnMut(Rhs1, RuleKind) -> Rhs2,
-    {
-        match self {
-            RuleRhs::None => RuleRhs::None,
-            RuleRhs::Rhs { expr, kind } => RuleRhs::Rhs {
-                expr: f(expr, kind),
-                kind,
-            },
-        }
-    }
+    Rhs { expr: syn::Expr, kind: RuleKind },
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -285,7 +270,7 @@ impl Parse for RuleLhs {
     }
 }
 
-impl Parse for SingleRule<syn::Expr> {
+impl Parse for SingleRule<RuleRhs> {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let lhs = RuleLhs::parse(input)?;
 
@@ -316,7 +301,7 @@ impl Parse for SingleRule<syn::Expr> {
     }
 }
 
-impl Parse for Rule<syn::Expr> {
+impl Parse for Rule<RuleRhs> {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         if input.peek(syn::token::Let) {
             // Let binding
@@ -379,7 +364,7 @@ impl Parse for Rule<syn::Expr> {
     }
 }
 
-impl Parse for Lexer<syn::Expr> {
+impl Parse for Lexer<RuleRhs> {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let public = input.parse::<syn::token::Pub>().is_ok();
         let type_name = input.parse::<syn::Ident>()?;

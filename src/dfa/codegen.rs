@@ -30,7 +30,7 @@ use quote::{quote, ToTokens};
 const MAX_GUARD_SIZE: usize = 9;
 
 pub fn reify(
-    dfa: DFA<Trans, RuleRhs<SemanticActionIdx>>,
+    dfa: DFA<Trans, SemanticActionIdx>,
     semantic_actions: SemanticActionTable,
     user_state_type: Option<syn::Type>,
     user_error_type: Option<syn::Type>,
@@ -282,10 +282,7 @@ fn generate_switch(ctx: &CgCtx, enum_name: &syn::Ident) -> TokenStream {
 }
 
 /// Generate arms of `match self.state { ... }` of a DFA.
-fn generate_state_arms(
-    ctx: &mut CgCtx,
-    dfa: DFA<Trans, RuleRhs<SemanticActionIdx>>,
-) -> Vec<TokenStream> {
+fn generate_state_arms(ctx: &mut CgCtx, dfa: DFA<Trans, SemanticActionIdx>) -> Vec<TokenStream> {
     let DFA { states } = dfa;
 
     let mut match_arms: Vec<TokenStream> = vec![];
@@ -317,8 +314,8 @@ fn generate_state_arms(
 fn generate_state_arm(
     ctx: &mut CgCtx,
     state_idx: usize,
-    state: &State<Trans, RuleRhs<SemanticActionIdx>>,
-    states: &[State<Trans, RuleRhs<SemanticActionIdx>>],
+    state: &State<Trans, SemanticActionIdx>,
+    states: &[State<Trans, SemanticActionIdx>],
 ) -> TokenStream {
     let State {
         initial,
@@ -381,7 +378,7 @@ fn generate_state_arm(
         )
     } else if let Some(rhs) = accepting {
         // Accepting state
-        let action = generate_rhs_code(ctx, rhs);
+        let action = generate_rhs_code(ctx, *rhs);
 
         if char_transitions.is_empty() && range_transitions.is_empty() {
             quote!({
@@ -447,7 +444,7 @@ fn generate_state_arm(
 
 fn generate_fail_transition(
     ctx: &mut CgCtx,
-    states: &[State<Trans, RuleRhs<SemanticActionIdx>>],
+    states: &[State<Trans, SemanticActionIdx>],
     initial: bool,
     trans: &Trans,
 ) -> TokenStream {
@@ -464,7 +461,7 @@ fn generate_fail_transition(
         }
 
         Trans::Accept(action) => {
-            let action_code = generate_rhs_code(ctx, action);
+            let action_code = generate_rhs_code(ctx, *action);
             if initial {
                 quote!(
                     self.current_match_end += char.len_utf8();
@@ -481,7 +478,7 @@ fn generate_fail_transition(
 /// Generate arms for `match char { ... }`
 fn generate_state_char_arms(
     ctx: &mut CgCtx,
-    states: &[State<Trans, RuleRhs<SemanticActionIdx>>],
+    states: &[State<Trans, SemanticActionIdx>],
     char_transitions: &FxHashMap<char, Trans>,
     range_transitions: &RangeMap<Trans>,
     fail_action: &TokenStream,
@@ -495,7 +492,7 @@ fn generate_state_char_arms(
     for (char, next) in char_transitions {
         match next {
             Trans::Accept(action) => {
-                let action_code = generate_rhs_code(ctx, action);
+                let action_code = generate_rhs_code(ctx, *action);
                 state_char_arms.push(quote!(
                     #char => {
                         self.current_match_end += char.len_utf8();
@@ -539,7 +536,7 @@ fn generate_state_char_arms(
                 char::try_from(range.end).unwrap(),
             )),
             Trans::Accept(action) => {
-                let action_code = generate_rhs_code(ctx, action);
+                let action_code = generate_rhs_code(ctx, *action);
                 let range_start = char::from_u32(range.start).unwrap();
                 let range_end = char::from_u32(range.end).unwrap();
                 state_char_arms.push(quote!(
@@ -592,20 +589,15 @@ fn generate_state_char_arms(
 
 // NB. Generates multiple states without enclosing `{...}`, see comments in
 // `generate_semantic_action`
-fn generate_rhs_code(ctx: &CgCtx, action: &RuleRhs<SemanticActionIdx>) -> TokenStream {
-    match action {
-        RuleRhs::None => quote!(
-            self.state = self.initial_state;
-        ),
-        RuleRhs::Rhs { kind: _, expr } => generate_semantic_action_call(ctx, *expr),
-    }
+fn generate_rhs_code(ctx: &CgCtx, action: SemanticActionIdx) -> TokenStream {
+    generate_semantic_action_call(ctx, action)
 }
 
 // NB. This function generates multiple statements but without enclosing `{...}`. Make sure to
 // generate braces in the use site. This is to avoid redundant `{...}` in some cases (allows
 // prepending/appending statements without creating new blocks).
-fn generate_semantic_action_call(ctx: &CgCtx, expr: SemanticActionIdx) -> TokenStream {
-    let fn_ident = expr.symbol();
+fn generate_semantic_action_call(ctx: &CgCtx, action: SemanticActionIdx) -> TokenStream {
+    let fn_ident = action.symbol();
     let handle_type_name = ctx.handle_type_name();
     let action_type_name = ctx.action_type_name();
     let has_user_error = ctx.user_error_type().is_some();
@@ -663,7 +655,7 @@ fn generate_semantic_action_fns(ctx: &CgCtx) -> TokenStream {
 
     let fns: Vec<TokenStream> = ctx
         .iter_semantic_actions()
-        .filter_map(|(idx, SemanticAction { expr, kind, use_count })| {
+        .filter_map(|(idx, SemanticAction { action, use_count })| {
             // TODO
             // if *use_count == 1 {
             //     // Inlined, no need for semantic action fn
@@ -671,24 +663,43 @@ fn generate_semantic_action_fns(ctx: &CgCtx) -> TokenStream {
             // }
 
             let ident = idx.symbol();
-            let rhs = match kind {
-                RuleKind::Simple =>
+
+            let rhs = match action {
+                RuleRhs::None => {
                     if user_error_type.is_some() {
-                        quote!(|__handle: #handle_type_name| __handle.return_(#expr).map_token(Ok))
+                        quote!(|__handle: #handle_type_name| __handle.continue_().map_token(Ok))
                     } else {
-                        quote!(|__handle: #handle_type_name| __handle.return_(#expr))
-                    },
-                RuleKind::Fallible => quote!(#expr),
-                RuleKind::Infallible =>
-                    if user_error_type.is_some() {
-                        quote!(|__handle: #handle_type_name| {
-                            let semantic_action: for<'input> fn(#handle_type_name<'_, 'input>) -> #action_type_name<#token_type> = #expr;
-                            semantic_action(__handle).map_token(Ok)
-                        })
-                    } else {
-                        quote!(#expr)
-                    },
+                        quote!(|__handle: #handle_type_name| __handle.continue_())
+                    }
+                }
+
+                RuleRhs::Rhs { expr, kind } => {
+                    match kind {
+                        RuleKind::Simple => {
+                            if user_error_type.is_some() {
+                                quote!(|__handle: #handle_type_name| __handle.return_(#expr).map_token(Ok))
+                            } else {
+                                quote!(|__handle: #handle_type_name| __handle.return_(#expr))
+                            }
+                        }
+                        RuleKind::Fallible => quote!(#expr),
+                        RuleKind::Infallible => {
+                            if user_error_type.is_some() {
+                                quote!(|__handle: #handle_type_name| {
+                                    let semantic_action:
+                                        for<'input> fn(#handle_type_name<'_, 'input>) -> #action_type_name<#token_type> =
+                                            #expr;
+
+                                    semantic_action(__handle).map_token(Ok)
+                                })
+                            } else {
+                                quote!(#expr)
+                            }
+                        }
+                    }
+                }
             };
+
             Some(quote!(
                 static #ident: for<'input> fn(#handle_type_name<'_, 'input>) -> #result_type =
                     #rhs;

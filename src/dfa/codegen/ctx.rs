@@ -1,7 +1,6 @@
 use super::search_table::SearchTableSet;
 use super::StateIdx;
 use super::DFA;
-use crate::ast::RuleRhs;
 use crate::dfa::simplify::Trans;
 use crate::semantic_action_table::{SemanticAction, SemanticActionIdx, SemanticActionTable};
 
@@ -53,7 +52,7 @@ struct CgState {
 
 impl CgCtx {
     pub fn new(
-        dfa: &DFA<Trans, RuleRhs<SemanticActionIdx>>,
+        dfa: &DFA<Trans, SemanticActionIdx>,
         semantic_action_table: SemanticActionTable,
         lexer_name: syn::Ident,
         token_type: syn::Type,

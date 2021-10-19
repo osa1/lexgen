@@ -1,23 +1,22 @@
 use super::{State, StateIdx, DFA};
-use crate::ast::RuleRhs;
 use crate::semantic_action_table::{SemanticActionIdx, SemanticActionTable};
 
 use fxhash::FxHashMap;
 
 #[derive(Debug)]
 pub enum Trans {
-    Accept(RuleRhs<SemanticActionIdx>),
+    Accept(SemanticActionIdx),
     Trans(StateIdx),
 }
 
 /// Removes accepting states with no transitions, makes the transitions to those states accepting.
 pub fn simplify<K>(
-    dfa: DFA<StateIdx, RuleRhs<SemanticActionIdx>>,
+    dfa: DFA<StateIdx, SemanticActionIdx>,
     dfa_state_indices: &mut FxHashMap<K, StateIdx>,
     semantic_action_table: &mut SemanticActionTable,
-) -> DFA<Trans, RuleRhs<SemanticActionIdx>> {
-    let mut empty_states: Vec<(StateIdx, Option<RuleRhs<SemanticActionIdx>>)> = vec![];
-    let mut non_empty_states: Vec<(StateIdx, State<StateIdx, RuleRhs<SemanticActionIdx>>)> = vec![];
+) -> DFA<Trans, SemanticActionIdx> {
+    let mut empty_states: Vec<(StateIdx, Option<SemanticActionIdx>)> = vec![];
+    let mut non_empty_states: Vec<(StateIdx, State<StateIdx, SemanticActionIdx>)> = vec![];
 
     for (state_idx, state) in dfa.into_state_indices() {
         if state.has_no_transitions() {
@@ -36,18 +35,15 @@ pub fn simplify<K>(
 
     let mut map_transition = |t: StateIdx| -> Option<Trans> {
         match empty_states.binary_search_by(|(state_idx, _action)| state_idx.cmp(&t)) {
-            Ok(idx) => empty_states[idx].1.clone().map(|rhs| match rhs {
-                RuleRhs::None => Trans::Accept(RuleRhs::None),
-                RuleRhs::Rhs { expr, kind } => {
-                    semantic_action_table.record_use(expr);
-                    Trans::Accept(RuleRhs::Rhs { expr, kind })
-                }
+            Ok(idx) => empty_states[idx].1.clone().map(|rhs| {
+                semantic_action_table.record_use(rhs);
+                Trans::Accept(rhs)
             }),
             Err(idx) => Some(Trans::Trans(t.map(|i| i - idx))),
         }
     };
 
-    let new_states: Vec<State<Trans, RuleRhs<SemanticActionIdx>>> = non_empty_states
+    let new_states: Vec<State<Trans, SemanticActionIdx>> = non_empty_states
         .into_iter()
         .map(|(_state_idx, state)| {
             let State {
