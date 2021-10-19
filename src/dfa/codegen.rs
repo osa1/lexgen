@@ -129,6 +129,17 @@ pub fn reify(
     let handle_type_name = ctx.handle_type_name();
     let lexer_name = ctx.lexer_name();
     let token_type = ctx.token_type();
+
+    // Semantic action function return type
+    let result_type = match ctx.user_error_type() {
+        None => quote!(#action_type_name<#token_type>),
+        Some(user_error_type) => quote!(#action_type_name<Result<#token_type, #user_error_type>>),
+    };
+
+    // Type of semantic actions, used to store the last match, to be used when backtracking
+    let semantic_action_fn_type =
+        quote!(for<'lexer, 'input> fn(#handle_type_name<'lexer, 'input>) -> #result_type);
+
     quote!(
         // Possible outcomes of a user action
         enum #action_type_name<T> {
@@ -176,16 +187,38 @@ pub fn reify(
         }
 
         // The lexer type
-        #visibility struct #lexer_name<'input> {
+        #visibility struct #lexer_name<'input_> {
             // Current lexer state
             state: usize,
+
             // Which lexer state to switch to on successful match
             initial_state: usize,
+
             user_state: #user_state_type,
-            input: &'input str,
-            iter: std::iter::Peekable<std::str::CharIndices<'input>>,
+
+            // User-provided input string. Does not change after initialization.
+            input: &'input_ str,
+
+            // Start index of `iter`. We update this as we backtrack and update `iter`.
+            iter_byte_idx: usize,
+
+            // Character iterator. `Peekable` is used in the handler's `peek` method. Note that we
+            // can't use byte index returned by this directly, as we re-initialize this field when
+            // backtracking. Add `iter_byte_idx` to the byte index before using. When resetting,
+            // update `iter_byte_idx`.
+            iter: std::iter::Peekable<std::str::CharIndices<'input_>>,
+
+            // Where does the current match start. Byte index in `input`.
             current_match_start: usize,
+
+            // Where does the current match end (exclusive). Byte index in `input`.
             current_match_end: usize,
+
+            // If we skipped an accepting state, this holds the triple:
+            // - Skipped match start (byte index in `input`)
+            // - Semantic action (a function name)
+            // - Skipped match end (exclusive, byte index in `input`)
+            last_match: Option<(usize, #semantic_action_fn_type, usize)>,
         }
 
         #lexer_error_type
@@ -231,9 +264,11 @@ pub fn reify(
                     initial_state: 0,
                     user_state: Default::default(),
                     input,
+                    iter_byte_idx: 0,
                     iter: input.char_indices().peekable(),
                     current_match_start: 0,
                     current_match_end: 0,
+                    last_match: None,
                 }
             }
 
@@ -340,6 +375,23 @@ fn generate_state_arm(
         }
     };
 
+    let fail = |ctx: &CgCtx| -> TokenStream {
+        let error = make_lexer_error();
+        let action = generate_semantic_action_call(ctx, &quote!(semantic_action));
+        quote!({
+            match self.last_match.take() {
+                None => return Some(Err(#error)),
+                Some((match_start, semantic_action, match_end)) => {
+                    self.current_match_start = match_start;
+                    self.current_match_end = match_end;
+                    self.iter = self.input[match_end..].char_indices().peekable();
+                    self.iter_byte_idx = match_end;
+                    #action
+                }
+            }
+        })
+    };
+
     if state_idx == 0 {
         assert!(initial);
 
@@ -347,14 +399,11 @@ fn generate_state_arm(
         // stream ends. In non-initial states EOS (end-of-stream) returns the last (longest)
         // match, or fails (error).
 
-        // Fail with an error if we don't have a fail transition
+        // Backtrack or fail with an error if we don't have a fail transition
         let fail_action = fail_transition
             .as_ref()
             .map(|fail_transition| generate_fail_transition(ctx, states, true, fail_transition))
-            .unwrap_or_else(|| {
-                let error = make_lexer_error();
-                quote!({ return Some(Err(#error)) })
-            });
+            .unwrap_or_else(|| fail(ctx));
 
         let state_char_arms = generate_state_char_arms(
             ctx,
@@ -368,6 +417,7 @@ fn generate_state_arm(
             match self.iter.peek().copied() {
                 None => return None,
                 Some((char_idx, char)) => {
+                    let char_idx = self.iter_byte_idx + char_idx;
                     self.current_match_start = char_idx;
                     self.current_match_end = char_idx;
                     match char {
@@ -388,7 +438,13 @@ fn generate_state_arm(
             let state_char_arms =
                 generate_state_char_arms(ctx, states, char_transitions, range_transitions, &action);
 
-            quote!(
+            let semantic_fn = rhs.symbol();
+
+            // TODO: Braces can be removed in some cases
+            quote!({
+                self.last_match =
+                    Some((self.current_match_start, #semantic_fn, self.current_match_end));
+
                 match self.iter.peek().copied() {
                     None => {
                         #action
@@ -399,17 +455,14 @@ fn generate_state_arm(
                         }
                     }
                 }
-            )
+            })
         }
     } else {
         // Non-accepting state
         let fail_action = fail_transition
             .as_ref()
             .map(|fail_transition| generate_fail_transition(ctx, states, *initial, fail_transition))
-            .unwrap_or_else(|| {
-                let error = make_lexer_error();
-                quote!(return Some(Err(#error)))
-            });
+            .unwrap_or_else(|| fail(ctx));
 
         let state_char_arms = generate_state_char_arms(
             ctx,
@@ -433,7 +486,7 @@ fn generate_state_arm(
             None => {
                 #end_of_stream_action
             }
-            Some((char_idx, char)) => {
+            Some((_, char)) => {
                 match char {
                     #(#state_char_arms,)*
                 }
@@ -590,15 +643,31 @@ fn generate_state_char_arms(
 // NB. Generates multiple states without enclosing `{...}`, see comments in
 // `generate_semantic_action`
 fn generate_rhs_code(ctx: &CgCtx, action: SemanticActionIdx) -> TokenStream {
-    generate_semantic_action_call(ctx, action)
+    generate_semantic_action_call(ctx, &action.symbol().into_token_stream())
 }
 
 // NB. This function generates multiple statements but without enclosing `{...}`. Make sure to
 // generate braces in the use site. This is to avoid redundant `{...}` in some cases (allows
 // prepending/appending statements without creating new blocks).
-fn generate_semantic_action_call(ctx: &CgCtx, action: SemanticActionIdx) -> TokenStream {
-    let fn_ident = action.symbol();
+fn generate_semantic_action_call(ctx: &CgCtx, action_fn: &TokenStream) -> TokenStream {
     let handle_type_name = ctx.handle_type_name();
+
+    let action_result = generate_action_result_handler(ctx, quote!(#action_fn(handle)));
+
+    quote!(
+        let str = &self.input[self.current_match_start..self.current_match_end];
+
+        let handle = #handle_type_name {
+            iter: &mut self.iter,
+            match_: str,
+            user_state: &mut self.user_state,
+        };
+
+        #action_result
+    )
+}
+
+fn generate_action_result_handler(ctx: &CgCtx, action_result: TokenStream) -> TokenStream {
     let action_type_name = ctx.action_type_name();
     let has_user_error = ctx.user_error_type().is_some();
 
@@ -611,35 +680,26 @@ fn generate_semantic_action_call(ctx: &CgCtx, action: SemanticActionIdx) -> Toke
         quote!(Ok((match_start, res, self.current_match_end)))
     };
 
-    quote!(
-        let str = &self.input[self.current_match_start..self.current_match_end];
-        let handle = #handle_type_name {
-            iter: &mut self.iter,
-            match_: str,
-            user_state: &mut self.user_state,
-        };
-
-        match #fn_ident(handle) {
-            #action_type_name::Continue => {
-                self.state = self.initial_state;
-            }
-            #action_type_name::Return(res) => {
-                self.state = self.initial_state;
-                let match_start = self.current_match_start;
-                self.current_match_start = self.current_match_end;
-                return Some(#map_res);
-            }
-            #action_type_name::Switch(rule_set) => {
-                self.switch(rule_set);
-            }
-            #action_type_name::SwitchAndReturn(res, rule_set) => {
-                self.switch(rule_set);
-                let match_start = self.current_match_start;
-                self.current_match_start = self.current_match_end;
-                return Some(#map_res);
-            }
+    quote!(match #action_result {
+        #action_type_name::Continue => {
+            self.state = self.initial_state;
         }
-    )
+        #action_type_name::Return(res) => {
+            self.state = self.initial_state;
+            let match_start = self.current_match_start;
+            self.current_match_start = self.current_match_end;
+            return Some(#map_res);
+        }
+        #action_type_name::Switch(rule_set) => {
+            self.switch(rule_set);
+        }
+        #action_type_name::SwitchAndReturn(res, rule_set) => {
+            self.switch(rule_set);
+            let match_start = self.current_match_start;
+            self.current_match_start = self.current_match_end;
+            return Some(#map_res);
+        }
+    })
 }
 
 fn generate_semantic_action_fns(ctx: &CgCtx) -> TokenStream {
@@ -681,7 +741,7 @@ fn generate_semantic_action_fns(ctx: &CgCtx) -> TokenStream {
                             if user_error_type.is_some() {
                                 quote!(|__handle: #handle_type_name| {
                                     let semantic_action:
-                                        for<'input> fn(#handle_type_name<'_, 'input>) -> #action_type_name<#token_type> =
+                                        for<'lexer, 'input> fn(#handle_type_name<'lexer, 'input>) -> #action_type_name<#token_type> =
                                             #expr;
 
                                     semantic_action(__handle).map_token(Ok)
@@ -695,7 +755,7 @@ fn generate_semantic_action_fns(ctx: &CgCtx) -> TokenStream {
             };
 
             Some(quote!(
-                static #ident: for<'input> fn(#handle_type_name<'_, 'input>) -> #result_type =
+                static #ident: for<'lexer, 'input> fn(#handle_type_name<'lexer, 'input>) -> #result_type =
                     #rhs;
             ))
         })

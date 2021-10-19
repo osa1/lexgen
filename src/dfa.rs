@@ -1,6 +1,9 @@
 pub mod codegen;
 pub mod simplify;
 
+#[cfg(test)]
+pub mod simulate;
+
 use crate::range_map::{Range, RangeMap};
 
 use std::convert::TryFrom;
@@ -230,45 +233,6 @@ impl<A> DFA<StateIdx, A> {
         }
 
         StateIdx(n_current_states)
-    }
-}
-
-impl<A> DFA<StateIdx, A> {
-    #[cfg(test)]
-    pub fn simulate(&self, chars: &mut dyn Iterator<Item = char>) -> Option<&A> {
-        let mut state = StateIdx(0);
-
-        'char_loop: for char in chars {
-            if let Some(next) = self.states[state.0].char_transitions.get(&char) {
-                state = *next;
-                continue;
-            }
-
-            for range in self.states[state.0].range_transitions.iter() {
-                let Range { start, end, values } = range;
-                assert_eq!(values.len(), 1);
-                let next = values[0];
-                if char as u32 >= *start && char as u32 <= *end {
-                    state = next;
-                    continue 'char_loop;
-                }
-            }
-
-            if let Some(next) = self.states[state.0].fail_transition {
-                state = next;
-                continue;
-            }
-
-            return None;
-        }
-
-        match &self.states[state.0].accepting {
-            Some(action) => Some(action),
-            None => match self.states[state.0].fail_transition {
-                None => None,
-                Some(fail_state) => self.states[fail_state.0].accepting.as_ref(),
-            },
-        }
     }
 }
 
