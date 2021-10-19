@@ -22,7 +22,7 @@ impl<A: Copy> DFA<StateIdx, A> {
 
         let mut char_indices = input.char_indices();
 
-        // Where the current macth starts
+        // Where the current match starts
         let mut match_start = 0;
 
         // Index of current character in input string

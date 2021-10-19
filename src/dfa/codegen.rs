@@ -129,6 +129,17 @@ pub fn reify(
     let handle_type_name = ctx.handle_type_name();
     let lexer_name = ctx.lexer_name();
     let token_type = ctx.token_type();
+
+    // Semantic action function return type
+    let result_type = match ctx.user_error_type() {
+        None => quote!(#action_type_name<#token_type>),
+        Some(user_error_type) => quote!(#action_type_name<Result<#token_type, #user_error_type>>),
+    };
+
+    // Type of semantic actions, used to store the last match, to be used when backtracking
+    let semantic_action_fn_type =
+        quote!(for<'lexer, 'input> fn(#handle_type_name<'lexer, 'input>) -> #result_type);
+
     quote!(
         // Possible outcomes of a user action
         enum #action_type_name<T> {
@@ -176,16 +187,17 @@ pub fn reify(
         }
 
         // The lexer type
-        #visibility struct #lexer_name<'input> {
+        #visibility struct #lexer_name<'input_> {
             // Current lexer state
             state: usize,
             // Which lexer state to switch to on successful match
             initial_state: usize,
             user_state: #user_state_type,
-            input: &'input str,
-            iter: std::iter::Peekable<std::str::CharIndices<'input>>,
+            input: &'input_ str,
+            iter: std::iter::Peekable<std::str::CharIndices<'input_>>,
             current_match_start: usize,
             current_match_end: usize,
+            previous_match: Option<(usize, #semantic_action_fn_type, usize)>,
         }
 
         #lexer_error_type
@@ -234,6 +246,7 @@ pub fn reify(
                     iter: input.char_indices().peekable(),
                     current_match_start: 0,
                     current_match_end: 0,
+                    previous_match: None,
                 }
             }
 
@@ -388,7 +401,13 @@ fn generate_state_arm(
             let state_char_arms =
                 generate_state_char_arms(ctx, states, char_transitions, range_transitions, &action);
 
-            quote!(
+            let semantic_fn = rhs.symbol();
+
+            // TODO: Braces can be removed in some cases
+            quote!({
+                self.previous_match =
+                    Some((self.current_match_start, #semantic_fn, self.current_match_end));
+
                 match self.iter.peek().copied() {
                     None => {
                         #action
@@ -399,7 +418,7 @@ fn generate_state_arm(
                         }
                     }
                 }
-            )
+            })
         }
     } else {
         // Non-accepting state
@@ -681,7 +700,7 @@ fn generate_semantic_action_fns(ctx: &CgCtx) -> TokenStream {
                             if user_error_type.is_some() {
                                 quote!(|__handle: #handle_type_name| {
                                     let semantic_action:
-                                        for<'input> fn(#handle_type_name<'_, 'input>) -> #action_type_name<#token_type> =
+                                        for<'lexer, 'input> fn(#handle_type_name<'lexer, 'input>) -> #action_type_name<#token_type> =
                                             #expr;
 
                                     semantic_action(__handle).map_token(Ok)
@@ -695,7 +714,7 @@ fn generate_semantic_action_fns(ctx: &CgCtx) -> TokenStream {
             };
 
             Some(quote!(
-                static #ident: for<'input> fn(#handle_type_name<'_, 'input>) -> #result_type =
+                static #ident: for<'lexer, 'input> fn(#handle_type_name<'lexer, 'input>) -> #result_type =
                     #rhs;
             ))
         })
