@@ -589,15 +589,19 @@ fn generate_state_char_arms(
 
 // NB. Generates multiple states without enclosing `{...}`, see comments in
 // `generate_semantic_action`
-fn generate_rhs_code(ctx: &CgCtx, action: SemanticActionIdx) -> TokenStream {
-    generate_semantic_action_call(ctx, action)
+fn generate_rhs_code(ctx: &CgCtx, action_idx: SemanticActionIdx) -> TokenStream {
+    let action = ctx.semantic_action(action_idx);
+    if action.use_count == 1 {
+        generate_inline_semantic_action(ctx, action)
+    } else {
+        generate_semantic_action_call(ctx, action_idx.symbol())
+    }
 }
 
 // NB. This function generates multiple statements but without enclosing `{...}`. Make sure to
 // generate braces in the use site. This is to avoid redundant `{...}` in some cases (allows
 // prepending/appending statements without creating new blocks).
-fn generate_semantic_action_call(ctx: &CgCtx, action: SemanticActionIdx) -> TokenStream {
-    let fn_ident = action.symbol();
+fn generate_semantic_action_call(ctx: &CgCtx, fn_ident: syn::Ident) -> TokenStream {
     let handle_type_name = ctx.handle_type_name();
     let action_type_name = ctx.action_type_name();
     let has_user_error = ctx.user_error_type().is_some();
@@ -642,6 +646,111 @@ fn generate_semantic_action_call(ctx: &CgCtx, action: SemanticActionIdx) -> Toke
     )
 }
 
+fn generate_inline_semantic_action(ctx: &CgCtx, action: &SemanticAction) -> TokenStream {
+    match &action.action {
+        RuleRhs::None => quote!(self.state = self.initial_state;),
+
+        RuleRhs::Rhs { expr, kind } => {
+            let token_type = ctx.token_type();
+            match kind {
+                RuleKind::Simple => quote!(
+                    let rhs: #token_type = #expr;
+                    self.state = self.initial_state;
+                    let match_start = self.current_match_start;
+                    self.current_match_start = self.current_match_end;
+                    return Some(Ok((match_start, rhs, self.current_match_end)));
+                ),
+
+                RuleKind::Fallible => {
+                    let user_error_type = match ctx.user_error_type() {
+                        None => panic!(
+                            "Fallible rules can only be used with a user error type, \
+                            declared with `type Error = ...;` syntax"
+                        ),
+                        Some(user_error_type) => user_error_type,
+                    };
+                    let handle_type_name = ctx.handle_type_name();
+                    let action_type_name = ctx.action_type_name();
+                    quote!(
+                        let rhs: fn(#handle_type_name<'_, 'input>) ->
+                            #action_type_name<Result<#token_type, #user_error_type>> = #expr;
+
+                        let str = &self.input[self.current_match_start..self.current_match_end];
+                        let handle = #handle_type_name {
+                            iter: &mut self.iter,
+                            match_: str,
+                            user_state: &mut self.user_state,
+                        };
+
+                        match rhs(handle) {
+                            #action_type_name::Continue => {
+                                self.state = self.initial_state;
+                            }
+                            #action_type_name::Return(res) => {
+                                self.state = self.initial_state;
+                                let match_start = self.current_match_start;
+                                self.current_match_start = self.current_match_end;
+                                return Some(match res {
+                                    Ok(tok) => Ok((self.match_start, tok, self.current_match_end)),
+                                    Err(err) => Err(LexerError::UserError(err)),
+                                });
+                            }
+                            #action_type_name::Switch(rule_set) => {
+                                self.switch(rule_set);
+                            }
+                            #action_type_name::SwitchAndReturn(res, rule_set) => {
+                                self.switch(rule_set);
+                                let match_start = self.current_match_start;
+                                self.current_match_start = self.current_match_end;
+                                return Some(match res {
+                                    Ok(tok) => Ok((match_start, tok, self.current_match_end)),
+                                    Err(err) => Err(LexerError::UserError(err)),
+                                });
+                            }
+                        }
+                    )
+                }
+
+                RuleKind::Infallible => {
+                    let handle_type_name = ctx.handle_type_name();
+                    let action_type_name = ctx.action_type_name();
+                    quote!(
+                        let rhs: fn(#handle_type_name<'_, 'input>) -> #action_type_name<#token_type> = #expr;
+
+                        let str = &self.input[self.current_match_start..self.current_match_end];
+                        let handle = #handle_type_name {
+                            iter: &mut self.iter,
+                            match_: str,
+                            user_state: &mut self.user_state,
+                        };
+
+                        match rhs(handle) {
+                            #action_type_name::Continue => {
+                                self.state = self.initial_state;
+                            }
+                            #action_type_name::Return(tok) => {
+                                self.state = self.initial_state;
+                                let match_start = self.current_match_start;
+                                self.current_match_start = self.current_match_end;
+                                return Some(Ok((match_start, tok, self.current_match_end)));
+                            }
+                            #action_type_name::Switch(rule_set) => {
+                                self.switch(rule_set);
+                            }
+                            #action_type_name::SwitchAndReturn(tok, rule_set) => {
+                                self.switch(rule_set);
+                                let match_start = self.current_match_start;
+                                self.current_match_start = self.current_match_end;
+                                return Some(Ok((match_start, tok, self.current_match_end)));
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
 fn generate_semantic_action_fns(ctx: &CgCtx) -> TokenStream {
     let token_type = ctx.token_type();
     let user_error_type = ctx.user_error_type();
@@ -656,11 +765,10 @@ fn generate_semantic_action_fns(ctx: &CgCtx) -> TokenStream {
     let fns: Vec<TokenStream> = ctx
         .iter_semantic_actions()
         .filter_map(|(idx, SemanticAction { action, use_count })| {
-            // TODO
-            // if *use_count == 1 {
-            //     // Inlined, no need for semantic action fn
-            //     return None;
-            // }
+            if *use_count == 1 {
+                // Inlined, no need for semantic action fn
+                return None;
+            }
 
             let ident = idx.symbol();
 
