@@ -143,6 +143,24 @@ pub fn reify(
             SwitchAndReturn(T, #rule_name_enum_name),
         }
 
+        impl<T> #action_type_name<T> {
+            fn map_token<F, T1>(self, f: F) -> #action_type_name<T1>
+                where
+                    F: Fn(T) -> T1
+            {
+                match self {
+                    #action_type_name::Continue =>
+                        #action_type_name::Continue,
+                    #action_type_name::Return(t) =>
+                        #action_type_name::Return(f(t)),
+                    #action_type_name::Switch(state) =>
+                        #action_type_name::Switch(state),
+                    #action_type_name::SwitchAndReturn(t, state) =>
+                        #action_type_name::SwitchAndReturn(f(t), state),
+                }
+            }
+        }
+
         // An enum for the rule sets in the DFA. `Init` is the initial, unnamed rule set.
         #[derive(Clone, Copy)]
         enum #rule_name_enum_name {
@@ -643,14 +661,31 @@ fn generate_semantic_action_fns(ctx: &CgCtx) -> TokenStream {
         Some(user_error_type) => quote!(#action_type_name<Result<#token_type, #user_error_type>>),
     };
 
+    // If we have a user error specified, then map simple and infallible rules to `Result<tok,
+    // error>`
+    let map_token = if user_error_type.is_some() {
+        quote!(res.map_token(|tok: #token_type| Ok(tok)))
+    } else {
+        quote!(res)
+    };
+
     let fns: Vec<TokenStream> = ctx
         .iter_semantic_actions()
         .map(|(idx, (expr, kind))| {
             let ident = idx.symbol();
             let rhs = match kind {
-                RuleKind::Simple => quote!(|handle: #handle_type_name| { handle.return_(#expr) }),
+                RuleKind::Simple =>
+                    quote!(|__handle: #handle_type_name| {
+                        let res = __handle.return_(#expr);
+                        #map_token
+                    }),
                 RuleKind::Fallible => quote!(#expr),
-                RuleKind::Infallible => quote!(#expr),
+                RuleKind::Infallible =>
+                    quote!(|__handle: #handle_type_name| {
+                        let semantic_action: for<'input> fn(#handle_type_name<'_, 'input>) -> #action_type_name<#token_type> = #expr;
+                        let res = semantic_action(__handle);
+                        #map_token
+                    }),
             };
             quote!(
                 static #ident: for<'input> fn(#handle_type_name<'_, 'input>) -> #result_type =
