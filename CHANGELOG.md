@@ -1,6 +1,9 @@
-# Unreleased
+# 2021/10/19: 0.6.0
 
 - Fixed precedences of concatenation (juxtaposition) and alternation (`|`).
+
+- Fixed lexing in lexers that require backtracking to implement longest match
+  rule. (#16)
 
 # 2021/10/07: 0.5.0
 
