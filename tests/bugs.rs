@@ -256,7 +256,7 @@ fn issue_16_backtracking_2() {
     }
 
     let mut lexer = Lexer::new("xyzxya");
-    assert_eq!(next(&mut lexer), Some(Ok("xyz"))); // fails
+    assert_eq!(next(&mut lexer), Some(Ok("xyz")));
     assert_eq!(next(&mut lexer), Some(Ok("xya")));
     assert_eq!(next(&mut lexer), None);
 }
