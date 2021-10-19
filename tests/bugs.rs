@@ -209,3 +209,54 @@ fn return_should_reset_match() {
     assert_eq!(next(&mut lexer), Some(Ok("bbb")));
     assert_eq!(next(&mut lexer), None);
 }
+
+#[test]
+fn issue_16_backtracking_1() {
+    fn return_match<'lexer, 'input>(
+        lexer: LexerHandle<'lexer, 'input>,
+    ) -> LexerAction<&'input str> {
+        let match_ = lexer.match_();
+        lexer.return_(match_)
+    }
+
+    lexer! {
+        Lexer -> &'input str;
+
+        'a'+ 'b' => return_match,
+        'a' => return_match,
+    }
+
+    let mut lexer = Lexer::new("aaaab");
+    assert_eq!(next(&mut lexer), Some(Ok("aaaab")));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("aaaa");
+    assert_eq!(next(&mut lexer), Some(Ok("a")));
+    assert_eq!(next(&mut lexer), Some(Ok("a")));
+    assert_eq!(next(&mut lexer), Some(Ok("a")));
+    assert_eq!(next(&mut lexer), Some(Ok("a")));
+    assert_eq!(next(&mut lexer), None);
+}
+
+#[test]
+fn issue_16_backtracking_2() {
+    fn return_match<'lexer, 'input>(
+        lexer: LexerHandle<'lexer, 'input>,
+    ) -> LexerAction<&'input str> {
+        let match_ = lexer.match_();
+        lexer.return_(match_)
+    }
+
+    lexer! {
+        Lexer -> &'input str;
+
+        "xyzxyz" => return_match,
+        "xyz" => return_match,
+        "xya" => return_match,
+    }
+
+    let mut lexer = Lexer::new("xyzxya");
+    assert_eq!(next(&mut lexer), Some(Ok("xyz"))); // fails
+    assert_eq!(next(&mut lexer), Some(Ok("xya")));
+    assert_eq!(next(&mut lexer), None);
+}
