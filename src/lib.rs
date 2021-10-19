@@ -9,8 +9,10 @@ mod dfa;
 mod display;
 mod nfa;
 mod nfa_to_dfa;
+mod number_semantic_actions;
 mod range_map;
 mod regex_to_nfa;
+mod semantic_action_table;
 
 use ast::{Lexer, Regex, Rule, RuleLhs, RuleRhs, SingleRule, Var};
 use dfa::{StateIdx as DfaStateIdx, DFA};
@@ -30,7 +32,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
         user_state_type,
         token_type,
         rules: top_level_rules,
-    } = syn::parse_macro_input!(input as Lexer);
+    } = syn::parse_macro_input!(input as Lexer<RuleRhs>);
 
     // Maps DFA names to their initial states in the final DFA
     let mut dfas: FxHashMap<String, dfa::StateIdx> = Default::default();
@@ -154,10 +156,14 @@ pub fn lexer(input: TokenStream) -> TokenStream {
         );
     }
 
-    let dfa = dfa::simplify::simplify(dfa.unwrap(), &mut dfas);
+    let (dfa, semantic_action_table) =
+        number_semantic_actions::number_semantic_actions(dfa.unwrap());
+
+    let dfa = dfa::simplify::simplify(dfa, &mut dfas);
 
     dfa::codegen::reify(
         dfa,
+        semantic_action_table,
         user_state_type,
         user_error_type,
         user_error_lifetimes,
