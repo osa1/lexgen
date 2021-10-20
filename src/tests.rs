@@ -409,7 +409,7 @@ fn zero_or_more_concat_confusion_3() {
 }
 
 #[test]
-fn simulate_any() {
+fn simulate_any_1() {
     let mut nfa: NFA<usize> = NFA::new();
 
     nfa.add_regex(&Default::default(), &Regex::String("ab".to_owned()), 1);
@@ -423,6 +423,25 @@ fn simulate_any() {
             ("abc", vec![("ab", 1), ("c", 2)], None),
         ],
     );
+}
+
+#[test]
+fn simulate_any_2() {
+    let mut nfa: NFA<usize> = NFA::new();
+
+    nfa.add_regex(
+        &Default::default(),
+        &Regex::Concat(
+            Box::new(Regex::Char('\'')),
+            Box::new(Regex::Concat(
+                Box::new(Regex::Any),
+                Box::new(Regex::Char('\'')),
+            )),
+        ),
+        1,
+    );
+
+    test_simulate(&nfa, vec![("'a'", vec![("'a'", 1)], None)]);
 }
 
 #[test]

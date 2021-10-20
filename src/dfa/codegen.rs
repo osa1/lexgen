@@ -292,7 +292,7 @@ pub fn reify(
                 }
 
                 loop {
-                    // println!("state = {:?}, next char = {:?}", self.state, self.iter.peek());
+                    println!("state = {:?}, next char = {:?}", self.state, self.iter.peek());
                     match self.state {
                         #(#match_arms,)*
                     }
@@ -412,7 +412,7 @@ fn generate_state_arm(
         // fail (backtrack or raise error)
         let default_action = any_transition
             .as_ref()
-            .map(|any_transition| generate_any_transition(ctx, states, true, any_transition))
+            .map(|any_transition| generate_any_transition(ctx, states, any_transition))
             .unwrap_or_else(|| fail(ctx));
 
         let end_of_input_action = match end_of_input_transition {
@@ -460,7 +460,7 @@ fn generate_state_arm(
         // Accepting state
         let default_action = any_transition
             .as_ref()
-            .map(|any_transition| generate_any_transition(ctx, states, true, any_transition))
+            .map(|any_transition| generate_any_transition(ctx, states, any_transition))
             .unwrap_or_else(|| generate_rhs_code(ctx, *rhs));
 
         let end_of_input_action = match end_of_input_transition {
@@ -516,7 +516,7 @@ fn generate_state_arm(
         // Non-accepting state
         let default_action = any_transition
             .as_ref()
-            .map(|any_transition| generate_any_transition(ctx, states, *initial, any_transition))
+            .map(|any_transition| generate_any_transition(ctx, states, any_transition))
             .unwrap_or_else(|| fail(ctx));
 
         let state_char_arms = generate_state_char_arms(
@@ -552,7 +552,7 @@ fn generate_state_arm(
                 } else {
                     // Otherwise we run the fail action and go to initial state of the current DFA.
                     // Initial state will then fail.
-                    default_action.clone()
+                    default_action
                 }
             }
         };
@@ -573,7 +573,6 @@ fn generate_state_arm(
 fn generate_any_transition(
     ctx: &mut CgCtx,
     states: &[State<Trans, SemanticActionIdx>],
-    initial: bool,
     trans: &Trans,
 ) -> TokenStream {
     match trans {
@@ -592,15 +591,11 @@ fn generate_any_transition(
 
         Trans::Accept(action) => {
             let action_code = generate_rhs_code(ctx, *action);
-            if initial {
-                quote!(
-                    self.current_match_end += char.len_utf8();
-                    let _ = self.iter.next();
-                    #action_code
-                )
-            } else {
-                action_code
-            }
+            quote!(
+                self.current_match_end += char.len_utf8();
+                let _ = self.iter.next();
+                #action_code
+            )
         }
     }
 }
