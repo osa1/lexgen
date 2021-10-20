@@ -410,12 +410,8 @@ fn generate_state_arm(
         let end_of_input_action = match end_of_input_transition {
             Some(end_of_input_transition) => match end_of_input_transition {
                 Trans::Accept(action) => {
-                    let action_code = generate_rhs_code(ctx, *action);
-                    quote!({
-                        self.current_match_end += char.len_utf8();
-                        let _ = self.iter.next();
-                        #action_code
-                    })
+                    let action = generate_rhs_code(ctx, *action);
+                    quote!({ #action })
                 }
                 Trans::Trans(next_state) => {
                     let StateIdx(next_state) = ctx.renumber_state(*next_state);
@@ -515,12 +511,8 @@ fn generate_state_arm(
         let end_of_input_action = match end_of_input_transition {
             Some(end_of_input_transition) => match end_of_input_transition {
                 Trans::Accept(action) => {
-                    let action_code = generate_rhs_code(ctx, *action);
-                    quote!({
-                        self.current_match_end += char.len_utf8();
-                        let _ = self.iter.next();
-                        #action_code
-                    })
+                    let action = generate_rhs_code(ctx, *action);
+                    quote!({ #action })
                 }
                 Trans::Trans(next_state) => {
                     let StateIdx(next_state) = ctx.renumber_state(*next_state);

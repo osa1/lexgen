@@ -481,3 +481,62 @@ fn regex_syntax_precedence() {
     assert_eq!(next(&mut lexer), Some(Ok("ccc")));
     assert_eq!(next(&mut lexer), None);
 }
+
+#[test]
+fn any_transitions() {
+    lexer! {
+        Lexer -> (usize, &'input str);
+
+        "ab" => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_((1, match_))
+        },
+        _ => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_((2, match_))
+        },
+    }
+
+    let mut lexer = Lexer::new("a");
+    assert_eq!(next(&mut lexer), Some(Ok((2, "a"))));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("ab");
+    assert_eq!(next(&mut lexer), Some(Ok((1, "ab"))));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("abc");
+    assert_eq!(next(&mut lexer), Some(Ok((1, "ab"))));
+    assert_eq!(next(&mut lexer), Some(Ok((2, "c"))));
+    assert_eq!(next(&mut lexer), None);
+}
+
+#[test]
+fn end_of_input_transition_1() {
+    lexer! {
+        Lexer -> usize;
+
+        $ = 1,
+    }
+
+    let mut lexer = Lexer::new("");
+    assert_eq!(next(&mut lexer), Some(Ok(1)));
+    // Not sure if this is ideal, but the lexer above will never terminate because we handle
+    // end-of-input in the initial state. Should be OK for now.
+    assert_eq!(next(&mut lexer), Some(Ok(1)));
+}
+
+// #[test]
+// fn end_of_input_transition() {
+//     lexer! {
+//         Lexer -> (usize, &'input str);
+// 
+//         "//" _* $ => |lexer| {
+//             let match_ = lexer.match_();
+//             lexer.return_(match_)
+//         },
+//     }
+// 
+//     let mut lexer = Lexer::new("");
+//     assert_eq!(next(&mut lexer), None);
+// }
