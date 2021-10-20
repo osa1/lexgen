@@ -1,3 +1,14 @@
+# Unreleased
+
+- Regex syntax updated to include "any character" (`_`) and "end of input"
+  (`$`).
+
+  Previously "any character" (`_`) could be used as a rule left-hand side, but
+  was not allowed in regexes.
+
+  "End of input" (`$`) is allowed like any other regex. In the `Init` rule set,
+  end-of-input still terminates the stream by default.
+
 # 2021/10/19: 0.6.0
 
 - Fixed precedences of concatenation (juxtaposition) and alternation (`|`).
