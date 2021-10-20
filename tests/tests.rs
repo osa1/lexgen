@@ -519,6 +519,9 @@ fn end_of_input_transition_1() {
 
         $ = 1,
         _ = 2,
+
+        // Rule above should have precedence, so this should never match
+        'a' = 3,
     }
 
     let mut lexer = Lexer::new("");
