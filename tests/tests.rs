@@ -526,14 +526,12 @@ fn end_of_input_transition_1() {
 
     let mut lexer = Lexer::new("");
     assert_eq!(next(&mut lexer), Some(Ok(1)));
-    // Not sure if this is ideal, but the lexer above will never terminate because we handle
-    // end-of-input in the initial state. Should be OK for now.
-    assert_eq!(next(&mut lexer), Some(Ok(1)));
+    assert_eq!(next(&mut lexer), None);
 
     let mut lexer = Lexer::new("a");
     assert_eq!(next(&mut lexer), Some(Ok(2)));
     assert_eq!(next(&mut lexer), Some(Ok(1)));
-    assert_eq!(next(&mut lexer), Some(Ok(1)));
+    assert_eq!(next(&mut lexer), None);
 }
 
 #[test]
@@ -555,7 +553,7 @@ fn end_of_input_transition_2() {
     let mut lexer = Lexer::new("a");
     assert_eq!(next(&mut lexer), Some(Ok((2, "a")))); // longest match
     assert_eq!(next(&mut lexer), Some(Ok((1, ""))));
-    assert_eq!(next(&mut lexer), Some(Ok((1, ""))));
+    assert_eq!(next(&mut lexer), None);
 }
 
 #[test]
@@ -568,7 +566,8 @@ fn end_of_input_transition_3() {
             lexer.return_((1, match_))
         },
 
-        "//" _* ('\n' | $) => |lexer| {
+        // TODO: need syntax for excluding characters
+        "//" (['a'-'z'] | ['A'-'Z'] | ' ')* ('\n' | $) => |lexer| {
             let match_ = lexer.match_();
             lexer.return_((2, match_))
         },
@@ -592,5 +591,33 @@ fn end_of_input_transition_3() {
     let mut lexer = Lexer::new("// a\ntest");
     assert_eq!(next(&mut lexer), Some(Ok((2, "// a\n"))));
     assert_eq!(next(&mut lexer), Some(Ok((1, "test"))));
+    assert_eq!(next(&mut lexer), None);
+}
+
+#[test]
+fn end_of_input_multiple_states() {
+    // End-of-input should be matched once
+    lexer! {
+        Lexer -> usize;
+
+        rule Init {
+            $ = 1,
+
+            'a' => |lexer| {
+                lexer.switch(LexerRule::Rule1)
+            },
+        }
+
+        rule Rule1 {
+            $ = 2,
+        }
+    }
+
+    let mut lexer = Lexer::new("");
+    assert_eq!(next(&mut lexer), Some(Ok(1)));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("a");
+    assert_eq!(next(&mut lexer), Some(Ok(2)));
     assert_eq!(next(&mut lexer), None);
 }

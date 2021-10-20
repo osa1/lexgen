@@ -191,6 +191,9 @@ pub fn reify(
             // Current lexer state
             state: usize,
 
+            // Set after end-of-input is handled by a rule, or by default in `Init` rule
+            done: bool,
+
             // Which lexer state to switch to on successful match
             initial_state: usize,
 
@@ -261,6 +264,7 @@ pub fn reify(
             #visibility fn new_with_state(input: &'input str, user_state: #user_state_type) -> Self {
                 #lexer_name {
                     state: 0,
+                    done: false,
                     initial_state: 0,
                     user_state: Default::default(),
                     input,
@@ -283,6 +287,10 @@ pub fn reify(
             type Item = Result<(usize, #token_type, usize), LexerError<#(#user_error_type_lifetimes),*>>;
 
             fn next(&mut self) -> Option<Self::Item> {
+                if self.done {
+                    return None;
+                }
+
                 loop {
                     // println!("state = {:?}, next char = {:?}", self.state, self.iter.peek());
                     match self.state {
@@ -411,16 +419,16 @@ fn generate_state_arm(
             Some(end_of_input_transition) => match end_of_input_transition {
                 Trans::Accept(action) => {
                     let action = generate_rhs_code(ctx, *action);
-                    quote!({ #action })
+                    quote!(#action)
                 }
                 Trans::Trans(next_state) => {
                     let StateIdx(next_state) = ctx.renumber_state(*next_state);
-                    quote!(self.state = #next_state,)
+                    quote!(self.state = #next_state;)
                 }
             },
             None => {
                 // End-of-input is handled in state 0 by default
-                quote!(return None,)
+                quote!(return None;)
             }
         };
 
@@ -434,8 +442,10 @@ fn generate_state_arm(
 
         quote!(
             match self.iter.peek().copied() {
-                None =>
+                None => {
+                    self.done = true; // don't handle end-of-input again
                     #end_of_input_action
+                }
                 Some((char_idx, char)) => {
                     let char_idx = self.iter_byte_idx + char_idx;
                     self.current_match_start = char_idx;
@@ -448,41 +458,57 @@ fn generate_state_arm(
         )
     } else if let Some(rhs) = accepting {
         // Accepting state
-        let end_of_input_action = generate_rhs_code(ctx, *rhs);
+        let default_action = any_transition
+            .as_ref()
+            .map(|any_transition| generate_any_transition(ctx, states, true, any_transition))
+            .unwrap_or_else(|| generate_rhs_code(ctx, *rhs));
 
-        // TODO: OK to ignore end-of-input transition here?
-        if char_transitions.is_empty() && range_transitions.is_empty() {
-            quote!({
-                #end_of_input_action
-            })
-        } else {
-            let state_char_arms = generate_state_char_arms(
-                ctx,
-                states,
-                char_transitions,
-                range_transitions,
-                &end_of_input_action,
-            );
+        let end_of_input_action = match end_of_input_transition {
+            Some(end_of_input_transition) => match end_of_input_transition {
+                Trans::Accept(action) => {
+                    let action = generate_rhs_code(ctx, *action);
+                    quote!(
+                        self.done = true; // don't handle end-of-input again
+                        #action
+                    )
+                }
+                Trans::Trans(next_state) => {
+                    let StateIdx(next_state) = ctx.renumber_state(*next_state);
+                    quote!(
+                        self.done = true; // don't handle end-of-input again
+                        self.state = #next_state;
+                    )
+                }
+            },
+            None => generate_rhs_code(ctx, *rhs),
+        };
 
-            let semantic_fn = rhs.symbol();
+        let state_char_arms = generate_state_char_arms(
+            ctx,
+            states,
+            char_transitions,
+            range_transitions,
+            &default_action,
+        );
 
-            // TODO: Braces can be removed in some cases
-            quote!({
-                self.last_match =
-                    Some((self.current_match_start, #semantic_fn, self.current_match_end));
+        let semantic_fn = rhs.symbol();
 
-                match self.iter.peek().copied() {
-                    None => {
-                        #end_of_input_action
-                    }
-                    Some((char_idx, char)) => {
-                        match char {
-                            #(#state_char_arms,)*
-                        }
+        // TODO: Braces can be removed in some cases
+        quote!({
+            self.last_match =
+                Some((self.current_match_start, #semantic_fn, self.current_match_end));
+
+            match self.iter.peek().copied() {
+                None => {
+                    #end_of_input_action
+                }
+                Some((char_idx, char)) => {
+                    match char {
+                        #(#state_char_arms,)*
                     }
                 }
-            })
-        }
+            }
+        })
     } else {
         // Non-accepting state
         let default_action = any_transition
@@ -502,11 +528,17 @@ fn generate_state_arm(
             Some(end_of_input_transition) => match end_of_input_transition {
                 Trans::Accept(action) => {
                     let action = generate_rhs_code(ctx, *action);
-                    quote!({ #action })
+                    quote!(
+                        self.done = true; // don't handle end-of-input again
+                        #action
+                    )
                 }
                 Trans::Trans(next_state) => {
                     let StateIdx(next_state) = ctx.renumber_state(*next_state);
-                    quote!(self.state = #next_state,)
+                    quote!(
+                        self.done = true; // don't handle end-of-input again
+                        self.state = #next_state;
+                    )
                 }
             },
             None => {
