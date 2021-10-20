@@ -558,6 +558,8 @@ fn generate_any_transition(
             } else {
                 let StateIdx(next_state) = ctx.renumber_state(StateIdx(*next_state));
                 quote!(
+                    self.current_match_end += char.len_utf8();
+                    let _ = self.iter.next();
                     self.state = #next_state;
                 )
             }
