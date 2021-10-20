@@ -502,14 +502,42 @@ fn generate_state_arm(
             &default_action,
         );
 
-        let end_of_input_action = if *initial {
-            // In an initial state other than the state 0 we fail with "unexpected EOF"
-            let error = make_lexer_error();
-            quote!(return Some(Err(#error));)
-        } else {
-            // Otherwise we run the fail action and go to initial state of the current DFA. Initial
-            // state will then fail.
-            default_action
+        // let end_of_input_action = if *initial {
+        //     // In an initial state other than the state 0 we fail with "unexpected EOF"
+        //     let error = make_lexer_error();
+        //     quote!(return Some(Err(#error));)
+        // } else {
+        //     // Otherwise we run the fail action and go to initial state of the current DFA. Initial
+        //     // state will then fail.
+        //     default_action
+        // };
+
+        let end_of_input_action = match end_of_input_transition {
+            Some(end_of_input_transition) => match end_of_input_transition {
+                Trans::Accept(action) => {
+                    let action_code = generate_rhs_code(ctx, *action);
+                    quote!({
+                        self.current_match_end += char.len_utf8();
+                        let _ = self.iter.next();
+                        #action_code
+                    })
+                }
+                Trans::Trans(next_state) => {
+                    let StateIdx(next_state) = ctx.renumber_state(*next_state);
+                    quote!(self.state = #next_state,)
+                }
+            },
+            None => {
+                if *initial {
+                    // In an initial state other than state 0 we fail with "unexpected EOF" error
+                    let error = make_lexer_error();
+                    quote!(return Some(Err(#error));)
+                } else {
+                    // Otherwise we run the fail action and go to initial state of the current DFA.
+                    // Initial state will then fail.
+                    default_action.clone()
+                }
+            }
         };
 
         quote!(match self.iter.peek().copied() {
