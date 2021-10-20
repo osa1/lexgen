@@ -109,11 +109,6 @@ fn next<A>(nfa: &NFA<A>, states: &Set<StateIdx>, char: char) -> Set<StateIdx> {
         // Char transitions
         if let Some(char_nexts) = nfa.states[state.0].char_transitions.get(&char) {
             next_states.extend(char_nexts.into_iter());
-            for (range, range_nexts) in &nfa.states[state.0].range_transitions {
-                if char >= range.0 && char <= range.1 {
-                    next_states.extend(range_nexts.into_iter());
-                }
-            }
         }
 
         // Range transitions
