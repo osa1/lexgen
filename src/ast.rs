@@ -166,6 +166,7 @@ fn parse_regex_1(input: ParseStream) -> syn::Result<Regex> {
         || input.peek(syn::LitChar)
         || input.peek(syn::LitStr)
         || input.peek(syn::token::Bracket)
+        || input.peek(syn::token::Underscore)
     {
         let re2 = parse_regex_2(input)?;
         re = Regex::Concat(Box::new(re), Box::new(re2)); // left associative

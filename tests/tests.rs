@@ -555,18 +555,29 @@ fn end_of_input_transition_2() {
     assert_eq!(next(&mut lexer), Some(Ok((1, ""))));
 }
 
-// TODO: Fails to parse?
-// #[test]
-// fn end_of_input_transition() {
-//     lexer! {
-//         Lexer -> (usize, &'input str);
-//
-//         "//" _* $ => |lexer| {
-//             let match_ = lexer.match_();
-//             lexer.return_(match_)
-//         },
-//     }
-//
-//     let mut lexer = Lexer::new("");
-//     assert_eq!(next(&mut lexer), None);
-// }
+#[test]
+fn end_of_input_transition() {
+    lexer! {
+        Lexer -> &'input str;
+
+        "//" _* $ => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_(match_)
+        },
+    }
+
+    let mut lexer = Lexer::new("");
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("//");
+    assert_eq!(next(&mut lexer), Some(Ok("//")));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("// a");
+    assert_eq!(next(&mut lexer), Some(Ok("// a")));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("// a\n");
+    assert_eq!(next(&mut lexer), Some(Ok("// a\n")));
+    assert_eq!(next(&mut lexer), None);
+}
