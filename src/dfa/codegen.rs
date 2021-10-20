@@ -292,7 +292,7 @@ pub fn reify(
                 }
 
                 loop {
-                    println!("state = {:?}, next char = {:?}", self.state, self.iter.peek());
+                    // println!("state = {:?}, next char = {:?}", self.state, self.iter.peek());
                     match self.state {
                         #(#match_arms,)*
                     }
