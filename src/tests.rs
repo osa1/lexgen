@@ -212,8 +212,7 @@ fn simulate_zero_or_one() {
     test_simulate(
         &nfa,
         vec![
-            // TODO
-            // ("", vec![], Some(0)),
+            ("", vec![], Some(0)),
             ("a", vec![("a", 1)], None),
             ("aa", vec![("a", 1), ("a", 1)], None),
             ("aab", vec![("a", 1), ("a", 1)], Some(2)),
@@ -410,15 +409,49 @@ fn zero_or_more_concat_confusion_3() {
 }
 
 #[test]
-fn simulate_fail() {
+fn simulate_any() {
     let mut nfa: NFA<usize> = NFA::new();
 
     nfa.add_regex(&Default::default(), &Regex::String("ab".to_owned()), 1);
-    nfa.set_fail_action(2);
+    nfa.add_regex(&Default::default(), &Regex::Any, 2);
 
     test_simulate(
         &nfa,
-        vec![("a", vec![], Some(0)), ("ab", vec![("ab", 1)], None)],
+        vec![
+            ("a", vec![("a", 2)], None),
+            ("ab", vec![("ab", 1)], None),
+            ("abc", vec![("ab", 1), ("c", 2)], None),
+        ],
+    );
+}
+
+#[test]
+fn simulate_end_of_input() {
+    let mut nfa: NFA<usize> = NFA::new();
+
+    // C-style single-line comment syntax: "//" _* ('\n' | $)
+    nfa.add_regex(
+        &Default::default(),
+        &Regex::Concat(
+            Box::new(Regex::String("//".to_owned())),
+            Box::new(Regex::Concat(
+                Box::new(Regex::ZeroOrMore(Box::new(Regex::Any))),
+                Box::new(Regex::Or(
+                    Box::new(Regex::Char('\n')),
+                    Box::new(Regex::EndOfInput),
+                )),
+            )),
+        ),
+        1,
+    );
+
+    test_simulate(
+        &nfa,
+        vec![
+            ("//", vec![("//", 1)], None),
+            ("//  \n", vec![("//  \n", 1)], None),
+            ("//  ", vec![("//  ", 1)], None),
+        ],
     );
 }
 
@@ -429,7 +462,6 @@ fn simulate_multiple_accepting_states_3() {
     nfa.add_regex(&Default::default(), &Regex::String("aaa".to_owned()), 1);
     nfa.add_regex(&Default::default(), &Regex::String("aaa".to_owned()), 2);
     nfa.add_regex(&Default::default(), &Regex::String("aa".to_owned()), 3);
-    nfa.set_fail_action(4);
 
     test_simulate(
         &nfa,

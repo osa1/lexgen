@@ -1,4 +1,4 @@
-pub mod codegen;
+// pub mod codegen;
 pub mod simplify;
 
 #[cfg(test)]
@@ -37,7 +37,8 @@ pub struct State<T, A> {
     initial: bool,
     char_transitions: FxHashMap<char, T>,
     range_transitions: RangeMap<T>,
-    fail_transition: Option<T>,
+    any_transition: Option<T>,
+    end_of_input_transition: Option<T>,
     accepting: Option<A>,
     // Predecessors of the state, used to inline code for a state with one predecessor in the
     // predecessor's code
@@ -50,7 +51,8 @@ impl<T, A> State<T, A> {
             initial: false,
             char_transitions: Default::default(),
             range_transitions: Default::default(),
-            fail_transition: None,
+            any_transition: None,
+            end_of_input_transition: None,
             accepting: None,
             predecessors: Default::default(),
         }
@@ -59,7 +61,8 @@ impl<T, A> State<T, A> {
     fn has_no_transitions(&self) -> bool {
         self.char_transitions.is_empty()
             && self.range_transitions.is_empty()
-            && self.fail_transition.is_none()
+            && self.any_transition.is_none()
+            && self.end_of_input_transition.is_none()
     }
 
     pub fn map_semantic_action<B, F>(self, f: F) -> State<T, B>
@@ -70,7 +73,8 @@ impl<T, A> State<T, A> {
             initial,
             char_transitions,
             range_transitions,
-            fail_transition,
+            any_transition,
+            end_of_input_transition,
             accepting,
             predecessors,
         } = self;
@@ -78,7 +82,8 @@ impl<T, A> State<T, A> {
             initial,
             char_transitions,
             range_transitions,
-            fail_transition,
+            any_transition,
+            end_of_input_transition,
             accepting: accepting.map(f),
             predecessors,
         }
@@ -143,9 +148,15 @@ impl<A> DFA<StateIdx, A> {
         self.states[next.0].predecessors.insert(state);
     }
 
-    pub fn add_fail_transition(&mut self, state: StateIdx, next: StateIdx) {
-        assert!(self.states[state.0].fail_transition.is_none());
-        self.states[state.0].fail_transition = Some(next);
+    pub fn set_any_transition(&mut self, state: StateIdx, next: StateIdx) {
+        assert!(self.states[state.0].any_transition.is_none());
+        self.states[state.0].any_transition = Some(next);
+        self.states[next.0].predecessors.insert(state);
+    }
+
+    pub fn set_end_of_input_transition(&mut self, state: StateIdx, next: StateIdx) {
+        assert!(self.states[state.0].end_of_input_transition.is_none());
+        self.states[state.0].end_of_input_transition = Some(next);
         self.states[next.0].predecessors.insert(state);
     }
 }
@@ -190,7 +201,8 @@ impl<A> DFA<StateIdx, A> {
             initial,
             char_transitions,
             range_transitions,
-            fail_transition,
+            any_transition,
+            end_of_input_transition,
             accepting,
             predecessors,
         } in other.states
@@ -198,6 +210,8 @@ impl<A> DFA<StateIdx, A> {
             let mut new_char_transitions: FxHashMap<char, StateIdx> = Default::default();
             let mut new_range_transitions: RangeMap<StateIdx> = Default::default();
             let mut new_fail_transition: Option<StateIdx> = None;
+            let mut new_any_transition: Option<StateIdx> = None;
+            let mut new_end_of_input_transition: Option<StateIdx> = None;
 
             for (char, next) in char_transitions {
                 new_char_transitions.insert(char, StateIdx(next.0 + n_current_states));
@@ -213,8 +227,12 @@ impl<A> DFA<StateIdx, A> {
                 );
             }
 
-            if let Some(next) = fail_transition {
-                new_fail_transition = Some(StateIdx(next.0 + n_current_states));
+            if let Some(next) = any_transition {
+                new_any_transition = Some(StateIdx(next.0 + n_current_states));
+            }
+
+            if let Some(next) = end_of_input_transition {
+                new_end_of_input_transition = Some(StateIdx(next.0 + n_current_states));
             }
 
             let predecessors = predecessors
@@ -226,7 +244,8 @@ impl<A> DFA<StateIdx, A> {
                 initial,
                 char_transitions: new_char_transitions,
                 range_transitions: new_range_transitions,
-                fail_transition: new_fail_transition,
+                any_transition: new_any_transition,
+                end_of_input_transition: new_end_of_input_transition,
                 accepting,
                 predecessors,
             });
@@ -251,7 +270,8 @@ impl<A> Display for DFA<StateIdx, A> {
                 initial,
                 char_transitions,
                 range_transitions,
-                fail_transition,
+                any_transition,
+                end_of_input_transition,
                 accepting,
                 predecessors: _,
             } = state;
@@ -272,24 +292,15 @@ impl<A> Display for DFA<StateIdx, A> {
 
             let mut first = true;
 
-            if let Some(next) = fail_transition {
-                writeln!(f, "FAIL -> {}", next)?;
-                first = false;
-            }
-
             for (char, next) in char_transitions.iter() {
-                if !first {
-                    write!(f, "      ")?;
-                } else {
-                    first = false;
-                }
+                first = false;
 
                 writeln!(f, "{:?} -> {}", char, next)?;
             }
 
             for Range { start, end, values } in range_transitions.iter() {
                 if !first {
-                    write!(f, "     ")?;
+                    write!(f, "      ")?;
                 } else {
                     first = false;
                 }
@@ -304,9 +315,28 @@ impl<A> Display for DFA<StateIdx, A> {
                 )?;
             }
 
+            if let Some(next) = any_transition {
+                if !first {
+                    write!(f, "      ")?;
+                } else {
+                    first = false;
+                }
+
+                writeln!(f, "_ -> {}", next)?;
+            }
+
+            if let Some(next) = end_of_input_transition {
+                if !first {
+                    write!(f, "      ")?;
+                }
+
+                writeln!(f, "$ -> {}", next)?;
+            }
+
             if char_transitions.is_empty()
                 && range_transitions.is_empty()
-                && fail_transition.is_none()
+                && any_transition.is_none()
+                && end_of_input_transition.is_none()
             {
                 writeln!(f)?;
             }

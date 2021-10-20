@@ -356,7 +356,8 @@ fn generate_state_arm(
         initial,
         char_transitions,
         range_transitions,
-        fail_transition,
+        any_transition,
+        end_of_input_transition,
         accepting,
         predecessors: _,
     } = state;

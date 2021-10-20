@@ -46,7 +46,8 @@ pub fn simplify<K>(
                 initial,
                 char_transitions,
                 range_transitions,
-                fail_transition,
+                any_transition,
+                end_of_input_transition,
                 accepting,
                 predecessors,
             } = state;
@@ -58,7 +59,9 @@ pub fn simplify<K>(
 
             let range_transitions = range_transitions.filter_map(map_transition);
 
-            let fail_transition = fail_transition.and_then(map_transition);
+            let any_transition = any_transition.and_then(map_transition);
+
+            let end_of_input_transition = end_of_input_transition.and_then(map_transition);
 
             let predecessors = predecessors
                 .into_iter()
@@ -76,7 +79,8 @@ pub fn simplify<K>(
                 initial,
                 char_transitions,
                 range_transitions,
-                fail_transition,
+                any_transition,
+                end_of_input_transition,
                 accepting,
                 predecessors,
             }
