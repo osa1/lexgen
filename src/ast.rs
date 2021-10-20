@@ -196,7 +196,7 @@ fn parse_regex_2(input: ParseStream) -> syn::Result<Regex> {
     Ok(re)
 }
 
-// re_3 -> ( re_0 ) | $ | $x | $$x | 'x' | "..." | [...]
+// re_3 -> ( re_0 ) | $ | $x | $$x | _ | 'x' | "..." | [...]
 fn parse_regex_3(input: ParseStream) -> syn::Result<Regex> {
     if input.peek(syn::token::Paren) {
         let parenthesized;

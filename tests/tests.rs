@@ -491,6 +491,7 @@ fn any_transitions() {
             let match_ = lexer.match_();
             lexer.return_((1, match_))
         },
+
         _ => |lexer| {
             let match_ = lexer.match_();
             lexer.return_((2, match_))
@@ -517,6 +518,7 @@ fn end_of_input_transition_1() {
         Lexer -> usize;
 
         $ = 1,
+        _ = 2,
     }
 
     let mut lexer = Lexer::new("");
@@ -524,19 +526,47 @@ fn end_of_input_transition_1() {
     // Not sure if this is ideal, but the lexer above will never terminate because we handle
     // end-of-input in the initial state. Should be OK for now.
     assert_eq!(next(&mut lexer), Some(Ok(1)));
+
+    let mut lexer = Lexer::new("a");
+    assert_eq!(next(&mut lexer), Some(Ok(2)));
+    assert_eq!(next(&mut lexer), Some(Ok(1)));
+    assert_eq!(next(&mut lexer), Some(Ok(1)));
 }
 
+#[test]
+fn end_of_input_transition_2() {
+    lexer! {
+        Lexer -> (usize, &'input str);
+
+        $ => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_((1, match_))
+        },
+
+        _* => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_((2, match_))
+        },
+    }
+
+    let mut lexer = Lexer::new("a");
+    assert_eq!(next(&mut lexer), Some(Ok((2, "a")))); // longest match
+    assert_eq!(next(&mut lexer), Some(Ok((1, ""))));
+    assert_eq!(next(&mut lexer), Some(Ok((1, ""))));
+}
+
+// TODO: Fails to parse?
 // #[test]
 // fn end_of_input_transition() {
 //     lexer! {
 //         Lexer -> (usize, &'input str);
-// 
+//
 //         "//" _* $ => |lexer| {
 //             let match_ = lexer.match_();
 //             lexer.return_(match_)
 //         },
 //     }
-// 
+//
 //     let mut lexer = Lexer::new("");
 //     assert_eq!(next(&mut lexer), None);
 // }

@@ -426,7 +426,7 @@ fn simulate_any() {
 }
 
 #[test]
-fn simulate_end_of_input() {
+fn simulate_end_of_input_1() {
     let mut nfa: NFA<usize> = NFA::new();
 
     // C-style single-line comment syntax: "//" _* ('\n' | $)
@@ -453,6 +453,21 @@ fn simulate_end_of_input() {
             ("//  ", vec![("//  ", 1)], None),
         ],
     );
+}
+
+#[test]
+fn simulate_end_of_input_2() {
+    let mut nfa: NFA<usize> = NFA::new();
+
+    nfa.add_regex(&Default::default(), &Regex::EndOfInput, 1);
+    nfa.add_regex(
+        &Default::default(),
+        &Regex::ZeroOrMore(Box::new(Regex::Any)),
+        2,
+    );
+
+    // TODO: EndOfInput never matches?
+    test_simulate(&nfa, vec![("a", vec![("a", 2)], None)]);
 }
 
 #[test]
