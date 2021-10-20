@@ -556,13 +556,18 @@ fn end_of_input_transition_2() {
 }
 
 #[test]
-fn end_of_input_transition() {
+fn end_of_input_transition_3() {
     lexer! {
-        Lexer -> &'input str;
+        Lexer -> (usize, &'input str);
 
-        "//" _* $ => |lexer| {
+        "test" => |lexer| {
             let match_ = lexer.match_();
-            lexer.return_(match_)
+            lexer.return_((1, match_))
+        },
+
+        "//" _* ('\n' | $) => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_((2, match_))
         },
     }
 
@@ -570,14 +575,19 @@ fn end_of_input_transition() {
     assert_eq!(next(&mut lexer), None);
 
     let mut lexer = Lexer::new("//");
-    assert_eq!(next(&mut lexer), Some(Ok("//")));
+    assert_eq!(next(&mut lexer), Some(Ok((2, "//"))));
     assert_eq!(next(&mut lexer), None);
 
     let mut lexer = Lexer::new("// a");
-    assert_eq!(next(&mut lexer), Some(Ok("// a")));
+    assert_eq!(next(&mut lexer), Some(Ok((2, "// a"))));
     assert_eq!(next(&mut lexer), None);
 
     let mut lexer = Lexer::new("// a\n");
-    assert_eq!(next(&mut lexer), Some(Ok("// a\n")));
+    assert_eq!(next(&mut lexer), Some(Ok((2, "// a\n"))));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("// a\ntest");
+    assert_eq!(next(&mut lexer), Some(Ok((2, "// a\n"))));
+    assert_eq!(next(&mut lexer), Some(Ok((1, "test"))));
     assert_eq!(next(&mut lexer), None);
 }
