@@ -575,29 +575,24 @@ fn generate_any_transition(
     states: &[State<Trans, SemanticActionIdx>],
     trans: &Trans,
 ) -> TokenStream {
-    match trans {
+    let action = match trans {
         Trans::Trans(StateIdx(next_state)) => {
             if states[*next_state].predecessors.len() == 1 {
                 generate_state_arm(ctx, *next_state, &states[*next_state], states)
             } else {
                 let StateIdx(next_state) = ctx.renumber_state(StateIdx(*next_state));
-                quote!(
-                    self.current_match_end += char.len_utf8();
-                    let _ = self.iter.next();
-                    self.state = #next_state;
-                )
+                quote!(self.state = #next_state;)
             }
         }
 
-        Trans::Accept(action) => {
-            let action_code = generate_rhs_code(ctx, *action);
-            quote!(
-                self.current_match_end += char.len_utf8();
-                let _ = self.iter.next();
-                #action_code
-            )
-        }
-    }
+        Trans::Accept(action) => generate_rhs_code(ctx, *action),
+    };
+
+    quote!(
+        self.current_match_end += char.len_utf8();
+        let _ = self.iter.next();
+        #action
+    )
 }
 
 /// Generate arms for `match char { ... }`

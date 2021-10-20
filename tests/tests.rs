@@ -621,3 +621,19 @@ fn end_of_input_multiple_states() {
     assert_eq!(next(&mut lexer), Some(Ok(2)));
     assert_eq!(next(&mut lexer), None);
 }
+
+#[test]
+fn any_2() {
+    lexer! {
+        Lexer -> &'input str;
+
+        "'" _ "'" => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_(match_)
+        },
+    }
+
+    let mut lexer = Lexer::new("'a'");
+    assert_eq!(next(&mut lexer), Some(Ok("'a'")));
+    assert_eq!(next(&mut lexer), None);
+}
