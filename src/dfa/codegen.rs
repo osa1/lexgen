@@ -498,16 +498,6 @@ fn generate_state_arm(
             &default_action,
         );
 
-        // let end_of_input_action = if *initial {
-        //     // In an initial state other than the state 0 we fail with "unexpected EOF"
-        //     let error = make_lexer_error();
-        //     quote!(return Some(Err(#error));)
-        // } else {
-        //     // Otherwise we run the fail action and go to initial state of the current DFA. Initial
-        //     // state will then fail.
-        //     default_action
-        // };
-
         let end_of_input_action = match end_of_input_transition {
             Some(end_of_input_transition) => match end_of_input_transition {
                 Trans::Accept(action) => {
