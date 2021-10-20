@@ -1,3 +1,4 @@
+#[cfg(test)]
 pub mod simulate;
 
 use crate::ast::{Regex, Var};
@@ -244,8 +245,6 @@ impl<A> Display for NFA<A> {
             if !end_of_input_transitions.is_empty() {
                 if !first {
                     write!(f, "     ")?;
-                } else {
-                    first = false;
                 }
 
                 writeln!(f, "$ -> {}", HashSetDisplay(end_of_input_transitions))?;

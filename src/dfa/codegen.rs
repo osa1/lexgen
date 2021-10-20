@@ -400,10 +400,11 @@ fn generate_state_arm(
         // stream ends. In non-initial states EOS (end-of-stream) returns the last (longest)
         // match, or fails (error).
 
-        // Backtrack or fail with an error if we don't have a fail transition
-        let fail_action = fail_transition
+        // When we can't take char or range transitions, take the 'any' transition if it exists, or
+        // fail (backtrack or raise error)
+        let default_action = any_transition
             .as_ref()
-            .map(|fail_transition| generate_fail_transition(ctx, states, true, fail_transition))
+            .map(|any_transition| generate_any_transition(ctx, states, true, any_transition))
             .unwrap_or_else(|| fail(ctx));
 
         let state_char_arms = generate_state_char_arms(
@@ -411,12 +412,14 @@ fn generate_state_arm(
             states,
             char_transitions,
             range_transitions,
-            &fail_action,
+            &default_action,
         );
 
         quote!(
             match self.iter.peek().copied() {
-                None => return None,
+                None =>
+                    // End-of-input is handled in state 0 by default
+                    return None,
                 Some((char_idx, char)) => {
                     let char_idx = self.iter_byte_idx + char_idx;
                     self.current_match_start = char_idx;
@@ -429,15 +432,20 @@ fn generate_state_arm(
         )
     } else if let Some(rhs) = accepting {
         // Accepting state
-        let action = generate_rhs_code(ctx, *rhs);
+        let end_of_input_action = generate_rhs_code(ctx, *rhs);
 
         if char_transitions.is_empty() && range_transitions.is_empty() {
             quote!({
-                #action
+                #end_of_input_action
             })
         } else {
-            let state_char_arms =
-                generate_state_char_arms(ctx, states, char_transitions, range_transitions, &action);
+            let state_char_arms = generate_state_char_arms(
+                ctx,
+                states,
+                char_transitions,
+                range_transitions,
+                &end_of_input_action,
+            );
 
             let semantic_fn = rhs.symbol();
 
@@ -448,7 +456,7 @@ fn generate_state_arm(
 
                 match self.iter.peek().copied() {
                     None => {
-                        #action
+                        #end_of_input_action
                     }
                     Some((char_idx, char)) => {
                         match char {
@@ -460,9 +468,9 @@ fn generate_state_arm(
         }
     } else {
         // Non-accepting state
-        let fail_action = fail_transition
+        let default_action = any_transition
             .as_ref()
-            .map(|fail_transition| generate_fail_transition(ctx, states, *initial, fail_transition))
+            .map(|any_transition| generate_any_transition(ctx, states, *initial, any_transition))
             .unwrap_or_else(|| fail(ctx));
 
         let state_char_arms = generate_state_char_arms(
@@ -470,22 +478,22 @@ fn generate_state_arm(
             states,
             char_transitions,
             range_transitions,
-            &fail_action,
+            &default_action,
         );
 
-        let end_of_stream_action = if *initial {
+        let end_of_input_action = if *initial {
             // In an initial state other than the state 0 we fail with "unexpected EOF"
             let error = make_lexer_error();
             quote!(return Some(Err(#error));)
         } else {
             // Otherwise we run the fail action and go to initial state of the current DFA. Initial
             // state will then fail.
-            fail_action
+            default_action
         };
 
         quote!(match self.iter.peek().copied() {
             None => {
-                #end_of_stream_action
+                #end_of_input_action
             }
             Some((_, char)) => {
                 match char {
@@ -496,7 +504,7 @@ fn generate_state_arm(
     }
 }
 
-fn generate_fail_transition(
+fn generate_any_transition(
     ctx: &mut CgCtx,
     states: &[State<Trans, SemanticActionIdx>],
     initial: bool,
@@ -535,7 +543,8 @@ fn generate_state_char_arms(
     states: &[State<Trans, SemanticActionIdx>],
     char_transitions: &FxHashMap<char, Trans>,
     range_transitions: &RangeMap<Trans>,
-    fail_action: &TokenStream,
+    // RHS of the default alternative for this `match` (_ => <default_rhs>)
+    default_rhs: &TokenStream,
 ) -> Vec<TokenStream> {
     // Arms of the `match` for the current character
     let mut state_char_arms: Vec<TokenStream> = vec![];
@@ -636,7 +645,7 @@ fn generate_state_char_arms(
         ));
     }
 
-    state_char_arms.push(quote!(_ => { #fail_action }));
+    state_char_arms.push(quote!(_ => { #default_rhs }));
 
     state_char_arms
 }

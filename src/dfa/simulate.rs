@@ -63,7 +63,7 @@ impl<A: Copy> DFA<StateIdx, A> {
             if let Some(next) = next_end_of_input(self, state) {
                 // Check for accepting state
                 state = next;
-                if let Some(value) = self.states[state.0].accepting  {
+                if let Some(value) = self.states[state.0].accepting {
                     values.push((&input[match_start..], value));
                     break; // 'outer
                 }

@@ -1,4 +1,4 @@
-// pub mod codegen;
+pub mod codegen;
 pub mod simplify;
 
 #[cfg(test)]
@@ -209,7 +209,6 @@ impl<A> DFA<StateIdx, A> {
         {
             let mut new_char_transitions: FxHashMap<char, StateIdx> = Default::default();
             let mut new_range_transitions: RangeMap<StateIdx> = Default::default();
-            let mut new_fail_transition: Option<StateIdx> = None;
             let mut new_any_transition: Option<StateIdx> = None;
             let mut new_end_of_input_transition: Option<StateIdx> = None;
 
