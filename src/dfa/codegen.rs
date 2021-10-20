@@ -407,6 +407,27 @@ fn generate_state_arm(
             .map(|any_transition| generate_any_transition(ctx, states, true, any_transition))
             .unwrap_or_else(|| fail(ctx));
 
+        let end_of_input_action = match end_of_input_transition {
+            Some(end_of_input_transition) => match end_of_input_transition {
+                Trans::Accept(action) => {
+                    let action_code = generate_rhs_code(ctx, *action);
+                    quote!({
+                        self.current_match_end += char.len_utf8();
+                        let _ = self.iter.next();
+                        #action_code
+                    })
+                }
+                Trans::Trans(next_state) => {
+                    let StateIdx(next_state) = ctx.renumber_state(*next_state);
+                    quote!(self.state = #next_state,)
+                }
+            },
+            None => {
+                // End-of-input is handled in state 0 by default
+                quote!(return None,)
+            }
+        };
+
         let state_char_arms = generate_state_char_arms(
             ctx,
             states,
@@ -418,8 +439,7 @@ fn generate_state_arm(
         quote!(
             match self.iter.peek().copied() {
                 None =>
-                    // End-of-input is handled in state 0 by default
-                    return None,
+                    #end_of_input_action
                 Some((char_idx, char)) => {
                     let char_idx = self.iter_byte_idx + char_idx;
                     self.current_match_start = char_idx;
@@ -434,6 +454,7 @@ fn generate_state_arm(
         // Accepting state
         let end_of_input_action = generate_rhs_code(ctx, *rhs);
 
+        // TODO: OK to ignore end-of-input transition here?
         if char_transitions.is_empty() && range_transitions.is_empty() {
             quote!({
                 #end_of_input_action
