@@ -621,3 +621,36 @@ fn end_of_input_multiple_states() {
     assert_eq!(next(&mut lexer), Some(Ok(2)));
     assert_eq!(next(&mut lexer), None);
 }
+
+#[test]
+fn switch_and_reset_match() {
+    lexer! {
+        Lexer -> &'input str;
+
+        rule Init {
+            $ = "_",
+
+            'a' => |lexer| {
+                lexer.switch_and_return(LexerRule::Rule1, "a")
+            },
+        }
+
+        rule Rule1 {
+            'c' => |lexer| {
+                lexer.switch_and_reset_match(LexerRule::Rule1)
+            },
+
+            ['d' 'e']+ => |lexer| {
+                let s = lexer.match_();
+                lexer.return_(s)
+            },
+            $ = "<>",
+        }
+    }
+
+    let mut lexer = Lexer::new("accdeed");
+    assert_eq!(next(&mut lexer), Some(Ok("a")));
+    assert_eq!(next(&mut lexer), Some(Ok("deed")));
+    assert_eq!(next(&mut lexer), Some(Ok("<>")));
+    assert_eq!(next(&mut lexer), None);
+}

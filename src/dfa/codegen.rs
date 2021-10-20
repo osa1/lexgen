@@ -149,6 +149,9 @@ pub fn reify(
             Return(T),
             // User action requested switching to the given rule set
             Switch(#rule_name_enum_name),
+            // User action requested switching to the given rule set
+            // and resetting the match stack.
+            SwitchAndResetMatch(#rule_name_enum_name),
             // Combination or `Switch` and `Return`: add token to the match stack, switch to the
             // given rule set
             SwitchAndReturn(T, #rule_name_enum_name),
@@ -166,6 +169,8 @@ pub fn reify(
                         #action_type_name::Return(f(t)),
                     #action_type_name::Switch(state) =>
                         #action_type_name::Switch(state),
+                    #action_type_name::SwitchAndResetMatch(state) =>
+                        #action_type_name::SwitchAndResetMatch(state),
                     #action_type_name::SwitchAndReturn(t, state) =>
                         #action_type_name::SwitchAndReturn(f(t), state),
                 }
@@ -237,6 +242,10 @@ pub fn reify(
 
             fn switch<T>(self, rule: #rule_name_enum_name) -> #action_type_name<T> {
                 #action_type_name::Switch(rule)
+            }
+
+            fn switch_and_reset_match<T>(self, rule: #rule_name_enum_name) -> #action_type_name<T> {
+                #action_type_name::SwitchAndResetMatch(rule)
             }
 
             fn continue_<T>(self) -> #action_type_name<T> {
@@ -770,6 +779,10 @@ fn generate_action_result_handler(ctx: &CgCtx, action_result: TokenStream) -> To
         }
         #action_type_name::Switch(rule_set) => {
             self.switch(rule_set);
+        }
+        #action_type_name::SwitchAndResetMatch(rule_set) => {
+            self.switch(rule_set);
+            self.current_match_start = self.current_match_end;
         }
         #action_type_name::SwitchAndReturn(res, rule_set) => {
             self.switch(rule_set);
