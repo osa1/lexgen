@@ -143,13 +143,13 @@ of rules. The syntax is:
 
   Here's an example character set for ASCII alphanumerics: `['a'-'z' 'A'-'Z'
   '0'-'9']`
+- `_` for matching any character
+- `$` for matching end-of-input
 - `<regex>*` for zero or more repetitions of `<regex>`
 - `<regex>+` for one or more repetitions of `<regex>`
 - `<regex>?` for zero or one repetitions of `<regex>`
 - `<regex> <regex>` for concatenation
 - `<regex> | <regex>` for alternation (match the first one, or the second one)
-- `_` can only appear at the top-level (in the LHS of a rule) and matches when
-  none of the other rules match.
 
 Binding powers (precedences), from higher to lower:
 

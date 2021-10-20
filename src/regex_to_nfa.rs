@@ -115,5 +115,13 @@ pub fn add_re<A>(
             nfa.add_empty_transition(current, re1_init);
             nfa.add_empty_transition(current, re2_init);
         }
+
+        Regex::Any => {
+            nfa.add_any_transition(current, cont);
+        }
+
+        Regex::EndOfInput => {
+            nfa.add_end_of_input_transition(current, cont);
+        }
     }
 }

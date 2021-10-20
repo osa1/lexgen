@@ -481,3 +481,143 @@ fn regex_syntax_precedence() {
     assert_eq!(next(&mut lexer), Some(Ok("ccc")));
     assert_eq!(next(&mut lexer), None);
 }
+
+#[test]
+fn any_transitions() {
+    lexer! {
+        Lexer -> (usize, &'input str);
+
+        "ab" => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_((1, match_))
+        },
+
+        _ => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_((2, match_))
+        },
+    }
+
+    let mut lexer = Lexer::new("a");
+    assert_eq!(next(&mut lexer), Some(Ok((2, "a"))));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("ab");
+    assert_eq!(next(&mut lexer), Some(Ok((1, "ab"))));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("abc");
+    assert_eq!(next(&mut lexer), Some(Ok((1, "ab"))));
+    assert_eq!(next(&mut lexer), Some(Ok((2, "c"))));
+    assert_eq!(next(&mut lexer), None);
+}
+
+#[test]
+fn end_of_input_transition_1() {
+    lexer! {
+        Lexer -> usize;
+
+        $ = 1,
+        _ = 2,
+
+        // Rule above should have precedence, so this should never match
+        'a' = 3,
+    }
+
+    let mut lexer = Lexer::new("");
+    assert_eq!(next(&mut lexer), Some(Ok(1)));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("a");
+    assert_eq!(next(&mut lexer), Some(Ok(2)));
+    assert_eq!(next(&mut lexer), Some(Ok(1)));
+    assert_eq!(next(&mut lexer), None);
+}
+
+#[test]
+fn end_of_input_transition_2() {
+    lexer! {
+        Lexer -> (usize, &'input str);
+
+        $ => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_((1, match_))
+        },
+
+        _* => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_((2, match_))
+        },
+    }
+
+    let mut lexer = Lexer::new("a");
+    assert_eq!(next(&mut lexer), Some(Ok((2, "a")))); // longest match
+    assert_eq!(next(&mut lexer), Some(Ok((1, ""))));
+    assert_eq!(next(&mut lexer), None);
+}
+
+#[test]
+fn end_of_input_transition_3() {
+    lexer! {
+        Lexer -> (usize, &'input str);
+
+        "test" => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_((1, match_))
+        },
+
+        // TODO: need syntax for excluding characters
+        "//" (['a'-'z'] | ['A'-'Z'] | ' ')* ('\n' | $) => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_((2, match_))
+        },
+    }
+
+    let mut lexer = Lexer::new("");
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("//");
+    assert_eq!(next(&mut lexer), Some(Ok((2, "//"))));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("// a");
+    assert_eq!(next(&mut lexer), Some(Ok((2, "// a"))));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("// a\n");
+    assert_eq!(next(&mut lexer), Some(Ok((2, "// a\n"))));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("// a\ntest");
+    assert_eq!(next(&mut lexer), Some(Ok((2, "// a\n"))));
+    assert_eq!(next(&mut lexer), Some(Ok((1, "test"))));
+    assert_eq!(next(&mut lexer), None);
+}
+
+#[test]
+fn end_of_input_multiple_states() {
+    // End-of-input should be matched once
+    lexer! {
+        Lexer -> usize;
+
+        rule Init {
+            $ = 1,
+
+            'a' => |lexer| {
+                lexer.switch(LexerRule::Rule1)
+            },
+        }
+
+        rule Rule1 {
+            $ = 2,
+        }
+    }
+
+    let mut lexer = Lexer::new("");
+    assert_eq!(next(&mut lexer), Some(Ok(1)));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("a");
+    assert_eq!(next(&mut lexer), Some(Ok(2)));
+    assert_eq!(next(&mut lexer), None);
+}

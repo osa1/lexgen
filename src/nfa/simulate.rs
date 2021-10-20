@@ -74,7 +74,22 @@ impl<A: std::fmt::Debug + Copy> NFA<A> {
                 }
             }
 
-            // Reached EOF without errors, accept current match
+            // Reached EOF, take EOF transitions, check for accepting states
+            states = next_end_of_input(self, &states);
+
+            {
+                let mut states_sorted: Vec<StateIdx> = states.iter().copied().collect();
+                states_sorted.sort();
+
+                for state in states_sorted {
+                    if let Some(value) = self.states[state.0].accepting {
+                        values.push((&input[match_start..], value));
+                        break 'outer;
+                    }
+                }
+            }
+
+            // Reached EOF but cannot accept input, backtrack if possible, otherwise raise an error
             match last_match.take() {
                 Some((last_match_start, last_match_value, last_match_end)) => {
                     values.push((&input[last_match_start..last_match_end], last_match_value));
@@ -117,6 +132,19 @@ fn next<A>(nfa: &NFA<A>, states: &Set<StateIdx>, char: char) -> Set<StateIdx> {
                 next_states.extend(nexts.into_iter());
             }
         }
+
+        // Any transitions
+        next_states.extend(nfa.states[state.0].any_transitions.iter().copied());
+    }
+
+    nfa.compute_state_closure(&next_states)
+}
+
+fn next_end_of_input<A>(nfa: &NFA<A>, states: &Set<StateIdx>) -> Set<StateIdx> {
+    let mut next_states: Set<StateIdx> = Default::default();
+
+    for state in states {
+        next_states.extend(nfa.states[state.0].end_of_input_transitions.iter().copied());
     }
 
     nfa.compute_state_closure(&next_states)

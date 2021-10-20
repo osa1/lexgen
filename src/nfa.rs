@@ -12,11 +12,6 @@ use fxhash::{FxHashMap, FxHashSet};
 pub struct NFA<A> {
     // Indexed by `StateIdx`
     states: Vec<State<A>>,
-
-    // Action for the "failure" state. In principle we could have many failure states and actions,
-    // but we only need one per NFA for lexing, so we have one action for the entire NFA. (NB. This
-    // is different in DFA)
-    fail: Option<A>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -27,6 +22,8 @@ struct State<A> {
     char_transitions: FxHashMap<char, FxHashSet<StateIdx>>,
     range_transitions: FxHashMap<(char, char), FxHashSet<StateIdx>>,
     empty_transitions: FxHashSet<StateIdx>,
+    any_transitions: FxHashSet<StateIdx>,
+    end_of_input_transitions: FxHashSet<StateIdx>,
     accepting: Option<A>,
 }
 
@@ -36,6 +33,8 @@ impl<A> State<A> {
             char_transitions: Default::default(),
             range_transitions: Default::default(),
             empty_transitions: Default::default(),
+            any_transitions: Default::default(),
+            end_of_input_transitions: Default::default(),
             accepting: None,
         }
     }
@@ -45,7 +44,6 @@ impl<A> NFA<A> {
     pub fn new() -> NFA<A> {
         NFA {
             states: vec![State::new()],
-            fail: None,
         }
     }
 
@@ -71,13 +69,15 @@ impl<A> NFA<A> {
         self.states[state.0].range_transitions.iter()
     }
 
-    pub fn get_fail_action(&self) -> Option<&A> {
-        self.fail.as_ref()
+    pub fn any_transitions(&self, state: StateIdx) -> impl Iterator<Item = StateIdx> + '_ {
+        self.states[state.0].any_transitions.iter().copied()
     }
 
-    pub fn set_fail_action(&mut self, value: A) {
-        assert!(self.fail.is_none());
-        self.fail = Some(value);
+    pub fn end_of_input_transitions(&self, state: StateIdx) -> impl Iterator<Item = StateIdx> + '_ {
+        self.states[state.0]
+            .end_of_input_transitions
+            .iter()
+            .copied()
     }
 
     pub fn new_state(&mut self) -> StateIdx {
@@ -130,6 +130,18 @@ impl<A> NFA<A> {
         assert!(not_exists, "add_empty_transition");
     }
 
+    pub fn add_any_transition(&mut self, state: StateIdx, next: StateIdx) {
+        let not_exists = self.states[state.0].any_transitions.insert(next);
+
+        assert!(not_exists, "add_any_transition");
+    }
+
+    pub fn add_end_of_input_transition(&mut self, state: StateIdx, next: StateIdx) {
+        let not_exists = self.states[state.0].end_of_input_transitions.insert(next);
+
+        assert!(not_exists, "add_end_of_input_transition");
+    }
+
     fn make_state_accepting(&mut self, state: StateIdx, value: A) {
         // TODO: Avoid overriding here?
         self.states[state.0].accepting = Some(value);
@@ -171,6 +183,8 @@ impl<A> Display for NFA<A> {
                 char_transitions,
                 range_transitions,
                 empty_transitions,
+                any_transitions,
+                end_of_input_transitions,
                 accepting,
             } = state;
 
@@ -218,16 +232,32 @@ impl<A> Display for NFA<A> {
                 )?;
             }
 
+            if !any_transitions.is_empty() {
+                if !first {
+                    write!(f, "     ")?;
+                } else {
+                    first = false;
+                }
+
+                writeln!(f, "_ -> {}", HashSetDisplay(any_transitions))?;
+            }
+
+            if !end_of_input_transitions.is_empty() {
+                if !first {
+                    write!(f, "     ")?;
+                }
+
+                writeln!(f, "$ -> {}", HashSetDisplay(end_of_input_transitions))?;
+            }
+
             if empty_transitions.is_empty()
                 && char_transitions.is_empty()
                 && range_transitions.is_empty()
+                && any_transitions.is_empty()
+                && end_of_input_transitions.is_empty()
             {
                 writeln!(f)?;
             }
-        }
-
-        if self.fail.is_some() {
-            writeln!(f, "*FAIL")?;
         }
 
         Ok(())

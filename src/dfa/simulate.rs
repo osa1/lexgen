@@ -59,7 +59,17 @@ impl<A: Copy> DFA<StateIdx, A> {
                 }
             }
 
-            // Reached EOF without errors, accept current match
+            // Reached EOF, take EOF transition, check for accepting states
+            if let Some(next) = next_end_of_input(self, state) {
+                // Check for accepting state
+                state = next;
+                if let Some(value) = self.states[state.0].accepting {
+                    values.push((&input[match_start..], value));
+                    break; // 'outer
+                }
+            }
+
+            // Reached EOF but cannot accept input, backtrack if possible, otherwise raise an error
             match last_match.take() {
                 Some((last_match_start, last_match_value, last_match_end)) => {
                     values.push((&input[last_match_start..last_match_end], last_match_value));
@@ -102,9 +112,13 @@ fn next<A>(dfa: &DFA<StateIdx, A>, state: StateIdx, char: char) -> Option<StateI
         }
     }
 
-    if let Some(next) = state.fail_transition {
+    if let Some(next) = state.any_transition {
         return Some(next);
     }
 
     return None;
+}
+
+fn next_end_of_input<A>(dfa: &DFA<StateIdx, A>, state: StateIdx) -> Option<StateIdx> {
+    dfa.states[state.0].end_of_input_transition
 }

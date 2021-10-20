@@ -41,17 +41,8 @@ pub enum Rule<Rhs> {
 }
 
 pub struct SingleRule<Rhs> {
-    pub lhs: RuleLhs,
+    pub lhs: Regex,
     pub rhs: Rhs,
-}
-
-#[derive(Debug)]
-pub enum RuleLhs {
-    Regex(Regex),
-
-    /// An `_` as the LHS of a rule. This rule only matches when none of the other rules in the
-    /// same rule set match.
-    Fail,
 }
 
 #[derive(Debug, Clone)]
@@ -131,6 +122,8 @@ pub enum Regex {
     ZeroOrOne(Box<Regex>),
     Concat(Box<Regex>, Box<Regex>),
     Or(Box<Regex>, Box<Regex>),
+    Any, // any character
+    EndOfInput,
 }
 
 #[derive(Debug, Clone)]
@@ -173,6 +166,7 @@ fn parse_regex_1(input: ParseStream) -> syn::Result<Regex> {
         || input.peek(syn::LitChar)
         || input.peek(syn::LitStr)
         || input.peek(syn::token::Bracket)
+        || input.peek(syn::token::Underscore)
     {
         let re2 = parse_regex_2(input)?;
         re = Regex::Concat(Box::new(re), Box::new(re2)); // left associative
@@ -203,7 +197,7 @@ fn parse_regex_2(input: ParseStream) -> syn::Result<Regex> {
     Ok(re)
 }
 
-// re_3 -> ( re_0 ) | $x | 'x' | "..." | [...]
+// re_3 -> ( re_0 ) | $ | $x | $$x | _ | 'x' | "..." | [...]
 fn parse_regex_3(input: ParseStream) -> syn::Result<Regex> {
     if input.peek(syn::token::Paren) {
         let parenthesized;
@@ -215,8 +209,10 @@ fn parse_regex_3(input: ParseStream) -> syn::Result<Regex> {
             let ident = input.parse::<syn::Ident>()?;
             Ok(Regex::Builtin(Builtin(ident.to_string())))
         } else {
-            let ident = input.parse::<syn::Ident>()?;
-            Ok(Regex::Var(Var(ident.to_string())))
+            match input.parse::<syn::Ident>() {
+                Ok(ident) => Ok(Regex::Var(Var(ident.to_string()))),
+                Err(_) => Ok(Regex::EndOfInput),
+            }
         }
     } else if input.peek(syn::LitChar) {
         let char = input.parse::<syn::LitChar>()?;
@@ -229,6 +225,8 @@ fn parse_regex_3(input: ParseStream) -> syn::Result<Regex> {
         syn::bracketed!(bracketed in input);
         let char_set = CharSet::parse(&bracketed)?;
         Ok(Regex::CharSet(char_set))
+    } else if input.parse::<syn::token::Underscore>().is_ok() {
+        Ok(Regex::Any)
     } else {
         Err(syn::Error::new(
             proc_macro2::Span::call_site(),
@@ -260,19 +258,9 @@ impl Parse for CharOrRange {
     }
 }
 
-impl Parse for RuleLhs {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        if input.parse::<syn::token::Underscore>().is_ok() {
-            Ok(RuleLhs::Fail)
-        } else {
-            Ok(RuleLhs::Regex(input.parse::<Regex>()?))
-        }
-    }
-}
-
 impl Parse for SingleRule<RuleRhs> {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let lhs = RuleLhs::parse(input)?;
+        let lhs = Regex::parse(input)?;
 
         let rhs = if input.parse::<syn::token::Comma>().is_ok() {
             RuleRhs::None
