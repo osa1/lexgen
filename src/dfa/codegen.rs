@@ -480,7 +480,10 @@ fn generate_state_arm(
                     )
                 }
             },
-            None => generate_rhs_code(ctx, *rhs),
+            None => {
+                // No `self.done = true` here, end-of-input is not handled
+                generate_rhs_code(ctx, *rhs)
+            }
         };
 
         let state_char_arms = generate_state_char_arms(
