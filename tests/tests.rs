@@ -62,7 +62,7 @@ fn switch_user_state() {
             $whitespace,
 
             "/*" =>
-                |mut lexer| {
+                |lexer| {
                     *lexer.state() = 1;
                     lexer.switch(LexerRule::Comment)
                 },
@@ -70,14 +70,14 @@ fn switch_user_state() {
 
         rule Comment {
             "/*" =>
-                |mut lexer| {
+                |lexer| {
                     let state = lexer.state();
                     *state = *state + 1;
                     lexer.continue_()
                 },
 
             "*/" =>
-                |mut lexer| {
+                |lexer| {
                     let state = lexer.state();
                     if *state == 1 {
                         lexer.switch_and_return(LexerRule::Init, Token::Comment)
@@ -108,7 +108,7 @@ fn counting() {
             ' ',
 
             '[' =>
-                |mut lexer| {
+                |lexer| {
                     *lexer.state() = 0;
                     lexer.switch(LexerRule::Count)
                 },
@@ -116,14 +116,14 @@ fn counting() {
 
         rule Count {
             '=' =>
-                |mut lexer| {
+                |lexer| {
                     let n = *lexer.state();
                     *lexer.state() = n + 1;
                     lexer.continue_()
                 },
 
             '[' =>
-                |mut lexer| {
+                |lexer| {
                     let n = *lexer.state();
                     lexer.switch_and_return(LexerRule::Init, n)
                 },
@@ -152,7 +152,7 @@ fn lua_long_strings() {
             ' ',
 
             '[' =>
-                |mut lexer| {
+                |lexer| {
                     *lexer.state() = Default::default();
                     lexer.switch(LuaLongStringLexerRule::LeftBracket)
                 },
@@ -160,7 +160,7 @@ fn lua_long_strings() {
 
         rule LeftBracket {
             '=' =>
-                |mut lexer| {
+                |lexer| {
                     lexer.state().left_size += 1;
                     lexer.continue_()
                 },
@@ -172,7 +172,7 @@ fn lua_long_strings() {
 
         rule String {
             ']' =>
-                |mut lexer| {
+                |lexer| {
                     lexer.state().right_size = 0;
                     lexer.switch(LuaLongStringLexerRule::RightBracket)
                 },
@@ -184,16 +184,16 @@ fn lua_long_strings() {
 
         rule RightBracket {
             '=' =>
-                |mut lexer| {
+                |lexer| {
                     lexer.state().right_size += 1;
                     lexer.continue_()
                 },
 
             ']' =>
-                |mut lexer| {
+                |lexer| {
                     let state = *lexer.state();
                     if state.left_size == state.right_size {
-                        let match_ = lexer.match_[state.left_size+2..lexer.match_.len() - state.right_size - 2].to_owned();
+                        let match_ = lexer.match_()[state.left_size+2..lexer.match_().len() - state.right_size - 2].to_owned();
                         lexer.switch_and_return(LuaLongStringLexerRule::Init, match_)
                     } else {
                         lexer.switch(LuaLongStringLexerRule::String)

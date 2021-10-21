@@ -19,19 +19,19 @@ fn failure_confusion_1() {
 
         let whitespace = [' ' '\t' '\n'];
 
-        '"' => |mut lexer| {
+        '"' => |lexer| {
             println!("matched a double quote");
             let str = std::mem::replace(&mut lexer.state().buf, String::new());
             lexer.return_(str)
         },
 
-        "\\\"" => |mut lexer| {
+        "\\\"" => |lexer| {
             println!("matched an escaped double quote");
             lexer.state().buf.push('"');
             lexer.continue_()
         },
 
-        _ => |mut lexer| {
+        _ => |lexer| {
             let char = lexer.match_().chars().next_back().unwrap();
             println!("wildcard matched {:?}", char);
             lexer.state().buf.push(char);
@@ -66,7 +66,7 @@ fn failure_confusion_2() {
             ' ',
 
             "(*" =>
-                |mut lexer| {
+                |lexer| {
                     lexer.state().comment_depth = 1;
                     lexer.switch(LexerRule::Comment)
                 },
@@ -74,14 +74,14 @@ fn failure_confusion_2() {
 
         rule Comment {
             "(*" =>
-                |mut lexer| {
+                |lexer| {
                     let depth = &mut lexer.state().comment_depth;
                     *depth =  *depth + 1;
                     lexer.continue_()
                 },
 
             "*)" =>
-                |mut lexer| {
+                |lexer| {
                     let depth = &mut lexer.state().comment_depth;
                     if *depth == 1 {
                         lexer.switch(LexerRule::Init)
@@ -212,9 +212,7 @@ fn return_should_reset_match() {
 
 #[test]
 fn issue_16_backtracking_1() {
-    fn return_match<'lexer, 'input>(
-        lexer: LexerHandle<'lexer, 'input>,
-    ) -> LexerAction<&'input str> {
+    fn return_match<'lexer, 'input>(lexer: &mut Lexer<'input>) -> LexerAction<&'input str> {
         let match_ = lexer.match_();
         lexer.return_(match_)
     }
@@ -240,9 +238,7 @@ fn issue_16_backtracking_1() {
 
 #[test]
 fn issue_16_backtracking_2() {
-    fn return_match<'lexer, 'input>(
-        lexer: LexerHandle<'lexer, 'input>,
-    ) -> LexerAction<&'input str> {
+    fn return_match<'lexer, 'input>(lexer: &mut Lexer<'input>) -> LexerAction<&'input str> {
         let match_ = lexer.match_();
         lexer.return_(match_)
     }
