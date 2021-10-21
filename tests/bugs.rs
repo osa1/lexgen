@@ -65,31 +65,28 @@ fn failure_confusion_2() {
         rule Init {
             ' ',
 
-            "(*" =>
-                |lexer| {
-                    lexer.state().comment_depth = 1;
-                    lexer.switch(LexerRule::Comment)
-                },
+            "(*" => |lexer| {
+                lexer.state().comment_depth = 1;
+                lexer.switch(LexerRule::Comment)
+            },
         }
 
         rule Comment {
-            "(*" =>
-                |lexer| {
-                    let depth = &mut lexer.state().comment_depth;
-                    *depth =  *depth + 1;
-                    lexer.continue_()
-                },
+            "(*" => |lexer| {
+                let depth = &mut lexer.state().comment_depth;
+                *depth =  *depth + 1;
+                lexer.continue_()
+            },
 
-            "*)" =>
-                |lexer| {
-                    let depth = &mut lexer.state().comment_depth;
-                    if *depth == 1 {
-                        lexer.switch(LexerRule::Init)
-                    } else {
-                        *depth = *depth - 1;
-                        lexer.continue_()
-                    }
-                },
+            "*)" => |lexer| {
+                let depth = &mut lexer.state().comment_depth;
+                if *depth == 1 {
+                    lexer.switch(LexerRule::Init)
+                } else {
+                    *depth = *depth - 1;
+                    lexer.continue_()
+                }
+            },
 
             _,
         }

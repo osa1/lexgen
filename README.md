@@ -17,11 +17,10 @@ lexer! {
         [' ' '\t' '\n']+,
 
         // Rule for matching identifiers
-        $init $subseq* =>
-            |lexer| {
-                let token = Token::Id(lexer.match_().to_owned());
-                lexer.return_(token)
-            },
+        $init $subseq* => |lexer| {
+            let token = Token::Id(lexer.match_().to_owned());
+            lexer.return_(token)
+        },
     }
 }
 
@@ -265,28 +264,25 @@ lexer! {
     Lexer(usize) -> usize;
 
     rule Init {
-        ' ',
+        ' ',                                            // line 5
 
-        '[' =>
-            |mut lexer| {
-                *lexer.state() = 0;                     // line 9
-                lexer.switch(LexerRule::Count)          // line 10
-            },
+        '[' => |mut lexer| {
+            *lexer.state() = 0;                         // line 8
+            lexer.switch(LexerRule::Count)              // line 9
+        },
     }
 
     rule Count {
-        '=' =>
-            |mut lexer| {
-                let n = *lexer.state();
-                *lexer.state() = n + 1;                 // line 18
-                lexer.continue_()                       // line 19
-            },
+        '=' => |mut lexer| {
+            let n = *lexer.state();
+            *lexer.state() = n + 1;                     // line 16
+            lexer.continue_()                           // line 17
+        },
 
-        '[' =>
-            |mut lexer| {
-                let n = *lexer.state();
-                lexer.switch_and_return(LexerRule::Init, n) // line 25
-            },
+        '[' => |mut lexer| {
+            let n = *lexer.state();
+            lexer.switch_and_return(LexerRule::Init, n) // line 22
+        },
     }
 }
 
@@ -297,11 +293,11 @@ assert_eq!(lexer.next(), Some(Ok((7, 2, 11))));
 assert_eq!(lexer.next(), None);
 ```
 
-Initially (the `Init` rule set) we skip spaces. When we see a `[` we initialize
-the user state (line 9) and switch to the `Count` state (line 10). In `Count`,
-each `=` increments the user state by one (line 18) and skips the match (line
-19). A `[` in the `Count` state returns the current number and switches to the
-`Init` state (line 25).
+Initially (the `Init` rule set) we skip spaces (line 5). When we see a `[` we
+initialize the user state (line 8) and switch to the `Count` state (line 9). In
+`Count`, each `=` increments the user state by one (line 16) and skips the
+match (line 17). A `[` in the `Count` state returns the current number and
+switches to the `Init` state (line 22).
 
 ## Implementation details
 
