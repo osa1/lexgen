@@ -266,20 +266,20 @@ lexer! {
     rule Init {
         ' ',                                            // line 5
 
-        '[' => |mut lexer| {
+        '[' => |lexer| {
             *lexer.state() = 0;                         // line 8
             lexer.switch(LexerRule::Count)              // line 9
         },
     }
 
     rule Count {
-        '=' => |mut lexer| {
+        '=' => |lexer| {
             let n = *lexer.state();
             *lexer.state() = n + 1;                     // line 16
             lexer.continue_()                           // line 17
         },
 
-        '[' => |mut lexer| {
+        '[' => |lexer| {
             let n = *lexer.state();
             lexer.switch_and_return(LexerRule::Init, n) // line 22
         },
