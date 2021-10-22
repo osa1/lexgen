@@ -625,20 +625,21 @@ fn switch_and_reset_match() {
                 if lexer.state().enable_reset_match {
                     lexer.reset_match();
                 }
-                lexer.switch(LexerRule::Rule1)
+                lexer.continue_()
             },
 
             "!" => |lexer| {
                 lexer.reset_match();
                 let enable_reset_match = &mut lexer.state().enable_reset_match;
                 *enable_reset_match = !*enable_reset_match;
-                lexer.switch(LexerRule::Rule1)
+                lexer.continue_()
             },
 
             ['d' 'e']+ => |lexer| {
                 let s = lexer.match_();
                 lexer.return_(s)
             },
+
             $ = "<>",
         }
     }
