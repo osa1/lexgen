@@ -452,7 +452,7 @@ fn generate_state_arm(
                 None => {
                     #end_of_input_action
                 }
-                Some((char_idx, char)) => {
+                Some((_, char)) => {
                     match char {
                         #(#state_char_arms,)*
                     }
