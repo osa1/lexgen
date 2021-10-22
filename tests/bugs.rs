@@ -19,19 +19,19 @@ fn failure_confusion_1() {
 
         let whitespace = [' ' '\t' '\n'];
 
-        '"' => |mut lexer| {
+        '"' => |lexer| {
             println!("matched a double quote");
             let str = std::mem::replace(&mut lexer.state().buf, String::new());
             lexer.return_(str)
         },
 
-        "\\\"" => |mut lexer| {
+        "\\\"" => |lexer| {
             println!("matched an escaped double quote");
             lexer.state().buf.push('"');
             lexer.continue_()
         },
 
-        _ => |mut lexer| {
+        _ => |lexer| {
             let char = lexer.match_().chars().next_back().unwrap();
             println!("wildcard matched {:?}", char);
             lexer.state().buf.push(char);
@@ -65,31 +65,28 @@ fn failure_confusion_2() {
         rule Init {
             ' ',
 
-            "(*" =>
-                |mut lexer| {
-                    lexer.state().comment_depth = 1;
-                    lexer.switch(LexerRule::Comment)
-                },
+            "(*" => |lexer| {
+                lexer.state().comment_depth = 1;
+                lexer.switch(LexerRule::Comment)
+            },
         }
 
         rule Comment {
-            "(*" =>
-                |mut lexer| {
-                    let depth = &mut lexer.state().comment_depth;
-                    *depth =  *depth + 1;
-                    lexer.continue_()
-                },
+            "(*" => |lexer| {
+                let depth = &mut lexer.state().comment_depth;
+                *depth =  *depth + 1;
+                lexer.continue_()
+            },
 
-            "*)" =>
-                |mut lexer| {
-                    let depth = &mut lexer.state().comment_depth;
-                    if *depth == 1 {
-                        lexer.switch(LexerRule::Init)
-                    } else {
-                        *depth = *depth - 1;
-                        lexer.continue_()
-                    }
-                },
+            "*)" => |lexer| {
+                let depth = &mut lexer.state().comment_depth;
+                if *depth == 1 {
+                    lexer.switch(LexerRule::Init)
+                } else {
+                    *depth = *depth - 1;
+                    lexer.continue_()
+                }
+            },
 
             _,
         }
@@ -100,7 +97,7 @@ fn failure_confusion_2() {
 }
 
 #[test]
-fn failure_confusion_3() {
+fn failure_confusion_3_1() {
     lexer! {
         Lexer -> usize;
 
@@ -116,6 +113,24 @@ fn failure_confusion_3() {
     assert_eq!(lexer.next(), Some(Ok((4, 0, 5))));
     assert_eq!(lexer.next(), Some(Ok((5, 1, 7))));
     assert_eq!(lexer.next(), Some(Ok((7, 2, 8))));
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn failure_confusion_3_2() {
+    // In practice the case we test in the previous test happens when lexing single-letter
+    // identifiers in a lexer that allows multi-letter identifiers (i.e. practically all language
+    // lexers). Here's a more realistic example:
+    lexer! {
+        Lexer -> usize;
+
+        $$ascii_lowercase+ = 1,
+        ',' = 2,
+    }
+
+    let mut lexer = Lexer::new("f,");
+    assert_eq!(lexer.next(), Some(Ok((0, 1, 1))));
+    assert_eq!(lexer.next(), Some(Ok((1, 2, 2))));
     assert_eq!(lexer.next(), None);
 }
 
@@ -212,9 +227,7 @@ fn return_should_reset_match() {
 
 #[test]
 fn issue_16_backtracking_1() {
-    fn return_match<'lexer, 'input>(
-        lexer: LexerHandle<'lexer, 'input>,
-    ) -> LexerAction<&'input str> {
+    fn return_match<'lexer, 'input>(lexer: &mut Lexer<'input>) -> LexerAction<&'input str> {
         let match_ = lexer.match_();
         lexer.return_(match_)
     }
@@ -240,9 +253,7 @@ fn issue_16_backtracking_1() {
 
 #[test]
 fn issue_16_backtracking_2() {
-    fn return_match<'lexer, 'input>(
-        lexer: LexerHandle<'lexer, 'input>,
-    ) -> LexerAction<&'input str> {
+    fn return_match<'lexer, 'input>(lexer: &mut Lexer<'input>) -> LexerAction<&'input str> {
         let match_ = lexer.match_();
         lexer.return_(match_)
     }

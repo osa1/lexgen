@@ -6,6 +6,12 @@
   Previously "any character" (`_`) could be used as a rule left-hand side, but
   was not allowed in regexes.
 
+- Semantic action functions that use user state (`state` method of the lexer
+  handle) no longer need `mut` modifier in the handle argument.
+
+  This will generate warnings in old code with semantic actions that take a
+  `mut` argument.
+
 # 2021/10/19: 0.6.0
 
 - Fixed precedences of concatenation (juxtaposition) and alternation (`|`).

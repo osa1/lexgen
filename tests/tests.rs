@@ -21,11 +21,10 @@ fn simple() {
 
             [' ' '\t' '\n']+,
 
-            $init $subseq* =>
-                |lexer| {
-                    let token = Token::Id(lexer.match_().to_owned());
-                    lexer.return_(token)
-                },
+            $init $subseq* => |lexer| {
+                let token = Token::Id(lexer.match_().to_owned());
+                lexer.return_(token)
+            },
         }
     }
 
@@ -61,35 +60,30 @@ fn switch_user_state() {
         rule Init {
             $whitespace,
 
-            "/*" =>
-                |mut lexer| {
-                    *lexer.state() = 1;
-                    lexer.switch(LexerRule::Comment)
-                },
+            "/*" => |lexer| {
+                *lexer.state() = 1;
+                lexer.switch(LexerRule::Comment)
+            },
         }
 
         rule Comment {
-            "/*" =>
-                |mut lexer| {
-                    let state = lexer.state();
-                    *state = *state + 1;
+            "/*" => |lexer| {
+                let state = lexer.state();
+                *state = *state + 1;
+                lexer.continue_()
+            },
+
+            "*/" => |lexer| {
+                let state = lexer.state();
+                if *state == 1 {
+                    lexer.switch_and_return(LexerRule::Init, Token::Comment)
+                } else {
+                    *state = *state - 1;
                     lexer.continue_()
-                },
+                }
+            },
 
-            "*/" =>
-                |mut lexer| {
-                    let state = lexer.state();
-                    if *state == 1 {
-                        lexer.switch_and_return(LexerRule::Init, Token::Comment)
-                    } else {
-                        *state = *state - 1;
-                        lexer.continue_()
-                    }
-                },
-
-            _ =>
-                |lexer|
-                    lexer.continue_(),
+            _ => |lexer| lexer.continue_(),
         }
     }
 
@@ -107,26 +101,23 @@ fn counting() {
         rule Init {
             ' ',
 
-            '[' =>
-                |mut lexer| {
-                    *lexer.state() = 0;
-                    lexer.switch(LexerRule::Count)
-                },
+            '[' => |lexer| {
+                *lexer.state() = 0;
+                lexer.switch(LexerRule::Count)
+            },
         }
 
         rule Count {
-            '=' =>
-                |mut lexer| {
-                    let n = *lexer.state();
-                    *lexer.state() = n + 1;
-                    lexer.continue_()
-                },
+            '=' => |lexer| {
+                let n = *lexer.state();
+                *lexer.state() = n + 1;
+                lexer.continue_()
+            },
 
-            '[' =>
-                |mut lexer| {
-                    let n = *lexer.state();
-                    lexer.switch_and_return(LexerRule::Init, n)
-                },
+            '[' => |lexer| {
+                let n = *lexer.state();
+                lexer.switch_and_return(LexerRule::Init, n)
+            },
         }
     }
 
@@ -151,58 +142,47 @@ fn lua_long_strings() {
         rule Init {
             ' ',
 
-            '[' =>
-                |mut lexer| {
-                    *lexer.state() = Default::default();
-                    lexer.switch(LuaLongStringLexerRule::LeftBracket)
-                },
+            '[' => |lexer| {
+                *lexer.state() = Default::default();
+                lexer.switch(LuaLongStringLexerRule::LeftBracket)
+            },
         }
 
         rule LeftBracket {
-            '=' =>
-                |mut lexer| {
-                    lexer.state().left_size += 1;
-                    lexer.continue_()
-                },
+            '=' => |lexer| {
+                lexer.state().left_size += 1;
+                lexer.continue_()
+            },
 
-            '[' =>
-                |lexer|
-                    lexer.switch(LuaLongStringLexerRule::String),
+            '[' => |lexer| lexer.switch(LuaLongStringLexerRule::String),
         }
 
         rule String {
-            ']' =>
-                |mut lexer| {
-                    lexer.state().right_size = 0;
-                    lexer.switch(LuaLongStringLexerRule::RightBracket)
-                },
+            ']' => |lexer| {
+                lexer.state().right_size = 0;
+                lexer.switch(LuaLongStringLexerRule::RightBracket)
+            },
 
-            _ =>
-                |lexer|
-                    lexer.continue_(),
+            _ => |lexer| lexer.continue_(),
         }
 
         rule RightBracket {
-            '=' =>
-                |mut lexer| {
-                    lexer.state().right_size += 1;
-                    lexer.continue_()
-                },
+            '=' => |lexer| {
+                lexer.state().right_size += 1;
+                lexer.continue_()
+            },
 
-            ']' =>
-                |mut lexer| {
-                    let state = *lexer.state();
-                    if state.left_size == state.right_size {
-                        let match_ = lexer.match_[state.left_size+2..lexer.match_.len() - state.right_size - 2].to_owned();
-                        lexer.switch_and_return(LuaLongStringLexerRule::Init, match_)
-                    } else {
-                        lexer.switch(LuaLongStringLexerRule::String)
-                    }
-                },
+            ']' => |lexer| {
+                let state = *lexer.state();
+                if state.left_size == state.right_size {
+                    let match_ = lexer.match_()[state.left_size+2..lexer.match_().len() - state.right_size - 2].to_owned();
+                    lexer.switch_and_return(LuaLongStringLexerRule::Init, match_)
+                } else {
+                    lexer.switch(LuaLongStringLexerRule::String)
+                }
+            },
 
-            _ =>
-                |lexer|
-                    lexer.switch(LuaLongStringLexerRule::String),
+            _ => |lexer| lexer.switch(LuaLongStringLexerRule::String),
         }
     }
 
@@ -652,5 +632,19 @@ fn switch_and_reset_match() {
     assert_eq!(next(&mut lexer), Some(Ok("a")));
     assert_eq!(next(&mut lexer), Some(Ok("deed")));
     assert_eq!(next(&mut lexer), Some(Ok("<>")));
+}
+
+fn any_2() {
+    lexer! {
+        Lexer -> &'input str;
+
+        "'" _ "'" => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_(match_)
+        },
+    }
+
+    let mut lexer = Lexer::new("'a'");
+    assert_eq!(next(&mut lexer), Some(Ok("'a'")));
     assert_eq!(next(&mut lexer), None);
 }

@@ -25,10 +25,6 @@ pub struct CgCtx {
     /// from `lexer_name`.
     action_type_name: syn::Ident,
 
-    /// Name of the `struct` type for the lexer handle passed to user actions: `struct LexerHandle
-    /// { ... }`. The name is derived from `lexer_name`.
-    handle_type_name: syn::Ident,
-
     /// Maps user-written rule names (e.g. `rule MyRule { ... }`) to their initial states in the
     /// final DFA.
     rule_states: FxHashMap<String, StateIdx>,
@@ -63,9 +59,6 @@ impl CgCtx {
         let action_type_name =
             syn::Ident::new(&(lexer_name.to_string() + "Action"), lexer_name.span());
 
-        let handle_type_name =
-            syn::Ident::new(&(lexer_name.to_string() + "Handle"), lexer_name.span());
-
         let inlined_states: Vec<StateIdx> = dfa
             .states
             .iter()
@@ -85,7 +78,6 @@ impl CgCtx {
             token_type,
             user_error_type,
             action_type_name,
-            handle_type_name,
             rule_states,
             inlined_states,
             codegen_state: CgState {
@@ -115,10 +107,6 @@ impl CgCtx {
 
     pub fn user_error_type(&self) -> Option<&syn::Type> {
         self.user_error_type.as_ref()
-    }
-
-    pub fn handle_type_name(&self) -> &syn::Ident {
-        &self.handle_type_name
     }
 
     pub fn action_type_name(&self) -> &syn::Ident {

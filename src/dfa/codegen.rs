@@ -126,7 +126,6 @@ pub fn reify(
     let semantic_action_fns = generate_semantic_action_fns(&ctx);
 
     let action_type_name = ctx.action_type_name();
-    let handle_type_name = ctx.handle_type_name();
     let lexer_name = ctx.lexer_name();
     let token_type = ctx.token_type();
 
@@ -138,7 +137,7 @@ pub fn reify(
 
     // Type of semantic actions, used to store the last match, to be used when backtracking
     let semantic_action_fn_type =
-        quote!(for<'lexer, 'input> fn(#handle_type_name<'lexer, 'input>) -> #result_type);
+        quote!(for<'lexer, 'input> fn(&'lexer mut #lexer_name<'input>) -> #result_type);
 
     quote!(
         // Possible outcomes of a user action
@@ -147,14 +146,6 @@ pub fn reify(
             Continue,
             // User action returned a token, return it
             Return(T),
-            // User action requested switching to the given rule set
-            Switch(#rule_name_enum_name),
-            // User action requested switching to the given rule set
-            // and resetting the match stack.
-            SwitchAndResetMatch(#rule_name_enum_name),
-            // Combination or `Switch` and `Return`: add token to the match stack, switch to the
-            // given rule set
-            SwitchAndReturn(T, #rule_name_enum_name),
         }
 
         impl<T> #action_type_name<T> {
@@ -167,12 +158,6 @@ pub fn reify(
                         #action_type_name::Continue,
                     #action_type_name::Return(t) =>
                         #action_type_name::Return(f(t)),
-                    #action_type_name::Switch(state) =>
-                        #action_type_name::Switch(state),
-                    #action_type_name::SwitchAndResetMatch(state) =>
-                        #action_type_name::SwitchAndResetMatch(state),
-                    #action_type_name::SwitchAndReturn(t, state) =>
-                        #action_type_name::SwitchAndReturn(f(t), state),
                 }
             }
         }
@@ -183,85 +168,74 @@ pub fn reify(
             #(#rule_name_idents,)*
         }
 
-        // The "handle" type passed to user actions. Allows getting the current match, modifying
-        // user state, returning tokens, and switching to a different lexer state.
-        struct #handle_type_name<'lexer, 'input> {
-            iter: &'lexer mut std::iter::Peekable<std::str::CharIndices<'input>>,
-            match_: &'input str,
-            user_state: &'lexer mut #user_state_type,
-        }
-
         // The lexer type
+        // NB. 'input lifetime used in `semantic_action_fn_type`
         #visibility struct #lexer_name<'input_> {
             // Current lexer state
-            state: usize,
+            __state: usize,
 
             // Set after end-of-input is handled by a rule, or by default in `Init` rule
-            done: bool,
+            __done: bool,
 
             // Which lexer state to switch to on successful match
-            initial_state: usize,
+            __initial_state: usize,
 
-            user_state: #user_state_type,
+            __user_state: #user_state_type,
 
             // User-provided input string. Does not change after initialization.
-            input: &'input_ str,
+            __input: &'input_ str,
 
             // Start index of `iter`. We update this as we backtrack and update `iter`.
-            iter_byte_idx: usize,
+            __iter_byte_idx: usize,
 
             // Character iterator. `Peekable` is used in the handler's `peek` method. Note that we
             // can't use byte index returned by this directly, as we re-initialize this field when
             // backtracking. Add `iter_byte_idx` to the byte index before using. When resetting,
             // update `iter_byte_idx`.
-            iter: std::iter::Peekable<std::str::CharIndices<'input_>>,
+            __iter: std::iter::Peekable<std::str::CharIndices<'input_>>,
 
             // Where does the current match start. Byte index in `input`.
-            current_match_start: usize,
+            __current_match_start: usize,
 
             // Where does the current match end (exclusive). Byte index in `input`.
-            current_match_end: usize,
+            __current_match_end: usize,
 
             // If we skipped an accepting state, this holds the triple:
             // - Skipped match start (byte index in `input`)
             // - Semantic action (a function name)
             // - Skipped match end (exclusive, byte index in `input`)
-            last_match: Option<(usize, #semantic_action_fn_type, usize)>,
+            __last_match: Option<(usize, #semantic_action_fn_type, usize)>,
         }
 
         #lexer_error_type
 
-        impl<'lexer, 'input> #handle_type_name<'lexer, 'input> {
-            fn switch_and_return<T>(self, rule: #rule_name_enum_name, token: T) -> #action_type_name<T> {
-                #action_type_name::SwitchAndReturn(token, rule)
-            }
-
-            fn return_<T>(self, token: T) -> #action_type_name<T> {
+        // Methods below for using in semantic actions
+        impl<'input> #lexer_name<'input> {
+            fn switch_and_return<T>(&mut self, rule: #rule_name_enum_name, token: T) -> #action_type_name<T> {
+                self.switch::<T>(rule);
                 #action_type_name::Return(token)
             }
 
-            fn switch<T>(self, rule: #rule_name_enum_name) -> #action_type_name<T> {
-                #action_type_name::Switch(rule)
+            fn return_<T>(&self, token: T) -> #action_type_name<T> {
+                #action_type_name::Return(token)
             }
 
-            fn switch_and_reset_match<T>(self, rule: #rule_name_enum_name) -> #action_type_name<T> {
-                #action_type_name::SwitchAndResetMatch(rule)
-            }
+            #switch_method
 
-            fn continue_<T>(self) -> #action_type_name<T> {
+            fn continue_<T>(&self) -> #action_type_name<T> {
                 #action_type_name::Continue
             }
 
             fn state(&mut self) -> &mut #user_state_type {
-                self.user_state
+                &mut self.__user_state
             }
 
             fn match_(&self) -> &'input str {
-                self.match_
+                &self.__input[self.__current_match_start..self.__current_match_end]
             }
 
             fn peek(&mut self) -> Option<char> {
-                self.iter.peek().map(|(_, char)| *char)
+                self.__iter.peek().map(|(_, char)| *char)
             }
         }
 
@@ -272,20 +246,18 @@ pub fn reify(
 
             #visibility fn new_with_state(input: &'input str, user_state: #user_state_type) -> Self {
                 #lexer_name {
-                    state: 0,
-                    done: false,
-                    initial_state: 0,
-                    user_state: Default::default(),
-                    input,
-                    iter_byte_idx: 0,
-                    iter: input.char_indices().peekable(),
-                    current_match_start: 0,
-                    current_match_end: 0,
-                    last_match: None,
+                    __state: 0,
+                    __done: false,
+                    __initial_state: 0,
+                    __user_state: Default::default(),
+                    __input: input,
+                    __iter_byte_idx: 0,
+                    __iter: input.char_indices().peekable(),
+                    __current_match_start: 0,
+                    __current_match_end: 0,
+                    __last_match: None,
                 }
             }
-
-            #switch_method
         }
 
         #(#search_tables)*
@@ -296,13 +268,13 @@ pub fn reify(
             type Item = Result<(usize, #token_type, usize), LexerError<#(#user_error_type_lifetimes),*>>;
 
             fn next(&mut self) -> Option<Self::Item> {
-                if self.done {
+                if self.__done {
                     return None;
                 }
 
                 loop {
-                    // println!("state = {:?}, next char = {:?}", self.state, self.iter.peek());
-                    match self.state {
+                    // println!("state = {:?}, next char = {:?}", self.__state, self.__iter.peek());
+                    match self.__state {
                         #(#match_arms,)*
                     }
                 }
@@ -312,6 +284,7 @@ pub fn reify(
 }
 
 fn generate_switch(ctx: &CgCtx, enum_name: &syn::Ident) -> TokenStream {
+    let action_type_name = ctx.action_type_name();
     let mut arms: Vec<TokenStream> = vec![];
 
     for (rule_name, state_idx) in ctx.rule_states().iter() {
@@ -319,21 +292,22 @@ fn generate_switch(ctx: &CgCtx, enum_name: &syn::Ident) -> TokenStream {
         let rule_ident = syn::Ident::new(rule_name, Span::call_site());
         arms.push(quote!(
             #enum_name::#rule_ident =>
-                self.state = #state_idx
+                self.__state = #state_idx
         ));
     }
 
     quote!(
-        fn switch(&mut self, rule: #enum_name) {
+        fn switch<A>(&mut self, rule: #enum_name) -> #action_type_name<A> {
             match rule {
                 #(#arms,)*
             }
-            self.initial_state = self.state;
+            self.__initial_state = self.__state;
+            #action_type_name::Continue
         }
     )
 }
 
-/// Generate arms of `match self.state { ... }` of a DFA.
+/// Generate arms of `match self.__state { ... }` of a DFA.
 fn generate_state_arms(ctx: &mut CgCtx, dfa: DFA<Trans, SemanticActionIdx>) -> Vec<TokenStream> {
     let DFA { states } = dfa;
 
@@ -384,11 +358,11 @@ fn generate_state_arm(
     let make_lexer_error = || -> TokenStream {
         if error_type_is_enum {
             quote!(LexerError::LexerError {
-                char_idx: self.current_match_start
+                char_idx: self.__current_match_start
             })
         } else {
             quote!(LexerError {
-                char_idx: self.current_match_start
+                char_idx: self.__current_match_start
             })
         }
     };
@@ -397,13 +371,13 @@ fn generate_state_arm(
         let error = make_lexer_error();
         let action = generate_semantic_action_call(ctx, &quote!(semantic_action));
         quote!({
-            match self.last_match.take() {
+            match self.__last_match.take() {
                 None => return Some(Err(#error)),
                 Some((match_start, semantic_action, match_end)) => {
-                    self.current_match_start = match_start;
-                    self.current_match_end = match_end;
-                    self.iter = self.input[match_end..].char_indices().peekable();
-                    self.iter_byte_idx = match_end;
+                    self.__current_match_start = match_start;
+                    self.__current_match_end = match_end;
+                    self.__iter = self.__input[match_end..].char_indices().peekable();
+                    self.__iter_byte_idx = match_end;
                     #action
                 }
             }
@@ -421,7 +395,7 @@ fn generate_state_arm(
         // fail (backtrack or raise error)
         let default_action = any_transition
             .as_ref()
-            .map(|any_transition| generate_any_transition(ctx, states, true, any_transition))
+            .map(|any_transition| generate_any_transition(ctx, states, any_transition))
             .unwrap_or_else(|| fail(ctx));
 
         let end_of_input_action = match end_of_input_transition {
@@ -432,7 +406,7 @@ fn generate_state_arm(
                 }
                 Trans::Trans(next_state) => {
                     let StateIdx(next_state) = ctx.renumber_state(*next_state);
-                    quote!(self.state = #next_state;)
+                    quote!(self.__state = #next_state;)
                 }
             },
             None => {
@@ -450,15 +424,15 @@ fn generate_state_arm(
         );
 
         quote!(
-            match self.iter.peek().copied() {
+            match self.__iter.peek().copied() {
                 None => {
-                    self.done = true; // don't handle end-of-input again
+                    self.__done = true; // don't handle end-of-input again
                     #end_of_input_action
                 }
                 Some((char_idx, char)) => {
-                    let char_idx = self.iter_byte_idx + char_idx;
-                    self.current_match_start = char_idx;
-                    self.current_match_end = char_idx;
+                    let char_idx = self.__iter_byte_idx + char_idx;
+                    self.__current_match_start = char_idx;
+                    self.__current_match_end = char_idx;
                     match char {
                         #(#state_char_arms,)*
                     }
@@ -469,7 +443,7 @@ fn generate_state_arm(
         // Accepting state
         let default_action = any_transition
             .as_ref()
-            .map(|any_transition| generate_any_transition(ctx, states, true, any_transition))
+            .map(|any_transition| generate_any_transition(ctx, states, any_transition))
             .unwrap_or_else(|| generate_rhs_code(ctx, *rhs));
 
         let end_of_input_action = match end_of_input_transition {
@@ -477,20 +451,20 @@ fn generate_state_arm(
                 Trans::Accept(action) => {
                     let action = generate_rhs_code(ctx, *action);
                     quote!(
-                        self.done = true; // don't handle end-of-input again
+                        self.__done = true; // don't handle end-of-input again
                         #action
                     )
                 }
                 Trans::Trans(next_state) => {
                     let StateIdx(next_state) = ctx.renumber_state(*next_state);
                     quote!(
-                        self.done = true; // don't handle end-of-input again
-                        self.state = #next_state;
+                        self.__done = true; // don't handle end-of-input again
+                        self.__state = #next_state;
                     )
                 }
             },
             None => {
-                // No `self.done = true` here, end-of-input is not handled
+                // No `self.__done = true` here, end-of-input is not handled
                 generate_rhs_code(ctx, *rhs)
             }
         };
@@ -507,10 +481,10 @@ fn generate_state_arm(
 
         // TODO: Braces can be removed in some cases
         quote!({
-            self.last_match =
-                Some((self.current_match_start, #semantic_fn, self.current_match_end));
+            self.__last_match =
+                Some((self.__current_match_start, #semantic_fn, self.__current_match_end));
 
-            match self.iter.peek().copied() {
+            match self.__iter.peek().copied() {
                 None => {
                     #end_of_input_action
                 }
@@ -525,7 +499,7 @@ fn generate_state_arm(
         // Non-accepting state
         let default_action = any_transition
             .as_ref()
-            .map(|any_transition| generate_any_transition(ctx, states, *initial, any_transition))
+            .map(|any_transition| generate_any_transition(ctx, states, any_transition))
             .unwrap_or_else(|| fail(ctx));
 
         let state_char_arms = generate_state_char_arms(
@@ -541,15 +515,15 @@ fn generate_state_arm(
                 Trans::Accept(action) => {
                     let action = generate_rhs_code(ctx, *action);
                     quote!(
-                        self.done = true; // don't handle end-of-input again
+                        self.__done = true; // don't handle end-of-input again
                         #action
                     )
                 }
                 Trans::Trans(next_state) => {
                     let StateIdx(next_state) = ctx.renumber_state(*next_state);
                     quote!(
-                        self.done = true; // don't handle end-of-input again
-                        self.state = #next_state;
+                        self.__done = true; // don't handle end-of-input again
+                        self.__state = #next_state;
                     )
                 }
             },
@@ -561,12 +535,12 @@ fn generate_state_arm(
                 } else {
                     // Otherwise we run the fail action and go to initial state of the current DFA.
                     // Initial state will then fail.
-                    default_action.clone()
+                    default_action
                 }
             }
         };
 
-        quote!(match self.iter.peek().copied() {
+        quote!(match self.__iter.peek().copied() {
             None => {
                 #end_of_input_action
             }
@@ -582,36 +556,26 @@ fn generate_state_arm(
 fn generate_any_transition(
     ctx: &mut CgCtx,
     states: &[State<Trans, SemanticActionIdx>],
-    initial: bool,
     trans: &Trans,
 ) -> TokenStream {
-    match trans {
+    let action = match trans {
         Trans::Trans(StateIdx(next_state)) => {
             if states[*next_state].predecessors.len() == 1 {
                 generate_state_arm(ctx, *next_state, &states[*next_state], states)
             } else {
                 let StateIdx(next_state) = ctx.renumber_state(StateIdx(*next_state));
-                quote!(
-                    self.current_match_end += char.len_utf8();
-                    let _ = self.iter.next();
-                    self.state = #next_state;
-                )
+                quote!(self.__state = #next_state;)
             }
         }
 
-        Trans::Accept(action) => {
-            let action_code = generate_rhs_code(ctx, *action);
-            if initial {
-                quote!(
-                    self.current_match_end += char.len_utf8();
-                    let _ = self.iter.next();
-                    #action_code
-                )
-            } else {
-                action_code
-            }
-        }
-    }
+        Trans::Accept(action) => generate_rhs_code(ctx, *action),
+    };
+
+    quote!(
+        self.__current_match_end += char.len_utf8();
+        let _ = self.__iter.next();
+        #action
+    )
 }
 
 /// Generate arms for `match char { ... }`
@@ -635,8 +599,8 @@ fn generate_state_char_arms(
                 let action_code = generate_rhs_code(ctx, *action);
                 state_char_arms.push(quote!(
                     #char => {
-                        self.current_match_end += char.len_utf8();
-                        let _ = self.iter.next();
+                        self.__current_match_end += char.len_utf8();
+                        let _ = self.__iter.next();
                         #action_code
                     }
                 ));
@@ -653,14 +617,14 @@ fn generate_state_char_arms(
         } else {
             let StateIdx(next_state) = ctx.renumber_state(StateIdx(*next_state));
             quote!(
-                self.state = #next_state;
+                self.__state = #next_state;
             )
         };
 
         state_char_arms.push(quote!(
             #pat => {
-                self.current_match_end += char.len_utf8();
-                let _ = self.iter.next();
+                self.__current_match_end += char.len_utf8();
+                let _ = self.__iter.next();
                 #next
             }
         ));
@@ -681,8 +645,8 @@ fn generate_state_char_arms(
                 let range_end = char::from_u32(range.end).unwrap();
                 state_char_arms.push(quote!(
                     x if x >= #range_start && x <= #range_end => {
-                        self.current_match_end += char.len_utf8();
-                        let _ = self.iter.next();
+                        self.__current_match_end += char.len_utf8();
+                        let _ = self.__iter.next();
                         #action_code
                     }
                 ));
@@ -709,14 +673,14 @@ fn generate_state_char_arms(
         } else {
             let StateIdx(next_state) = ctx.renumber_state(StateIdx(next_state));
             quote!(
-                self.state = #next_state;
+                self.__state = #next_state;
             )
         };
 
         state_char_arms.push(quote!(
             x if #guard => {
-                self.current_match_end += x.len_utf8();
-                let _ = self.iter.next();
+                self.__current_match_end += x.len_utf8();
+                let _ = self.__iter.next();
                 #next
             }
         ));
@@ -737,21 +701,7 @@ fn generate_rhs_code(ctx: &CgCtx, action: SemanticActionIdx) -> TokenStream {
 // generate braces in the use site. This is to avoid redundant `{...}` in some cases (allows
 // prepending/appending statements without creating new blocks).
 fn generate_semantic_action_call(ctx: &CgCtx, action_fn: &TokenStream) -> TokenStream {
-    let handle_type_name = ctx.handle_type_name();
-
-    let action_result = generate_action_result_handler(ctx, quote!(#action_fn(handle)));
-
-    quote!(
-        let str = &self.input[self.current_match_start..self.current_match_end];
-
-        let handle = #handle_type_name {
-            iter: &mut self.iter,
-            match_: str,
-            user_state: &mut self.user_state,
-        };
-
-        #action_result
-    )
+    generate_action_result_handler(ctx, quote!(#action_fn(self)))
 }
 
 fn generate_action_result_handler(ctx: &CgCtx, action_result: TokenStream) -> TokenStream {
@@ -760,43 +710,30 @@ fn generate_action_result_handler(ctx: &CgCtx, action_result: TokenStream) -> To
 
     let map_res = if has_user_error {
         quote!(match res {
-            Ok(tok) => Ok((match_start, tok, self.current_match_end)),
+            Ok(tok) => Ok((match_start, tok, self.__current_match_end)),
             Err(err) => Err(LexerError::UserError(err)),
         })
     } else {
-        quote!(Ok((match_start, res, self.current_match_end)))
+        quote!(Ok((match_start, res, self.__current_match_end)))
     };
 
     quote!(match #action_result {
         #action_type_name::Continue => {
-            self.state = self.initial_state;
+            self.__state = self.__initial_state;
         }
         #action_type_name::Return(res) => {
-            self.state = self.initial_state;
-            let match_start = self.current_match_start;
-            self.current_match_start = self.current_match_end;
-            return Some(#map_res);
-        }
-        #action_type_name::Switch(rule_set) => {
-            self.switch(rule_set);
-        }
-        #action_type_name::SwitchAndResetMatch(rule_set) => {
-            self.switch(rule_set);
-            self.current_match_start = self.current_match_end;
-        }
-        #action_type_name::SwitchAndReturn(res, rule_set) => {
-            self.switch(rule_set);
-            let match_start = self.current_match_start;
-            self.current_match_start = self.current_match_end;
+            self.__state = self.__initial_state;
+            let match_start = self.__current_match_start;
+            self.__current_match_start = self.__current_match_end;
             return Some(#map_res);
         }
     })
 }
 
 fn generate_semantic_action_fns(ctx: &CgCtx) -> TokenStream {
+    let lexer_name = ctx.lexer_name();
     let token_type = ctx.token_type();
     let user_error_type = ctx.user_error_type();
-    let handle_type_name = ctx.handle_type_name();
     let action_type_name = ctx.action_type_name();
 
     let result_type = match user_error_type {
@@ -812,9 +749,9 @@ fn generate_semantic_action_fns(ctx: &CgCtx) -> TokenStream {
             let rhs = match action {
                 RuleRhs::None => {
                     if user_error_type.is_some() {
-                        quote!(|__handle: #handle_type_name| __handle.continue_().map_token(Ok))
+                        quote!(|__lexer: &mut #lexer_name| __lexer.continue_().map_token(Ok))
                     } else {
-                        quote!(|__handle: #handle_type_name| __handle.continue_())
+                        quote!(|__lexer: &mut #lexer_name| __lexer.continue_())
                     }
                 }
 
@@ -822,20 +759,20 @@ fn generate_semantic_action_fns(ctx: &CgCtx) -> TokenStream {
                     match kind {
                         RuleKind::Simple => {
                             if user_error_type.is_some() {
-                                quote!(|__handle: #handle_type_name| __handle.return_(#expr).map_token(Ok))
+                                quote!(|__lexer: &mut #lexer_name| __lexer.return_(#expr).map_token(Ok))
                             } else {
-                                quote!(|__handle: #handle_type_name| __handle.return_(#expr))
+                                quote!(|__lexer: &mut #lexer_name| __lexer.return_(#expr))
                             }
                         }
                         RuleKind::Fallible => quote!(#expr),
                         RuleKind::Infallible => {
                             if user_error_type.is_some() {
-                                quote!(|__handle: #handle_type_name| {
+                                quote!(|__lexer: &mut #lexer_name| {
                                     let semantic_action:
-                                        for<'lexer, 'input> fn(#handle_type_name<'lexer, 'input>) -> #action_type_name<#token_type> =
+                                        for<'lexer, 'input> fn(&'lexer mut #lexer_name<'input>) -> #action_type_name<#token_type> =
                                             #expr;
 
-                                    semantic_action(__handle).map_token(Ok)
+                                    semantic_action(__lexer).map_token(Ok)
                                 })
                             } else {
                                 quote!(#expr)
@@ -846,7 +783,7 @@ fn generate_semantic_action_fns(ctx: &CgCtx) -> TokenStream {
             };
 
             quote!(
-                static #ident: for<'lexer, 'input> fn(#handle_type_name<'lexer, 'input>) -> #result_type =
+                static #ident: for<'lexer, 'input> fn(&'lexer mut #lexer_name<'input>) -> #result_type =
                     #rhs;
             )
         })
