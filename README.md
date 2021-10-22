@@ -208,7 +208,7 @@ XID_Continue]:
   below. `LexerReturn` is the type declared at the beginning of the lexer with
   `Lexer -> LexerReturn;`.
 
-- `<regex> =>? <user action>,`: fallible actions. This syntax is similar to the
+- `<regex> =? <user action>,`: fallible actions. This syntax is similar to the
   syntax above, except `<user action>` has type `fn(LexerHandle) ->
   LexerAction<Result<Token, UserError>>`. When using rules of this kind, the
   error type needs to be declared at the beginning of the lexer with the `type
