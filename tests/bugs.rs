@@ -271,3 +271,31 @@ fn issue_16_backtracking_2() {
     assert_eq!(next(&mut lexer), Some(Ok("xya")));
     assert_eq!(next(&mut lexer), None);
 }
+
+#[test]
+fn end_of_input_handling() {
+    lexer! {
+        Lexer -> (usize, &'input str);
+
+        rule Init {
+            'a' => |lexer| {
+                let match_ = lexer.match_();
+                lexer.switch_and_return(LexerRule::Rule1, (0, match_))
+            },
+        }
+
+        rule Rule1 {
+            $,
+
+            'a' => |lexer| {
+                let match_ = lexer.match_();
+                lexer.return_((1, match_))
+            },
+        }
+    }
+
+    let mut lexer = Lexer::new("aa");
+    assert_eq!(lexer.next(), Some(Ok((0, (0, "a"), 1))));
+    assert_eq!(lexer.next(), Some(Ok((1, (1, "a"), 2))));
+    assert_eq!(lexer.next(), None);
+}

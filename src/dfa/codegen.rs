@@ -270,11 +270,11 @@ pub fn reify(
             type Item = Result<(usize, #token_type, usize), LexerError<#(#user_error_type_lifetimes),*>>;
 
             fn next(&mut self) -> Option<Self::Item> {
-                if self.__done {
-                    return None;
-                }
-
                 loop {
+                    if self.__done {
+                        return None;
+                    }
+
                     // println!("state = {:?}, next char = {:?}", self.__state, self.__iter.peek());
                     match self.__state {
                         #(#match_arms,)*
