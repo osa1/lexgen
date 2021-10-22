@@ -691,15 +691,12 @@ fn generate_state_char_arms(
     state_char_arms
 }
 
-// NB. Generates multiple states without enclosing `{...}`, see comments in
-// `generate_semantic_action`
+/// Generate call to the semantic action function with the given index and handle the result.
 fn generate_rhs_code(ctx: &CgCtx, action: SemanticActionIdx) -> TokenStream {
     generate_semantic_action_call(ctx, &action.symbol().into_token_stream())
 }
 
-// NB. This function generates multiple statements but without enclosing `{...}`. Make sure to
-// generate braces in the use site. This is to avoid redundant `{...}` in some cases (allows
-// prepending/appending statements without creating new blocks).
+/// Generate call to the given semantic action function and handle the result.
 fn generate_semantic_action_call(ctx: &CgCtx, action_fn: &TokenStream) -> TokenStream {
     generate_action_result_handler(ctx, quote!(#action_fn(self)))
 }
