@@ -146,11 +146,6 @@ pub fn reify(
             Continue,
             // User action returned a token, return it
             Return(T),
-            // User action requested switching to the given rule set
-            Switch(#rule_name_enum_name),
-            // Combination or `Switch` and `Return`: add token to the match stack, switch to the
-            // given rule set
-            SwitchAndReturn(T, #rule_name_enum_name),
         }
 
         impl<T> #action_type_name<T> {
@@ -163,10 +158,6 @@ pub fn reify(
                         #action_type_name::Continue,
                     #action_type_name::Return(t) =>
                         #action_type_name::Return(f(t)),
-                    #action_type_name::Switch(state) =>
-                        #action_type_name::Switch(state),
-                    #action_type_name::SwitchAndReturn(t, state) =>
-                        #action_type_name::SwitchAndReturn(f(t), state),
                 }
             }
         }
@@ -220,17 +211,16 @@ pub fn reify(
 
         // Methods below for using in semantic actions
         impl<'input> #lexer_name<'input> {
-            fn switch_and_return<T>(&self, rule: #rule_name_enum_name, token: T) -> #action_type_name<T> {
-                #action_type_name::SwitchAndReturn(token, rule)
+            fn switch_and_return<T>(&mut self, rule: #rule_name_enum_name, token: T) -> #action_type_name<T> {
+                self.switch::<T>(rule);
+                #action_type_name::Return(token)
             }
 
             fn return_<T>(&self, token: T) -> #action_type_name<T> {
                 #action_type_name::Return(token)
             }
 
-            fn switch<T>(&self, rule: #rule_name_enum_name) -> #action_type_name<T> {
-                #action_type_name::Switch(rule)
-            }
+            #switch_method
 
             fn continue_<T>(&self) -> #action_type_name<T> {
                 #action_type_name::Continue
@@ -268,8 +258,6 @@ pub fn reify(
                     __last_match: None,
                 }
             }
-
-            #switch_method
         }
 
         #(#search_tables)*
@@ -296,6 +284,7 @@ pub fn reify(
 }
 
 fn generate_switch(ctx: &CgCtx, enum_name: &syn::Ident) -> TokenStream {
+    let action_type_name = ctx.action_type_name();
     let mut arms: Vec<TokenStream> = vec![];
 
     for (rule_name, state_idx) in ctx.rule_states().iter() {
@@ -308,11 +297,12 @@ fn generate_switch(ctx: &CgCtx, enum_name: &syn::Ident) -> TokenStream {
     }
 
     quote!(
-        fn __switch(&mut self, rule: #enum_name) {
+        fn switch<A>(&mut self, rule: #enum_name) -> #action_type_name<A> {
             match rule {
                 #(#arms,)*
             }
             self.__initial_state = self.__state;
+            #action_type_name::Continue
         }
     )
 }
@@ -733,15 +723,6 @@ fn generate_action_result_handler(ctx: &CgCtx, action_result: TokenStream) -> To
         }
         #action_type_name::Return(res) => {
             self.__state = self.__initial_state;
-            let match_start = self.__current_match_start;
-            self.__current_match_start = self.__current_match_end;
-            return Some(#map_res);
-        }
-        #action_type_name::Switch(rule_set) => {
-            self.__switch(rule_set);
-        }
-        #action_type_name::SwitchAndReturn(res, rule_set) => {
-            self.__switch(rule_set);
             let match_start = self.__current_match_start;
             self.__current_match_start = self.__current_match_end;
             return Some(#map_res);
