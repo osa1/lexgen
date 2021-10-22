@@ -97,7 +97,7 @@ fn failure_confusion_2() {
 }
 
 #[test]
-fn failure_confusion_3() {
+fn failure_confusion_3_1() {
     lexer! {
         Lexer -> usize;
 
@@ -113,6 +113,24 @@ fn failure_confusion_3() {
     assert_eq!(lexer.next(), Some(Ok((4, 0, 5))));
     assert_eq!(lexer.next(), Some(Ok((5, 1, 7))));
     assert_eq!(lexer.next(), Some(Ok((7, 2, 8))));
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn failure_confusion_3_2() {
+    // In practice the case we test in the previous test happens when lexing single-letter
+    // identifiers in a lexer that allows multi-letter identifiers (i.e. practically all language
+    // lexers). Here's a more realistic example:
+    lexer! {
+        Lexer -> usize;
+
+        $$ascii_lowercase+ = 1,
+        ',' = 2,
+    }
+
+    let mut lexer = Lexer::new("f,");
+    assert_eq!(lexer.next(), Some(Ok((0, 1, 1))));
+    assert_eq!(lexer.next(), Some(Ok((1, 2, 2))));
     assert_eq!(lexer.next(), None);
 }
 
