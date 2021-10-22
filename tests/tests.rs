@@ -604,8 +604,13 @@ fn end_of_input_multiple_states() {
 
 #[test]
 fn switch_and_reset_match() {
+    #[derive(Default)]
+    struct State {
+        enable_reset_match: bool,
+    }
+
     lexer! {
-        Lexer -> &'input str;
+        Lexer(State) -> &'input str;
 
         rule Init {
             $ = "_",
@@ -617,7 +622,17 @@ fn switch_and_reset_match() {
 
         rule Rule1 {
             'c' => |lexer| {
-                lexer.switch_and_reset_match(LexerRule::Rule1)
+                if lexer.state().enable_reset_match {
+                    lexer.reset_match();
+                }
+                lexer.switch(LexerRule::Rule1)
+            },
+
+            "!" => |lexer| {
+                lexer.reset_match();
+                let enable_reset_match = &mut lexer.state().enable_reset_match;
+                *enable_reset_match = !*enable_reset_match;
+                lexer.switch(LexerRule::Rule1)
             },
 
             ['d' 'e']+ => |lexer| {
@@ -628,12 +643,14 @@ fn switch_and_reset_match() {
         }
     }
 
-    let mut lexer = Lexer::new("accdeed");
+    let mut lexer = Lexer::new("accdeed!ccdeed");
     assert_eq!(next(&mut lexer), Some(Ok("a")));
+    assert_eq!(next(&mut lexer), Some(Ok("ccdeed")));
     assert_eq!(next(&mut lexer), Some(Ok("deed")));
     assert_eq!(next(&mut lexer), Some(Ok("<>")));
 }
 
+#[test]
 fn any_2() {
     lexer! {
         Lexer -> &'input str;

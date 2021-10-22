@@ -230,6 +230,10 @@ pub fn reify(
                 &mut self.__user_state
             }
 
+            fn reset_match(&mut self) {
+                self.__current_match_start = self.__current_match_end;
+            }
+
             fn match_(&self) -> &'input str {
                 &self.__input[self.__current_match_start..self.__current_match_end]
             }
