@@ -244,16 +244,18 @@ and type specified by the user. If the lexer type is declared as `Lexer(State)
   - `fn peek(&mut self) -> Option<char>`: looks ahead one character
   - `fn state(&mut self) -> &mut <user state type>`: returns a mutable reference
     to the user state
-  - `fn return_(self, token: <user token type>) -> LexerAction`: returns the
-    passed token as a match.
-  - `fn continue_(self) -> LexerAction`: ignores the current match and continues
-    lexing in the same lexer state. Useful for skipping whitespace and comments.
-  - `fn switch(self, rule: LexerRule) -> LexerAction`: used for switching
+  - `fn return_(&self, token: <user token type>) -> LexerAction`: returns
+    the passed token as a match.
+  - `fn continue_(&self) -> LexerAction`: ignores the current match and
+    continues lexing in the same lexer state. Useful for skipping whitespace and comments.
+  - `fn switch(&mut self, rule: LexerRule) -> LexerAction`: used for switching
     between lexer states. The `LexerRule` is an enum with a variant for each
     rule set name, for example, `LexerRule::Init`. See the stateful lexer
     example below.
-  - `fn switch_and_return(self, rule: LexerRule, token: <user token type>) ->
-    LexerAction`: switches to the given lexer state and returns the given token.
+  - `fn switch_and_return(&mut self, rule: LexerRule, token: <user token type>)
+    -> LexerAction`: switches to the given lexer state and returns the given token.
+  - `fn reset_match(&mut self)`: resets the current match. E.g. if you call
+    `match_()` right after `reset_match()` it will return an empty string.
 
 ## Stateful lexer example
 

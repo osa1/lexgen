@@ -12,6 +12,8 @@
   This will generate warnings in old code with semantic actions that take a
   `mut` argument.
 
+- New lexer method `reset_match` implemented to reset the current match.
+
 # 2021/10/19: 0.6.0
 
 - Fixed precedences of concatenation (juxtaposition) and alternation (`|`).
