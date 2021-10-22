@@ -330,13 +330,14 @@ fn generate_state_arms(ctx: &mut CgCtx, dfa: DFA<Trans, SemanticActionIdx>) -> V
         };
 
         match_arms.push(quote!(
-            #state_idx_pat => #state_code
+            #state_idx_pat => { #state_code }
         ));
     }
 
     match_arms
 }
 
+// NB. Does not generate braces around the code
 fn generate_state_arm(
     ctx: &mut CgCtx,
     state_idx: usize,
@@ -367,66 +368,69 @@ fn generate_state_arm(
         }
     };
 
+    // TODO: This duplicates a lot of code. Maybe implement a __backtrack method?
     let fail = |ctx: &CgCtx| -> TokenStream {
         let error = make_lexer_error();
         let action = generate_semantic_action_call(ctx, &quote!(semantic_action));
-        quote!({
-            match self.__last_match.take() {
-                None => return Some(Err(#error)),
-                Some((match_start, semantic_action, match_end)) => {
-                    self.__current_match_start = match_start;
-                    self.__current_match_end = match_end;
-                    self.__iter = self.__input[match_end..].char_indices().peekable();
-                    self.__iter_byte_idx = match_end;
-                    #action
-                }
+        quote!(match self.__last_match.take() {
+            None => return Some(Err(#error)),
+            Some((match_start, semantic_action, match_end)) => {
+                self.__done = false;
+                self.__current_match_start = match_start;
+                self.__current_match_end = match_end;
+                self.__iter = self.__input[match_end..].char_indices().peekable();
+                self.__iter_byte_idx = match_end;
+                #action
             }
         })
     };
 
+    // When we can't take char or range transitions, take the 'any' transition if it exists, or
+    // fail (backtrack or raise error)
+    let default_action = any_transition
+        .as_ref()
+        .map(|any_transition| generate_any_transition(ctx, states, any_transition))
+        .unwrap_or_else(|| fail(ctx));
+
+    let state_char_arms = generate_state_char_arms(
+        ctx,
+        states,
+        char_transitions,
+        range_transitions,
+        &default_action,
+    );
+
+    // In initial state (rule `Init`) unhandled end-of-input yields `None`. In other states we
+    // expect to see a end-of-input handler, or fail with "unexpected end-of-input".
+    let end_of_input_default_action = if state_idx == 0 {
+        quote!(return None;)
+    } else {
+        fail(ctx)
+    };
+
+    let end_of_input_action = match end_of_input_transition {
+        Some(end_of_input_transition) => match end_of_input_transition {
+            Trans::Accept(action) => generate_rhs_code(ctx, *action),
+            Trans::Trans(next_state) => {
+                let StateIdx(next_state) = ctx.renumber_state(*next_state);
+                quote!(self.__state = #next_state;)
+            }
+        },
+        None => end_of_input_default_action,
+    };
+
+    let end_of_input_action = quote!(
+        self.__done = true; // don't handle end-of-input again
+        #end_of_input_action
+    );
+
     if state_idx == 0 {
         assert!(initial);
 
-        // Initial state. Difference from other states is we return `None` when the
-        // stream ends. In non-initial states EOS (end-of-stream) returns the last (longest)
-        // match, or fails (error).
-
-        // When we can't take char or range transitions, take the 'any' transition if it exists, or
-        // fail (backtrack or raise error)
-        let default_action = any_transition
-            .as_ref()
-            .map(|any_transition| generate_any_transition(ctx, states, any_transition))
-            .unwrap_or_else(|| fail(ctx));
-
-        let end_of_input_action = match end_of_input_transition {
-            Some(end_of_input_transition) => match end_of_input_transition {
-                Trans::Accept(action) => {
-                    let action = generate_rhs_code(ctx, *action);
-                    quote!(#action)
-                }
-                Trans::Trans(next_state) => {
-                    let StateIdx(next_state) = ctx.renumber_state(*next_state);
-                    quote!(self.__state = #next_state;)
-                }
-            },
-            None => {
-                // End-of-input is handled in state 0 by default
-                quote!(return None;)
-            }
-        };
-
-        let state_char_arms = generate_state_char_arms(
-            ctx,
-            states,
-            char_transitions,
-            range_transitions,
-            &default_action,
-        );
-
+        // See #12 for the special case in state 0 (rule Init)
         quote!(
-            match self.__iter.peek().copied() {
+            match self.__iter.next() {
                 None => {
-                    self.__done = true; // don't handle end-of-input again
                     #end_of_input_action
                 }
                 Some((char_idx, char)) => {
@@ -441,50 +445,13 @@ fn generate_state_arm(
         )
     } else if let Some(rhs) = accepting {
         // Accepting state
-        let default_action = any_transition
-            .as_ref()
-            .map(|any_transition| generate_any_transition(ctx, states, any_transition))
-            .unwrap_or_else(|| generate_rhs_code(ctx, *rhs));
-
-        let end_of_input_action = match end_of_input_transition {
-            Some(end_of_input_transition) => match end_of_input_transition {
-                Trans::Accept(action) => {
-                    let action = generate_rhs_code(ctx, *action);
-                    quote!(
-                        self.__done = true; // don't handle end-of-input again
-                        #action
-                    )
-                }
-                Trans::Trans(next_state) => {
-                    let StateIdx(next_state) = ctx.renumber_state(*next_state);
-                    quote!(
-                        self.__done = true; // don't handle end-of-input again
-                        self.__state = #next_state;
-                    )
-                }
-            },
-            None => {
-                // No `self.__done = true` here, end-of-input is not handled
-                generate_rhs_code(ctx, *rhs)
-            }
-        };
-
-        let state_char_arms = generate_state_char_arms(
-            ctx,
-            states,
-            char_transitions,
-            range_transitions,
-            &default_action,
-        );
-
         let semantic_fn = rhs.symbol();
 
-        // TODO: Braces can be removed in some cases
-        quote!({
+        quote!(
             self.__last_match =
                 Some((self.__current_match_start, #semantic_fn, self.__current_match_end));
 
-            match self.__iter.peek().copied() {
+            match self.__iter.next() {
                 None => {
                     #end_of_input_action
                 }
@@ -494,53 +461,10 @@ fn generate_state_arm(
                     }
                 }
             }
-        })
+        )
     } else {
         // Non-accepting state
-        let default_action = any_transition
-            .as_ref()
-            .map(|any_transition| generate_any_transition(ctx, states, any_transition))
-            .unwrap_or_else(|| fail(ctx));
-
-        let state_char_arms = generate_state_char_arms(
-            ctx,
-            states,
-            char_transitions,
-            range_transitions,
-            &default_action,
-        );
-
-        let end_of_input_action = match end_of_input_transition {
-            Some(end_of_input_transition) => match end_of_input_transition {
-                Trans::Accept(action) => {
-                    let action = generate_rhs_code(ctx, *action);
-                    quote!(
-                        self.__done = true; // don't handle end-of-input again
-                        #action
-                    )
-                }
-                Trans::Trans(next_state) => {
-                    let StateIdx(next_state) = ctx.renumber_state(*next_state);
-                    quote!(
-                        self.__done = true; // don't handle end-of-input again
-                        self.__state = #next_state;
-                    )
-                }
-            },
-            None => {
-                if *initial {
-                    // In an initial state other than state 0 we fail with "unexpected EOF" error
-                    let error = make_lexer_error();
-                    quote!(return Some(Err(#error));)
-                } else {
-                    // Otherwise we run the fail action and go to initial state of the current DFA.
-                    // Initial state will then fail.
-                    default_action
-                }
-            }
-        };
-
-        quote!(match self.__iter.peek().copied() {
+        quote!(match self.__iter.next() {
             None => {
                 #end_of_input_action
             }
@@ -573,7 +497,6 @@ fn generate_any_transition(
 
     quote!(
         self.__current_match_end += char.len_utf8();
-        let _ = self.__iter.next();
         #action
     )
 }
@@ -600,7 +523,6 @@ fn generate_state_char_arms(
                 state_char_arms.push(quote!(
                     #char => {
                         self.__current_match_end += char.len_utf8();
-                        let _ = self.__iter.next();
                         #action_code
                     }
                 ));
@@ -624,7 +546,6 @@ fn generate_state_char_arms(
         state_char_arms.push(quote!(
             #pat => {
                 self.__current_match_end += char.len_utf8();
-                let _ = self.__iter.next();
                 #next
             }
         ));
@@ -646,7 +567,6 @@ fn generate_state_char_arms(
                 state_char_arms.push(quote!(
                     x if x >= #range_start && x <= #range_end => {
                         self.__current_match_end += char.len_utf8();
-                        let _ = self.__iter.next();
                         #action_code
                     }
                 ));
@@ -680,7 +600,6 @@ fn generate_state_char_arms(
         state_char_arms.push(quote!(
             x if #guard => {
                 self.__current_match_end += x.len_utf8();
-                let _ = self.__iter.next();
                 #next
             }
         ));
