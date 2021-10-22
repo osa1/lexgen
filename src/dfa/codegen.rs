@@ -123,21 +123,19 @@ pub fn reify(
         })
         .collect();
 
-    let semantic_action_fns = generate_semantic_action_fns(&ctx);
-
     let action_type_name = ctx.action_type_name();
     let lexer_name = ctx.lexer_name();
     let token_type = ctx.token_type();
 
-    // Semantic action function return type
-    let result_type = match ctx.user_error_type() {
+    let semantic_action_fn_ret_ty = match ctx.user_error_type() {
         None => quote!(#action_type_name<#token_type>),
         Some(user_error_type) => quote!(#action_type_name<Result<#token_type, #user_error_type>>),
     };
 
     // Type of semantic actions, used to store the last match, to be used when backtracking
-    let semantic_action_fn_type =
-        quote!(for<'lexer, 'input> fn(&'lexer mut #lexer_name<'input>) -> #result_type);
+    let semantic_action_fn_type = quote!(for<'lexer, 'input> fn(&'lexer mut #lexer_name<'input>) -> #semantic_action_fn_ret_ty);
+
+    let semantic_action_fns = generate_semantic_action_fns(&ctx, &semantic_action_fn_ret_ty);
 
     quote!(
         // Possible outcomes of a user action
@@ -354,23 +352,18 @@ fn generate_state_arm(
         predecessors: _,
     } = state;
 
-    let error_type_is_enum = ctx.user_error_type().is_some();
-
-    let make_lexer_error = || -> TokenStream {
-        if error_type_is_enum {
-            quote!(LexerError::LexerError {
-                char_idx: self.__current_match_start
-            })
-        } else {
-            quote!(LexerError {
-                char_idx: self.__current_match_start
-            })
-        }
+    let error = if ctx.user_error_type().is_some() {
+        quote!(LexerError::LexerError {
+            char_idx: self.__current_match_start
+        })
+    } else {
+        quote!(LexerError {
+            char_idx: self.__current_match_start
+        })
     };
 
     // TODO: This duplicates a lot of code. Maybe implement a __backtrack method?
     let fail = |ctx: &CgCtx| -> TokenStream {
-        let error = make_lexer_error();
         let action = generate_semantic_action_call(ctx, &quote!(semantic_action));
         quote!(match self.__last_match.take() {
             None => return Some(Err(#error)),
@@ -646,16 +639,14 @@ fn generate_action_result_handler(ctx: &CgCtx, action_result: TokenStream) -> To
     })
 }
 
-fn generate_semantic_action_fns(ctx: &CgCtx) -> TokenStream {
+fn generate_semantic_action_fns(
+    ctx: &CgCtx,
+    semantic_action_fn_ret_ty: &TokenStream,
+) -> TokenStream {
     let lexer_name = ctx.lexer_name();
     let token_type = ctx.token_type();
     let user_error_type = ctx.user_error_type();
     let action_type_name = ctx.action_type_name();
-
-    let result_type = match user_error_type {
-        None => quote!(#action_type_name<#token_type>),
-        Some(user_error_type) => quote!(#action_type_name<Result<#token_type, #user_error_type>>),
-    };
 
     let fns: Vec<TokenStream> = ctx
         .iter_semantic_actions()
@@ -699,7 +690,7 @@ fn generate_semantic_action_fns(ctx: &CgCtx) -> TokenStream {
             };
 
             quote!(
-                static #ident: for<'lexer, 'input> fn(&'lexer mut #lexer_name<'input>) -> #result_type =
+                static #ident: for<'lexer, 'input> fn(&'lexer mut #lexer_name<'input>) -> #semantic_action_fn_ret_ty =
                     #rhs;
             )
         })
