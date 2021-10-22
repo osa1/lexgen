@@ -330,7 +330,7 @@ fn generate_state_arms(ctx: &mut CgCtx, dfa: DFA<Trans, SemanticActionIdx>) -> V
         };
 
         match_arms.push(quote!(
-            #state_idx_pat => #state_code
+            #state_idx_pat => { #state_code }
         ));
     }
 
@@ -479,8 +479,7 @@ fn generate_state_arm(
 
         let semantic_fn = rhs.symbol();
 
-        // TODO: Braces can be removed in some cases
-        quote!({
+        quote!(
             self.__last_match =
                 Some((self.__current_match_start, #semantic_fn, self.__current_match_end));
 
@@ -494,7 +493,7 @@ fn generate_state_arm(
                     }
                 }
             }
-        })
+        )
     } else {
         // Non-accepting state
         let default_action = any_transition
