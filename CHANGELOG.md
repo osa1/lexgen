@@ -1,4 +1,4 @@
-# Unreleased
+# 2021/10/21: 0.7.0
 
 - Regex syntax updated to include "any character" (`_`) and "end of input"
   (`$`).
