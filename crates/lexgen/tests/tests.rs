@@ -266,7 +266,10 @@ fn rule_kind_fallible_no_lifetimes() {
 
     let mut lexer = Lexer::new("123 blah");
     assert_eq!(lexer.next(), Some(Ok((0, Token::Int(123), 3))));
-    assert!(matches!(lexer.next(), Some(Err(LexerError::UserError(_)))));
+    assert!(matches!(
+        lexer.next(),
+        Some(Err(::lexgen_util::LexerError::Custom(_)))
+    ));
     assert_eq!(lexer.next(), None);
 }
 
@@ -299,7 +302,7 @@ fn rule_kind_fallible_with_lifetimes() {
     assert_eq!(lexer.next(), Some(Ok((0, Token::Int(123), 3))));
     assert!(matches!(
         lexer.next(),
-        Some(Err(LexerError::UserError(UserError("blah"))))
+        Some(Err(::lexgen_util::LexerError::Custom(UserError("blah"))))
     ));
     assert_eq!(lexer.next(), None);
 }
@@ -346,7 +349,7 @@ fn rule_kind_mix() {
     assert_eq!(lexer.next(), Some(Ok((0, Token::Int(123), 3))));
     assert!(matches!(
         lexer.next(),
-        Some(Err(LexerError::UserError(UserError("blah"))))
+        Some(Err(::lexgen_util::LexerError::Custom(UserError("blah"))))
     ));
     assert_eq!(lexer.next(), None);
 

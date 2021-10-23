@@ -227,16 +227,18 @@ fn return_should_reset_match() {
 
 #[test]
 fn issue_16_backtracking_1() {
-    fn return_match<'lexer, 'input>(lexer: &mut Lexer<'input>) -> LexerAction<&'input str> {
-        let match_ = lexer.match_();
-        lexer.return_(match_)
-    }
-
     lexer! {
         Lexer -> &'input str;
 
-        'a'+ 'b' => return_match,
-        'a' => return_match,
+        'a'+ 'b' => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_(match_)
+        },
+
+        'a' => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_(match_)
+        },
     }
 
     let mut lexer = Lexer::new("aaaab");
@@ -253,17 +255,23 @@ fn issue_16_backtracking_1() {
 
 #[test]
 fn issue_16_backtracking_2() {
-    fn return_match<'lexer, 'input>(lexer: &mut Lexer<'input>) -> LexerAction<&'input str> {
-        let match_ = lexer.match_();
-        lexer.return_(match_)
-    }
-
     lexer! {
         Lexer -> &'input str;
 
-        "xyzxyz" => return_match,
-        "xyz" => return_match,
-        "xya" => return_match,
+        "xyzxyz" => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_(match_)
+        },
+
+        "xyz" => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_(match_)
+        },
+
+        "xya" => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_(match_)
+        },
     }
 
     let mut lexer = Lexer::new("xyzxya");
