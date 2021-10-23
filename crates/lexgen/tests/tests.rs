@@ -276,30 +276,30 @@ fn rule_kind_fallible_no_lifetimes() {
 #[test]
 fn rule_kind_fallible_with_lifetimes() {
     #[derive(Debug, PartialEq, Eq)]
-    enum Token {
-        Int(i64),
+    enum Token<'input> {
+        Int(&'input str),
     }
 
     #[derive(Debug, PartialEq, Eq)]
     struct UserError<'input>(&'input str);
 
     lexer! {
-        Lexer -> Token;
+        Lexer -> Token<'input>;
 
-        type Error<'input> = UserError<'input>;
+        type Error = UserError<'input>;
 
         [' ' '\t' '\n'],
         ['a'-'z' '0'-'9']+ =? |lexer| {
             let match_ = lexer.match_();
-            match str::parse(match_) {
-                Ok(i) => lexer.return_(Ok(Token::Int(i))),
+            match str::parse::<i64>(match_) {
+                Ok(_) => lexer.return_(Ok(Token::Int(match_))),
                 Err(_) => lexer.return_(Err(UserError(match_))),
             }
         },
     }
 
     let mut lexer = Lexer::new("123 blah");
-    assert_eq!(lexer.next(), Some(Ok((0, Token::Int(123), 3))));
+    assert_eq!(lexer.next(), Some(Ok((0, Token::Int("123"), 3))));
     assert!(matches!(
         lexer.next(),
         Some(Err(::lexgen_util::LexerError::Custom(UserError("blah"))))
@@ -322,7 +322,7 @@ fn rule_kind_mix() {
     lexer! {
         Lexer -> Token;
 
-        type Error<'input> = UserError<'input>;
+        type Error = UserError<'input>;
 
         // simple with skip
         [' ' '\t' '\n'],

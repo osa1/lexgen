@@ -21,10 +21,6 @@ pub struct CgCtx {
     /// Type of the user error, when available. `<type>` in `type Error = ...`.
     user_error_type: Option<syn::Type>,
 
-    /// Name of the `enum` type for user actions: `enum LexerAction { ... }`. The name is derived
-    /// from `lexer_name`.
-    action_type_name: syn::Ident,
-
     /// Maps user-written rule names (e.g. `rule MyRule { ... }`) to their initial states in the
     /// final DFA.
     rule_states: FxHashMap<String, StateIdx>,
@@ -56,9 +52,6 @@ impl CgCtx {
         user_error_type: Option<syn::Type>,
         rule_states: FxHashMap<String, StateIdx>,
     ) -> CgCtx {
-        let action_type_name =
-            syn::Ident::new(&(lexer_name.to_string() + "Action"), lexer_name.span());
-
         let inlined_states: Vec<StateIdx> = dfa
             .states
             .iter()
@@ -77,7 +70,6 @@ impl CgCtx {
             lexer_name,
             token_type,
             user_error_type,
-            action_type_name,
             rule_states,
             inlined_states,
             codegen_state: CgState {
@@ -107,10 +99,6 @@ impl CgCtx {
 
     pub fn user_error_type(&self) -> Option<&syn::Type> {
         self.user_error_type.as_ref()
-    }
-
-    pub fn action_type_name(&self) -> &syn::Ident {
-        &self.action_type_name
     }
 
     pub fn add_search_table(&mut self, ranges: Vec<(char, char)>) -> syn::Ident {

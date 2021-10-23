@@ -34,7 +34,6 @@ pub fn reify(
     semantic_actions: SemanticActionTable,
     user_state_type: Option<syn::Type>,
     user_error_type: Option<syn::Type>,
-    user_error_type_lifetimes: Vec<syn::Lifetime>,
     rule_states: FxHashMap<String, StateIdx>,
     lexer_name: syn::Ident,
     token_type: syn::Type,
