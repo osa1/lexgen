@@ -78,7 +78,7 @@ pub struct Lexer<'input, Token, State, Error, Wrapper> {
     )>,
 }
 
-impl<'input, T, S: Default, E, _Self> Lexer<'input, T, S, E, _Self> {
+impl<'input, T, S: Default, E, W> Lexer<'input, T, S, E, W> {
     pub fn new(input: &'input str) -> Self {
         Self {
             __state: 0,
