@@ -116,4 +116,11 @@ impl CgCtx {
     pub fn iter_semantic_actions(&self) -> impl Iterator<Item = (SemanticActionIdx, &RuleRhs)> {
         self.semantic_action_table.iter()
     }
+
+    pub fn semantic_action_fn_ident(&self, action: SemanticActionIdx) -> syn::Ident {
+        syn::Ident::new(
+            &format!("{}_ACTION_{}", self.lexer_name, action.as_usize()),
+            self.lexer_name.span(),
+        )
+    }
 }

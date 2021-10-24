@@ -319,7 +319,7 @@ fn generate_state_arm(
 
     let end_of_input_action = match end_of_input_transition {
         Some(end_of_input_transition) => match end_of_input_transition {
-            Trans::Accept(action) => generate_rhs_code(*action),
+            Trans::Accept(action) => generate_rhs_code(ctx, *action),
             Trans::Trans(next_state) => {
                 let StateIdx(next_state) = ctx.renumber_state(*next_state);
                 quote!(self.0.__state = #next_state;)
@@ -354,7 +354,7 @@ fn generate_state_arm(
         )
     } else if let Some(rhs) = accepting {
         // Accepting state
-        let semantic_fn = rhs.symbol();
+        let semantic_fn = ctx.semantic_action_fn_ident(*rhs);
 
         quote!(
             self.0.__last_match =
@@ -401,7 +401,7 @@ fn generate_any_transition(
             }
         }
 
-        Trans::Accept(action) => generate_rhs_code(*action),
+        Trans::Accept(action) => generate_rhs_code(ctx, *action),
     };
 
     quote!(
@@ -428,7 +428,7 @@ fn generate_state_char_arms(
     for (char, next) in char_transitions {
         match next {
             Trans::Accept(action) => {
-                let action_code = generate_rhs_code(*action);
+                let action_code = generate_rhs_code(ctx, *action);
                 state_char_arms.push(quote!(
                     #char => {
                         self.0.__current_match_end += char.len_utf8();
@@ -470,7 +470,7 @@ fn generate_state_char_arms(
                 char::try_from(range.end).unwrap(),
             )),
             Trans::Accept(action) => {
-                let action_code = generate_rhs_code(*action);
+                let action_code = generate_rhs_code(ctx, *action);
                 let range_start = char::from_u32(range.start).unwrap();
                 let range_end = char::from_u32(range.end).unwrap();
                 state_char_arms.push(quote!(
@@ -520,8 +520,8 @@ fn generate_state_char_arms(
 }
 
 /// Generate call to the semantic action function with the given index and handle the result.
-fn generate_rhs_code(action: SemanticActionIdx) -> TokenStream {
-    generate_semantic_action_call(&action.symbol().into_token_stream())
+fn generate_rhs_code(ctx: &CgCtx, action: SemanticActionIdx) -> TokenStream {
+    generate_semantic_action_call(&ctx.semantic_action_fn_ident(action).into_token_stream())
 }
 
 /// Generate call to the given semantic action function and handle the result.
@@ -558,7 +558,7 @@ fn generate_semantic_action_fns(
     let fns: Vec<TokenStream> = ctx
         .iter_semantic_actions()
         .map(|(idx, action)| {
-            let ident = idx.symbol();
+            let ident = ctx.semantic_action_fn_ident(idx);
 
             let rhs = match action {
                 RuleRhs::None => {
@@ -585,6 +585,7 @@ fn generate_semantic_action_fns(
             };
 
             quote!(
+                #[allow(non_upper_case_globals)]
                 static #ident: for<'lexer, 'input> fn(&'lexer mut #lexer_name<'input>) -> #semantic_action_fn_ret_ty =
                     #rhs;
             )

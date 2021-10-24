@@ -27,10 +27,7 @@ impl SemanticActionTable {
 }
 
 impl SemanticActionIdx {
-    pub fn symbol(&self) -> syn::Ident {
-        syn::Ident::new(
-            &format!("SEMANTIC_ACTION_{}", self.0),
-            proc_macro2::Span::call_site(),
-        )
+    pub fn as_usize(&self) -> usize {
+        self.0
     }
 }

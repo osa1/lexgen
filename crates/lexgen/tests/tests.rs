@@ -655,7 +655,7 @@ fn switch_and_reset_match() {
 }
 
 #[test]
-fn any_2() {
+fn char_lit() {
     lexer! {
         Lexer -> &'input str;
 
@@ -667,5 +667,28 @@ fn any_2() {
 
     let mut lexer = Lexer::new("'a'");
     assert_eq!(next(&mut lexer), Some(Ok("'a'")));
+    assert_eq!(next(&mut lexer), None);
+}
+
+#[test]
+fn multiple_lexers_in_scope() {
+    lexer! {
+        Lexer1 -> usize;
+
+        'a' = 1,
+    }
+
+    lexer! {
+        Lexer2 -> usize;
+
+        'a' = 2,
+    }
+
+    let mut lexer = Lexer1::new("a");
+    assert_eq!(next(&mut lexer), Some(Ok(1)));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer2::new("a");
+    assert_eq!(next(&mut lexer), Some(Ok(2)));
     assert_eq!(next(&mut lexer), None);
 }
