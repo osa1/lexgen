@@ -273,24 +273,11 @@ fn generate_state_arm(
         predecessors: _,
     } = state;
 
-    // TODO: location
-    let error = quote!(::lexgen_util::LexerError::InvalidToken {
-        location: ::lexgen_util::Loc { line: 0, col: 0 },
-    });
-
-    // TODO: This duplicates a lot of code. Maybe implement a __backtrack method?
     let fail = || -> TokenStream {
         let action = generate_semantic_action_call(&quote!(semantic_action));
-        quote!(match self.0.__last_match.take() {
-            None => return Some(Err(#error)),
-            Some((match_start, semantic_action, match_end)) => {
-                self.0.__done = false;
-                self.0.__current_match_start = match_start;
-                self.0.__current_match_end = match_end;
-                self.0.__iter = self.0.__input[match_end..].char_indices().peekable();
-                self.0.__iter_byte_idx = match_end;
-                #action
-            }
+        quote!(match self.0.backtrack() {
+            Err(err) => return Some(Err(err)),
+            Ok(semantic_action) => #action,
         })
     };
 

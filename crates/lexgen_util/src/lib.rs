@@ -110,4 +110,25 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
             __last_match: None,
         }
     }
+
+    // On success returns semantic action function for the last match
+    pub fn backtrack(
+        &mut self,
+    ) -> Result<for<'lexer> fn(&'lexer mut W) -> SemanticActionResult<Result<T, E>>, LexerError<E>>
+    {
+        match self.__last_match.take() {
+            // TODO: location
+            None => Err(LexerError::InvalidToken {
+                location: Loc { line: 0, col: 0 },
+            }),
+            Some((match_start, semantic_action, match_end)) => {
+                self.__done = false;
+                self.__current_match_start = match_start;
+                self.__current_match_end = match_end;
+                self.__iter = self.__input[match_end..].char_indices().peekable();
+                self.__iter_byte_idx = match_end;
+                Ok(semantic_action)
+            }
+        }
+    }
 }
