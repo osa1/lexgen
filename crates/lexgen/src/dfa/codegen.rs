@@ -158,11 +158,11 @@ pub fn reify(
             }
 
             fn reset_match(&mut self) {
-                self.0.__current_match_start = self.0.__current_match_end;
+                self.0.reset_match()
             }
 
             fn match_(&self) -> &'input str {
-                &self.0.__input[self.0.__current_match_start..self.0.__current_match_end]
+                self.0.match_()
             }
 
             fn peek(&mut self) -> Option<char> {
@@ -325,13 +325,13 @@ fn generate_state_arm(
 
         // See #12 for the special case in state 0 (rule Init)
         quote!(
+            self.reset_match();
+
             match self.0.next() {
                 None => {
                     #end_of_input_action
                 }
                 Some((char_idx, char)) => {
-                    self.0.__current_match_start = char_idx;
-                    self.0.__current_match_end = char_idx;
                     match char {
                         #(#state_char_arms,)*
                     }
@@ -343,8 +343,7 @@ fn generate_state_arm(
         let semantic_fn = ctx.semantic_action_fn_ident(*rhs);
 
         quote!(
-            self.0.__last_match =
-                Some((self.0.__current_match_start, #semantic_fn, self.0.__current_match_end));
+            self.0.set_accepting_state(#semantic_fn);
 
             match self.0.next() {
                 None => {
@@ -391,7 +390,6 @@ fn generate_any_transition(
     };
 
     quote!(
-        self.0.__current_match_end += char.len_utf8();
         #action
     )
 }
@@ -417,7 +415,6 @@ fn generate_state_char_arms(
                 let action_code = generate_rhs_code(ctx, *action);
                 state_char_arms.push(quote!(
                     #char => {
-                        self.0.__current_match_end += char.len_utf8();
                         #action_code
                     }
                 ));
@@ -440,7 +437,6 @@ fn generate_state_char_arms(
 
         state_char_arms.push(quote!(
             #pat => {
-                self.0.__current_match_end += char.len_utf8();
                 #next
             }
         ));
@@ -461,7 +457,6 @@ fn generate_state_char_arms(
                 let range_end = char::from_u32(range.end).unwrap();
                 state_char_arms.push(quote!(
                     x if x >= #range_start && x <= #range_end => {
-                        self.0.__current_match_end += char.len_utf8();
                         #action_code
                     }
                 ));
@@ -494,7 +489,6 @@ fn generate_state_char_arms(
 
         state_char_arms.push(quote!(
             x if #guard => {
-                self.0.__current_match_end += x.len_utf8();
                 #next
             }
         ));

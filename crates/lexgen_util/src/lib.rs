@@ -13,6 +13,7 @@ pub enum LexerError<E> {
 pub struct Loc {
     pub line: u32,
     pub col: u32,
+    pub byte_idx: usize,
 }
 
 /// **Do not use**
@@ -98,8 +99,16 @@ impl<'input, T, S: Default, E, W> Lexer<'input, T, S, E, W> {
             __iter: input.char_indices().peekable(),
             __current_match_start: 0,
             __current_match_end: 0,
-            __current_match_start_loc: Loc { line: 0, col: 0 },
-            __current_match_end_loc: Loc { line: 0, col: 0 },
+            __current_match_start_loc: Loc {
+                line: 0,
+                col: 0,
+                byte_idx: 0,
+            },
+            __current_match_end_loc: Loc {
+                line: 0,
+                col: 0,
+                byte_idx: 0,
+            },
             __last_match: None,
         }
     }
@@ -117,8 +126,16 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
             __iter: input.char_indices().peekable(),
             __current_match_start: 0,
             __current_match_end: 0,
-            __current_match_start_loc: Loc { line: 0, col: 0 },
-            __current_match_end_loc: Loc { line: 0, col: 0 },
+            __current_match_start_loc: Loc {
+                line: 0,
+                col: 0,
+                byte_idx: 0,
+            },
+            __current_match_end_loc: Loc {
+                line: 0,
+                col: 0,
+                byte_idx: 0,
+            },
             __last_match: None,
         }
     }
@@ -129,6 +146,7 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
             None => None,
             Some((char_idx, char)) => {
                 let char_idx = self.__iter_byte_idx + char_idx;
+                self.__current_match_end += char.len_utf8();
                 if char == '\n' {
                     self.__current_match_end_loc.line += 1;
                     self.__current_match_end_loc.col = 0;
@@ -150,7 +168,6 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
     ) -> Result<for<'lexer> fn(&'lexer mut W) -> SemanticActionResult<Result<T, E>>, LexerError<E>>
     {
         match self.__last_match.take() {
-            // TODO: location
             None => Err(LexerError::InvalidToken {
                 location: self.__current_match_start_loc,
             }),
@@ -163,5 +180,25 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
                 Ok(semantic_action)
             }
         }
+    }
+
+    pub fn set_accepting_state(
+        &mut self,
+        semantic_action_fn: for<'lexer> fn(&'lexer mut W) -> SemanticActionResult<Result<T, E>>,
+    ) {
+        self.__last_match = Some((
+            self.__current_match_start,
+            semantic_action_fn,
+            self.__current_match_end,
+        ));
+    }
+
+    pub fn reset_match(&mut self) {
+        self.__current_match_start = self.__current_match_end;
+        self.__current_match_start_loc = self.__current_match_end_loc;
+    }
+
+    pub fn match_(&self) -> &'input str {
+        &self.__input[self.__current_match_start..self.__current_match_end]
     }
 }
