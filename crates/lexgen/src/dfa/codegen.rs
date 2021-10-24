@@ -166,7 +166,7 @@ pub fn reify(
             }
 
             fn peek(&mut self) -> Option<char> {
-                self.0.__iter.peek().map(|(_, char)| *char)
+                self.0.peek().map(|(_, char)| char)
             }
         }
 
@@ -193,7 +193,7 @@ pub fn reify(
                         return None;
                     }
 
-                    // println!("state = {:?}, next char = {:?}", self.0.__state, self.__iter.peek());
+                    // println!("state = {:?}, next char = {:?}", self.0.__state, self.0.peek());
                     match self.0.__state {
                         #(#match_arms,)*
                     }
@@ -325,12 +325,11 @@ fn generate_state_arm(
 
         // See #12 for the special case in state 0 (rule Init)
         quote!(
-            match self.0.__iter.next() {
+            match self.0.next() {
                 None => {
                     #end_of_input_action
                 }
                 Some((char_idx, char)) => {
-                    let char_idx = self.0.__iter_byte_idx + char_idx;
                     self.0.__current_match_start = char_idx;
                     self.0.__current_match_end = char_idx;
                     match char {
@@ -347,7 +346,7 @@ fn generate_state_arm(
             self.0.__last_match =
                 Some((self.0.__current_match_start, #semantic_fn, self.0.__current_match_end));
 
-            match self.0.__iter.next() {
+            match self.0.next() {
                 None => {
                     #end_of_input_action
                 }
@@ -360,7 +359,7 @@ fn generate_state_arm(
         )
     } else {
         // Non-accepting state
-        quote!(match self.0.__iter.next() {
+        quote!(match self.0.next() {
             None => {
                 #end_of_input_action
             }

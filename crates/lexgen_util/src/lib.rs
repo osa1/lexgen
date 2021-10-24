@@ -55,22 +55,30 @@ pub struct Lexer<'input, Token, State, Error, Wrapper> {
     pub __input: &'input str,
 
     // Start index of `iter`. We update this as we backtrack and update `iter`.
-    pub __iter_byte_idx: usize,
+    __iter_byte_idx: usize,
 
     // Character iterator. `Peekable` is used in the handler's `peek` method. Note that we can't
     // use byte index returned by this directly, as we re-initialize this field when backtracking.
     // Add `iter_byte_idx` to the byte index before using. When resetting, update `iter_byte_idx`.
-    pub __iter: std::iter::Peekable<std::str::CharIndices<'input>>,
+    __iter: std::iter::Peekable<std::str::CharIndices<'input>>,
 
-    // Where does the current match start. Byte index in `input`.
+    // Byte index of start of the current match
     pub __current_match_start: usize,
 
-    // Where does the current match end (exclusive). Byte index in `input`.
+    // Byte index of end (exclusive) of the current match
     pub __current_match_end: usize,
 
-    // If we skipped an accepting state, this holds the triple: - Skipped match start (byte index
-    // in `input`) - Semantic action (a function name) - Skipped match end (exclusive, byte index
-    // in `input`)
+    // Line and col of start of the current match
+    pub __current_match_start_loc: Loc,
+
+    // Line and col of end of the current match
+    pub __current_match_end_loc: Loc,
+
+    // If we skipped an accepting state, this holds the triple:
+    //
+    // - Skipped match start (byte index in `input`)
+    // - Semantic action (a function name)
+    // - Skipped match end (exclusive, byte index in `input`)
     pub __last_match: Option<(
         usize,
         for<'lexer, 'input_> fn(&'lexer mut Wrapper) -> SemanticActionResult<Result<Token, Error>>,
@@ -90,6 +98,8 @@ impl<'input, T, S: Default, E, W> Lexer<'input, T, S, E, W> {
             __iter: input.char_indices().peekable(),
             __current_match_start: 0,
             __current_match_end: 0,
+            __current_match_start_loc: Loc { line: 0, col: 0 },
+            __current_match_end_loc: Loc { line: 0, col: 0 },
             __last_match: None,
         }
     }
@@ -107,8 +117,31 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
             __iter: input.char_indices().peekable(),
             __current_match_start: 0,
             __current_match_end: 0,
+            __current_match_start_loc: Loc { line: 0, col: 0 },
+            __current_match_end_loc: Loc { line: 0, col: 0 },
             __last_match: None,
         }
+    }
+
+    // Read the next chracter
+    pub fn next(&mut self) -> Option<(usize, char)> {
+        match self.__iter.next() {
+            None => None,
+            Some((char_idx, char)) => {
+                let char_idx = self.__iter_byte_idx + char_idx;
+                if char == '\n' {
+                    self.__current_match_end_loc.line += 1;
+                    self.__current_match_end_loc.col = 0;
+                } else if char == '\t' {
+                    self.__current_match_end_loc.col += 4; // TODO: Make this configurable?
+                }
+                Some((char_idx, char))
+            }
+        }
+    }
+
+    pub fn peek(&mut self) -> Option<(usize, char)> {
+        self.__iter.peek().copied()
     }
 
     // On success returns semantic action function for the last match
@@ -119,7 +152,7 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
         match self.__last_match.take() {
             // TODO: location
             None => Err(LexerError::InvalidToken {
-                location: Loc { line: 0, col: 0 },
+                location: self.__current_match_start_loc,
             }),
             Some((match_start, semantic_action, match_end)) => {
                 self.__done = false;
