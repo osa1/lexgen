@@ -511,7 +511,7 @@ fn generate_semantic_action_call(action_fn: &TokenStream) -> TokenStream {
 
 fn generate_action_result_handler(action_result: TokenStream) -> TokenStream {
     let map_res = quote!(match res {
-        Ok(tok) => Ok((match_start, tok, self.0.__current_match_end)),
+        Ok(tok) => Ok((match_start, tok, self.0.__current_match_end.byte_idx)),
         Err(err) => Err(::lexgen_util::LexerError::Custom(err)),
     });
 
@@ -521,7 +521,7 @@ fn generate_action_result_handler(action_result: TokenStream) -> TokenStream {
         }
         ::lexgen_util::SemanticActionResult::Return(res) => {
             self.0.__state = self.0.__initial_state;
-            let match_start = self.0.__current_match_start;
+            let match_start = self.0.__current_match_start.byte_idx;
             self.0.__current_match_start = self.0.__current_match_end;
             return Some(#map_res);
         }
