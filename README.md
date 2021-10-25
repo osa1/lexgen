@@ -72,8 +72,8 @@ generator.
 
 ## Usage
 
-lexgen doesn't require a build step. Just add it as a dependency in your
-`Cargo.toml`.
+lexgen doesn't require a build step. Add same versions of `lexgen` and
+`lexgen_util` as dependencies in your `Cargo.toml`.
 
 ## Lexer syntax
 
