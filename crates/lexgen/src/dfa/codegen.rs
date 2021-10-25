@@ -154,7 +154,7 @@ pub fn reify(
             }
 
             fn state(&mut self) -> &mut #user_state_type {
-                &mut self.0.__user_state
+                self.0.state()
             }
 
             fn reset_match(&mut self) {

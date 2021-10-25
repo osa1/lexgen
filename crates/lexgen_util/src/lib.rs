@@ -50,18 +50,18 @@ pub struct Lexer<'input, Token, State, Error, Wrapper> {
     // Which lexer state to switch to on successful match
     pub __initial_state: usize,
 
-    pub __user_state: State,
+    user_state: State,
 
     // User-provided input string. Does not change after initialization.
-    pub __input: &'input str,
+    input: &'input str,
 
     // Start index of `iter`. We update this as we backtrack and update `iter`.
-    __iter_byte_idx: usize,
+    iter_byte_idx: usize,
 
     // Character iterator. `Peekable` is used in the handler's `peek` method. Note that we can't
     // use byte index returned by this directly, as we re-initialize this field when backtracking.
     // Add `iter_byte_idx` to the byte index before using. When resetting, update `iter_byte_idx`.
-    __iter: std::iter::Peekable<std::str::CharIndices<'input>>,
+    iter: std::iter::Peekable<std::str::CharIndices<'input>>,
 
     // Byte index of start of the current match
     pub __current_match_start: usize,
@@ -80,7 +80,7 @@ pub struct Lexer<'input, Token, State, Error, Wrapper> {
     // - Skipped match start (byte index in `input`)
     // - Semantic action (a function name)
     // - Skipped match end (exclusive, byte index in `input`)
-    pub __last_match: Option<(
+    last_match: Option<(
         usize,
         for<'lexer, 'input_> fn(&'lexer mut Wrapper) -> SemanticActionResult<Result<Token, Error>>,
         usize,
@@ -93,10 +93,10 @@ impl<'input, T, S: Default, E, W> Lexer<'input, T, S, E, W> {
             __state: 0,
             __done: false,
             __initial_state: 0,
-            __user_state: Default::default(),
-            __input: input,
-            __iter_byte_idx: 0,
-            __iter: input.char_indices().peekable(),
+            user_state: Default::default(),
+            input,
+            iter_byte_idx: 0,
+            iter: input.char_indices().peekable(),
             __current_match_start: 0,
             __current_match_end: 0,
             __current_match_start_loc: Loc {
@@ -109,7 +109,7 @@ impl<'input, T, S: Default, E, W> Lexer<'input, T, S, E, W> {
                 col: 0,
                 byte_idx: 0,
             },
-            __last_match: None,
+            last_match: None,
         }
     }
 }
@@ -120,10 +120,10 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
             __state: 0,
             __done: false,
             __initial_state: 0,
-            __user_state: state,
-            __input: input,
-            __iter_byte_idx: 0,
-            __iter: input.char_indices().peekable(),
+            user_state: state,
+            input,
+            iter_byte_idx: 0,
+            iter: input.char_indices().peekable(),
             __current_match_start: 0,
             __current_match_end: 0,
             __current_match_start_loc: Loc {
@@ -136,16 +136,16 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
                 col: 0,
                 byte_idx: 0,
             },
-            __last_match: None,
+            last_match: None,
         }
     }
 
     // Read the next chracter
     pub fn next(&mut self) -> Option<(usize, char)> {
-        match self.__iter.next() {
+        match self.iter.next() {
             None => None,
             Some((char_idx, char)) => {
-                let char_idx = self.__iter_byte_idx + char_idx;
+                let char_idx = self.iter_byte_idx + char_idx;
                 self.__current_match_end += char.len_utf8();
                 if char == '\n' {
                     self.__current_match_end_loc.line += 1;
@@ -159,7 +159,7 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
     }
 
     pub fn peek(&mut self) -> Option<(usize, char)> {
-        self.__iter.peek().copied()
+        self.iter.peek().copied()
     }
 
     // On success returns semantic action function for the last match
@@ -167,7 +167,7 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
         &mut self,
     ) -> Result<for<'lexer> fn(&'lexer mut W) -> SemanticActionResult<Result<T, E>>, LexerError<E>>
     {
-        match self.__last_match.take() {
+        match self.last_match.take() {
             None => Err(LexerError::InvalidToken {
                 location: self.__current_match_start_loc,
             }),
@@ -175,8 +175,8 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
                 self.__done = false;
                 self.__current_match_start = match_start;
                 self.__current_match_end = match_end;
-                self.__iter = self.__input[match_end..].char_indices().peekable();
-                self.__iter_byte_idx = match_end;
+                self.iter = self.input[match_end..].char_indices().peekable();
+                self.iter_byte_idx = match_end;
                 Ok(semantic_action)
             }
         }
@@ -186,7 +186,7 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
         &mut self,
         semantic_action_fn: for<'lexer> fn(&'lexer mut W) -> SemanticActionResult<Result<T, E>>,
     ) {
-        self.__last_match = Some((
+        self.last_match = Some((
             self.__current_match_start,
             semantic_action_fn,
             self.__current_match_end,
@@ -199,6 +199,10 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
     }
 
     pub fn match_(&self) -> &'input str {
-        &self.__input[self.__current_match_start..self.__current_match_end]
+        &self.input[self.__current_match_start..self.__current_match_end]
+    }
+
+    pub fn state(&mut self) -> &mut S {
+        &mut self.user_state
     }
 }
