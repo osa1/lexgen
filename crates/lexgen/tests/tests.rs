@@ -1,9 +1,165 @@
 mod test_utils;
 
 use lexgen::lexer;
+use lexgen_util::Loc;
 use test_utils::{loc, next};
 
 use std::convert::TryFrom;
+
+#[test]
+fn readme_1() {
+    lexer! {
+        // First line specifies name of the lexer and the token type returned by
+        // user actions
+        Lexer -> Token;
+
+        // Regular expressions can be named with `let` syntax
+        let init = ['a'-'z'];
+        let subseq = $init | ['A'-'Z' '0'-'9' '-' '_'];
+
+        // Rule sets have names. Each rule set is compiled to a separate DFA.
+        // Switching between rule sets is done explicitly in user actions.
+        rule Init {
+            // Rules without a right-hand sides for skipping whitespace,
+            // comments, etc.
+            [' ' '\t' '\n']+,
+
+            // Rule for matching identifiers
+            $init $subseq* => |lexer| {
+                let token = Token::Id(lexer.match_().to_owned());
+                lexer.return_(token)
+            },
+        }
+    }
+
+    // The token type
+    #[derive(Debug, PartialEq, Eq)]
+    enum Token {
+        // An identifier
+        Id(String),
+    }
+
+    // Generated lexers are initialized with a `&str` for the input
+    let mut lexer = Lexer::new(" abc123Q-t  z9_9");
+
+    // Lexers implement `Iterator<Item=Result<(Loc, T, Loc), LexerError>>`,
+    // where `T` is the token type specified in the lexer definition (`Token` in
+    // this case), and `Loc`s indicate line, column, and byte indices of
+    // beginning and end of the lexemes.
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((
+            Loc {
+                line: 0,
+                col: 1,
+                byte_idx: 1,
+            },
+            Token::Id("abc123Q-t".to_owned()),
+            Loc {
+                line: 0,
+                col: 10,
+                byte_idx: 10,
+            }
+        )))
+    );
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((
+            Loc {
+                line: 0,
+                col: 12,
+                byte_idx: 12,
+            },
+            Token::Id("z9_9".to_owned()),
+            Loc {
+                line: 0,
+                col: 16,
+                byte_idx: 16,
+            }
+        )))
+    );
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn readme_2() {
+    lexer! {
+        Lexer(usize) -> usize;
+
+        rule Init {
+            ' ',                                            // line 5
+
+            '[' => |lexer| {
+                *lexer.state() = 0;                         // line 8
+                lexer.switch(LexerRule::Count)              // line 9
+            },
+        }
+
+        rule Count {
+            '=' => |lexer| {
+                let n = *lexer.state();
+                *lexer.state() = n + 1;                     // line 16
+                lexer.continue_()                           // line 17
+            },
+
+            '[' => |lexer| {
+                let n = *lexer.state();
+                lexer.switch_and_return(LexerRule::Init, n) // line 22
+            },
+        }
+    }
+
+    let mut lexer = Lexer::new("[[ [=[ [==[");
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((
+            Loc {
+                line: 0,
+                col: 0,
+                byte_idx: 0
+            },
+            0,
+            Loc {
+                line: 0,
+                col: 2,
+                byte_idx: 2
+            }
+        )))
+    );
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((
+            Loc {
+                line: 0,
+                col: 3,
+                byte_idx: 3
+            },
+            1,
+            Loc {
+                line: 0,
+                col: 6,
+                byte_idx: 6
+            }
+        )))
+    );
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((
+            Loc {
+                line: 0,
+                col: 7,
+                byte_idx: 7
+            },
+            2,
+            Loc {
+                line: 0,
+                col: 11,
+                byte_idx: 11
+            }
+        )))
+    );
+    assert_eq!(lexer.next(), None);
+}
 
 #[test]
 fn simple() {

@@ -255,23 +255,19 @@ fn issue_16_backtracking_1() {
 
 #[test]
 fn issue_16_backtracking_2() {
+    fn return_match<'input>(
+        lexer: &mut Lexer<'input>,
+    ) -> lexgen_util::SemanticActionResult<&'input str> {
+        let match_ = lexer.match_();
+        lexer.return_(match_)
+    }
+
     lexer! {
         Lexer -> &'input str;
 
-        "xyzxyz" => |lexer| {
-            let match_ = lexer.match_();
-            lexer.return_(match_)
-        },
-
-        "xyz" => |lexer| {
-            let match_ = lexer.match_();
-            lexer.return_(match_)
-        },
-
-        "xya" => |lexer| {
-            let match_ = lexer.match_();
-            lexer.return_(match_)
-        },
+        "xyzxyz" => return_match,
+        "xyz" => return_match,
+        "xya" => return_match,
     }
 
     let mut lexer = Lexer::new("xyzxya");
