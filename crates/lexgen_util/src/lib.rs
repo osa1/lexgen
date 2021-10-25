@@ -18,6 +18,14 @@ pub struct Loc {
     pub byte_idx: usize,
 }
 
+impl Loc {
+    const ZERO: Loc = Loc {
+        line: 0,
+        col: 0,
+        byte_idx: 0,
+    };
+}
+
 /// **Do not use**
 // Possible outcomes of user action
 pub enum SemanticActionResult<T> {
@@ -97,22 +105,10 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
             __initial_state: 0,
             user_state: state,
             input,
-            iter_loc: Loc {
-                line: 0,
-                col: 0,
-                byte_idx: 0,
-            },
+            iter_loc: Loc::ZERO,
             iter: input.char_indices().peekable(),
-            current_match_start: Loc {
-                line: 0,
-                col: 0,
-                byte_idx: 0,
-            },
-            current_match_end: Loc {
-                line: 0,
-                col: 0,
-                byte_idx: 0,
-            },
+            current_match_start: Loc::ZERO,
+            current_match_end: Loc::ZERO,
             last_match: None,
         }
     }
