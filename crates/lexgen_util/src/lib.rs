@@ -57,8 +57,8 @@ pub struct Lexer<'input, Token, State, Error, Wrapper> {
     // User-provided input string. Does not change after initialization.
     input: &'input str,
 
-    // Start index of `iter`. We update this as we backtrack and update `iter`.
-    iter_byte_idx: usize,
+    // Start location of `iter`. We update this as we backtrack and update `iter`.
+    iter_loc: Loc,
 
     // Character iterator. `Peekable` is used in the handler's `peek` method. Note that we can't
     // use byte index returned by this directly, as we re-initialize this field when backtracking.
@@ -85,26 +85,7 @@ pub struct Lexer<'input, Token, State, Error, Wrapper> {
 
 impl<'input, T, S: Default, E, W> Lexer<'input, T, S, E, W> {
     pub fn new(input: &'input str) -> Self {
-        Self {
-            __state: 0,
-            __done: false,
-            __initial_state: 0,
-            user_state: Default::default(),
-            input,
-            iter_byte_idx: 0,
-            iter: input.char_indices().peekable(),
-            __current_match_start: Loc {
-                line: 0,
-                col: 0,
-                byte_idx: 0,
-            },
-            __current_match_end: Loc {
-                line: 0,
-                col: 0,
-                byte_idx: 0,
-            },
-            last_match: None,
-        }
+        Self::new_with_state(input, Default::default())
     }
 }
 
@@ -116,7 +97,11 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
             __initial_state: 0,
             user_state: state,
             input,
-            iter_byte_idx: 0,
+            iter_loc: Loc {
+                line: 0,
+                col: 0,
+                byte_idx: 0,
+            },
             iter: input.char_indices().peekable(),
             __current_match_start: Loc {
                 line: 0,
@@ -137,7 +122,7 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
         match self.iter.next() {
             None => None,
             Some((char_idx, char)) => {
-                let char_idx = self.iter_byte_idx + char_idx;
+                let char_idx = self.iter_loc.byte_idx + char_idx;
                 self.__current_match_end.byte_idx += char.len_utf8();
                 if char == '\n' {
                     self.__current_match_end.line += 1;
@@ -171,7 +156,7 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
                 self.__current_match_start = match_start;
                 self.__current_match_end = match_end;
                 self.iter = self.input[match_end.byte_idx..].char_indices().peekable();
-                self.iter_byte_idx = match_end.byte_idx;
+                self.iter_loc = match_end;
                 Ok(semantic_action)
             }
         }
