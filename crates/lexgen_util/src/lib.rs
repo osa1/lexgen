@@ -1,3 +1,5 @@
+use unicode_width::UnicodeWidthChar;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LexerError<E> {
     InvalidToken {
@@ -152,6 +154,9 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
                     self.__current_match_end_loc.col = 0;
                 } else if char == '\t' {
                     self.__current_match_end_loc.col += 4; // TODO: Make this configurable?
+                } else {
+                    self.__current_match_end_loc.col +=
+                        UnicodeWidthChar::width(char).unwrap_or(1) as u32;
                 }
                 Some((char_idx, char))
             }
