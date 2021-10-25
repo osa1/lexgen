@@ -1,9 +1,165 @@
 mod test_utils;
 
 use lexgen::lexer;
-use test_utils::next;
+use lexgen_util::Loc;
+use test_utils::{loc, next};
 
 use std::convert::TryFrom;
+
+#[test]
+fn readme_1() {
+    lexer! {
+        // First line specifies name of the lexer and the token type returned by
+        // user actions
+        Lexer -> Token;
+
+        // Regular expressions can be named with `let` syntax
+        let init = ['a'-'z'];
+        let subseq = $init | ['A'-'Z' '0'-'9' '-' '_'];
+
+        // Rule sets have names. Each rule set is compiled to a separate DFA.
+        // Switching between rule sets is done explicitly in user actions.
+        rule Init {
+            // Rules without a right-hand sides for skipping whitespace,
+            // comments, etc.
+            [' ' '\t' '\n']+,
+
+            // Rule for matching identifiers
+            $init $subseq* => |lexer| {
+                let token = Token::Id(lexer.match_().to_owned());
+                lexer.return_(token)
+            },
+        }
+    }
+
+    // The token type
+    #[derive(Debug, PartialEq, Eq)]
+    enum Token {
+        // An identifier
+        Id(String),
+    }
+
+    // Generated lexers are initialized with a `&str` for the input
+    let mut lexer = Lexer::new(" abc123Q-t  z9_9");
+
+    // Lexers implement `Iterator<Item=Result<(Loc, T, Loc), LexerError>>`,
+    // where `T` is the token type specified in the lexer definition (`Token` in
+    // this case), and `Loc`s indicate line, column, and byte indices of
+    // beginning and end of the lexemes.
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((
+            Loc {
+                line: 0,
+                col: 1,
+                byte_idx: 1,
+            },
+            Token::Id("abc123Q-t".to_owned()),
+            Loc {
+                line: 0,
+                col: 10,
+                byte_idx: 10,
+            }
+        )))
+    );
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((
+            Loc {
+                line: 0,
+                col: 12,
+                byte_idx: 12,
+            },
+            Token::Id("z9_9".to_owned()),
+            Loc {
+                line: 0,
+                col: 16,
+                byte_idx: 16,
+            }
+        )))
+    );
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn readme_2() {
+    lexer! {
+        Lexer(usize) -> usize;
+
+        rule Init {
+            ' ',                                            // line 5
+
+            '[' => |lexer| {
+                *lexer.state() = 0;                         // line 8
+                lexer.switch(LexerRule::Count)              // line 9
+            },
+        }
+
+        rule Count {
+            '=' => |lexer| {
+                let n = *lexer.state();
+                *lexer.state() = n + 1;                     // line 16
+                lexer.continue_()                           // line 17
+            },
+
+            '[' => |lexer| {
+                let n = *lexer.state();
+                lexer.switch_and_return(LexerRule::Init, n) // line 22
+            },
+        }
+    }
+
+    let mut lexer = Lexer::new("[[ [=[ [==[");
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((
+            Loc {
+                line: 0,
+                col: 0,
+                byte_idx: 0
+            },
+            0,
+            Loc {
+                line: 0,
+                col: 2,
+                byte_idx: 2
+            }
+        )))
+    );
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((
+            Loc {
+                line: 0,
+                col: 3,
+                byte_idx: 3
+            },
+            1,
+            Loc {
+                line: 0,
+                col: 6,
+                byte_idx: 6
+            }
+        )))
+    );
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((
+            Loc {
+                line: 0,
+                col: 7,
+                byte_idx: 7
+            },
+            2,
+            Loc {
+                line: 0,
+                col: 11,
+                byte_idx: 11
+            }
+        )))
+    );
+    assert_eq!(lexer.next(), None);
+}
 
 #[test]
 fn simple() {
@@ -33,11 +189,19 @@ fn simple() {
     let mut lexer = Lexer::new(" abc123Q-t  z9_9");
     assert_eq!(
         lexer.next(),
-        Some(Ok((1, Token::Id("abc123Q-t".to_owned()), 10)))
+        Some(Ok((
+            loc(0, 1, 1),
+            Token::Id("abc123Q-t".to_owned()),
+            loc(0, 10, 10)
+        )))
     );
     assert_eq!(
         lexer.next(),
-        Some(Ok((12, Token::Id("z9_9".to_owned()), 16)))
+        Some(Ok((
+            loc(0, 12, 12),
+            Token::Id("z9_9".to_owned()),
+            loc(0, 16, 16)
+        )))
     );
     assert_eq!(lexer.next(), None);
 }
@@ -88,8 +252,14 @@ fn switch_user_state() {
     }
 
     let mut lexer = Lexer::new("  /* test  */  /* /* nested comments!! */ */");
-    assert_eq!(lexer.next(), Some(Ok((2, Token::Comment, 13))));
-    assert_eq!(lexer.next(), Some(Ok((15, Token::Comment, 44))));
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((loc(0, 2, 2), Token::Comment, loc(0, 13, 13))))
+    );
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((loc(0, 15, 15), Token::Comment, loc(0, 44, 44))))
+    );
     assert_eq!(lexer.next(), None);
 }
 
@@ -122,9 +292,9 @@ fn counting() {
     }
 
     let mut lexer = Lexer::new("[[ [=[ [==[");
-    assert_eq!(lexer.next(), Some(Ok((0, 0, 2))));
-    assert_eq!(lexer.next(), Some(Ok((3, 1, 6))));
-    assert_eq!(lexer.next(), Some(Ok((7, 2, 11))));
+    assert_eq!(lexer.next(), Some(Ok((loc(0, 0, 0), 0, loc(0, 2, 2)))));
+    assert_eq!(lexer.next(), Some(Ok((loc(0, 3, 3), 1, loc(0, 6, 6)))));
+    assert_eq!(lexer.next(), Some(Ok((loc(0, 7, 7), 2, loc(0, 11, 11)))));
     assert_eq!(lexer.next(), None);
 }
 
@@ -187,8 +357,14 @@ fn lua_long_strings() {
     }
 
     let mut lexer = LuaLongStringLexer::new("[[ ]] [=[test]=] [=[ ]]");
-    assert_eq!(lexer.next(), Some(Ok((0, " ".to_owned(), 5))));
-    assert_eq!(lexer.next(), Some(Ok((6, "test".to_owned(), 16))));
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((loc(0, 0, 0), " ".to_owned(), loc(0, 5, 5))))
+    );
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((loc(0, 6, 6), "test".to_owned(), loc(0, 16, 16))))
+    );
     assert!(matches!(lexer.next(), Some(Err(_))));
 }
 
@@ -211,8 +387,14 @@ fn simple_lifetime() {
     }
 
     let mut lexer = Lexer::new("good times");
-    assert_eq!(lexer.next(), Some(Ok((0, Token::Id("good"), 4))));
-    assert_eq!(lexer.next(), Some(Ok((5, Token::Id("times"), 10))));
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((loc(0, 0, 0), Token::Id("good"), loc(0, 4, 4))))
+    );
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((loc(0, 5, 5), Token::Id("times"), loc(0, 10, 10))))
+    );
     assert_eq!(lexer.next(), None);
 }
 
@@ -232,10 +414,22 @@ fn rule_kind_simple() {
     }
 
     let mut lexer = Lexer::new("(())");
-    assert_eq!(lexer.next(), Some(Ok((0, Token::LParen, 1))));
-    assert_eq!(lexer.next(), Some(Ok((1, Token::LParen, 2))));
-    assert_eq!(lexer.next(), Some(Ok((2, Token::RParen, 3))));
-    assert_eq!(lexer.next(), Some(Ok((3, Token::RParen, 4))));
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((loc(0, 0, 0), Token::LParen, loc(0, 1, 1))))
+    );
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((loc(0, 1, 1), Token::LParen, loc(0, 2, 2))))
+    );
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((loc(0, 2, 2), Token::RParen, loc(0, 3, 3))))
+    );
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((loc(0, 3, 3), Token::RParen, loc(0, 4, 4))))
+    );
     assert_eq!(lexer.next(), None);
 }
 
@@ -265,41 +459,50 @@ fn rule_kind_fallible_no_lifetimes() {
     }
 
     let mut lexer = Lexer::new("123 blah");
-    assert_eq!(lexer.next(), Some(Ok((0, Token::Int(123), 3))));
-    assert!(matches!(lexer.next(), Some(Err(LexerError::UserError(_)))));
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((loc(0, 0, 0), Token::Int(123), loc(0, 3, 3))))
+    );
+    assert!(matches!(
+        lexer.next(),
+        Some(Err(::lexgen_util::LexerError::Custom(_)))
+    ));
     assert_eq!(lexer.next(), None);
 }
 
 #[test]
 fn rule_kind_fallible_with_lifetimes() {
     #[derive(Debug, PartialEq, Eq)]
-    enum Token {
-        Int(i64),
+    enum Token<'input> {
+        Int(&'input str),
     }
 
     #[derive(Debug, PartialEq, Eq)]
     struct UserError<'input>(&'input str);
 
     lexer! {
-        Lexer -> Token;
+        Lexer -> Token<'input>;
 
-        type Error<'input> = UserError<'input>;
+        type Error = UserError<'input>;
 
         [' ' '\t' '\n'],
         ['a'-'z' '0'-'9']+ =? |lexer| {
             let match_ = lexer.match_();
-            match str::parse(match_) {
-                Ok(i) => lexer.return_(Ok(Token::Int(i))),
+            match str::parse::<i64>(match_) {
+                Ok(_) => lexer.return_(Ok(Token::Int(match_))),
                 Err(_) => lexer.return_(Err(UserError(match_))),
             }
         },
     }
 
     let mut lexer = Lexer::new("123 blah");
-    assert_eq!(lexer.next(), Some(Ok((0, Token::Int(123), 3))));
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((loc(0, 0, 0), Token::Int("123"), loc(0, 3, 3))))
+    );
     assert!(matches!(
         lexer.next(),
-        Some(Err(LexerError::UserError(UserError("blah"))))
+        Some(Err(::lexgen_util::LexerError::Custom(UserError("blah"))))
     ));
     assert_eq!(lexer.next(), None);
 }
@@ -319,7 +522,7 @@ fn rule_kind_mix() {
     lexer! {
         Lexer -> Token;
 
-        type Error<'input> = UserError<'input>;
+        type Error = UserError<'input>;
 
         // simple with skip
         [' ' '\t' '\n'],
@@ -343,16 +546,25 @@ fn rule_kind_mix() {
     }
 
     let mut lexer = Lexer::new("123 blah");
-    assert_eq!(lexer.next(), Some(Ok((0, Token::Int(123), 3))));
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((loc(0, 0, 0), Token::Int(123), loc(0, 3, 3))))
+    );
     assert!(matches!(
         lexer.next(),
-        Some(Err(LexerError::UserError(UserError("blah"))))
+        Some(Err(::lexgen_util::LexerError::Custom(UserError("blah"))))
     ));
     assert_eq!(lexer.next(), None);
 
     let mut lexer = Lexer::new("A -");
-    assert_eq!(lexer.next(), Some(Ok((0, Token::A, 1))));
-    assert_eq!(lexer.next(), Some(Ok((2, Token::Other, 3))));
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((loc(0, 0, 0), Token::A, loc(0, 1, 1))))
+    );
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((loc(0, 2, 2), Token::Other, loc(0, 3, 3))))
+    );
     assert_eq!(lexer.next(), None);
 }
 
@@ -395,8 +607,8 @@ fn builtin_alphabetic() {
     // Test characters copied from Rust std documentation
 
     let mut lexer = Lexer::new("a 京 💝");
-    assert_eq!(next(&mut lexer), Some(Ok(())));
-    assert_eq!(next(&mut lexer), Some(Ok(())));
+    assert_eq!(lexer.next(), Some(Ok((loc(0, 0, 0), (), loc(0, 1, 1)))));
+    assert_eq!(lexer.next(), Some(Ok((loc(0, 2, 2), (), loc(0, 4, 5)))));
     assert!(matches!(next(&mut lexer), Some(Err(_))));
 }
 
@@ -410,15 +622,15 @@ fn builtin_alphanumeric() {
     }
 
     let mut lexer = Lexer::new("٣ 7 ৬ ¾ ① K و 藏");
-    assert_eq!(next(&mut lexer), Some(Ok(())));
-    assert_eq!(next(&mut lexer), Some(Ok(())));
-    assert_eq!(next(&mut lexer), Some(Ok(())));
-    assert_eq!(next(&mut lexer), Some(Ok(())));
-    assert_eq!(next(&mut lexer), Some(Ok(())));
-    assert_eq!(next(&mut lexer), Some(Ok(())));
-    assert_eq!(next(&mut lexer), Some(Ok(())));
-    assert_eq!(next(&mut lexer), Some(Ok(())));
-    assert_eq!(next(&mut lexer), None);
+    assert_eq!(lexer.next(), Some(Ok((loc(0, 0, 0), (), loc(0, 1, 2))))); // 2 bytes
+    assert_eq!(lexer.next(), Some(Ok((loc(0, 2, 3), (), loc(0, 3, 4)))));
+    assert_eq!(lexer.next(), Some(Ok((loc(0, 4, 5), (), loc(0, 5, 8))))); // 3 bytes
+    assert_eq!(lexer.next(), Some(Ok((loc(0, 6, 9), (), loc(0, 7, 11))))); // 2 bytes
+    assert_eq!(lexer.next(), Some(Ok((loc(0, 8, 12), (), loc(0, 9, 15))))); // 3 bytes
+    assert_eq!(lexer.next(), Some(Ok((loc(0, 10, 16), (), loc(0, 11, 17)))));
+    assert_eq!(lexer.next(), Some(Ok((loc(0, 12, 18), (), loc(0, 13, 20))))); // 2 bytes
+    assert_eq!(lexer.next(), Some(Ok((loc(0, 14, 21), (), loc(0, 16, 24))))); // 3 bytes, wide
+    assert_eq!(lexer.next(), None);
 }
 
 #[test]
@@ -652,7 +864,7 @@ fn switch_and_reset_match() {
 }
 
 #[test]
-fn any_2() {
+fn char_lit() {
     lexer! {
         Lexer -> &'input str;
 
@@ -665,4 +877,62 @@ fn any_2() {
     let mut lexer = Lexer::new("'a'");
     assert_eq!(next(&mut lexer), Some(Ok("'a'")));
     assert_eq!(next(&mut lexer), None);
+}
+
+#[test]
+fn multiple_lexers_in_scope() {
+    lexer! {
+        Lexer1 -> usize;
+
+        'a' = 1,
+    }
+
+    lexer! {
+        Lexer2 -> usize;
+
+        'a' = 2,
+    }
+
+    let mut lexer = Lexer1::new("a");
+    assert_eq!(next(&mut lexer), Some(Ok(1)));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer2::new("a");
+    assert_eq!(next(&mut lexer), Some(Ok(2)));
+    assert_eq!(next(&mut lexer), None);
+}
+
+#[test]
+fn loc_tracking() {
+    lexer! {
+        Lexer -> &'input str;
+
+        rule Init {
+            _ => |lexer| lexer.switch(LexerRule::Rule1),
+        }
+
+        rule Rule1 {
+            '\n' => |lexer| {
+                let match_ = lexer.match_();
+                lexer.return_(match_)
+            },
+
+            _,
+
+            $ => |lexer| {
+                let match_ = lexer.match_();
+                lexer.return_(match_)
+            },
+        }
+    }
+
+    let mut lexer = Lexer::new("Ｈｅｌｌｏ,\nｗｏｒｌｄ!!!");
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((loc(0, 0, 0), "Ｈｅｌｌｏ,\n", loc(1, 0, 17))))
+    );
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((loc(1, 0, 17), "ｗｏｒｌｄ!!!", loc(1, 13, 35))))
+    );
 }

@@ -13,7 +13,8 @@ lexer! {
     // Rule sets have names. Each rule set is compiled to a separate DFA.
     // Switching between rule sets is done explicitly in user actions.
     rule Init {
-        // Rules without a right-hand sides for skipping whitespace, comments, etc.
+        // Rules without a right-hand sides for skipping whitespace,
+        // comments, etc.
         [' ' '\t' '\n']+,
 
         // Rule for matching identifiers
@@ -34,17 +35,25 @@ enum Token {
 // Generated lexers are initialized with a `&str` for the input
 let mut lexer = Lexer::new(" abc123Q-t  z9_9");
 
-// Lexers implement `Iterator<Item=Result<(usize, T, usize), LexerError>>`,
+// Lexers implement `Iterator<Item=Result<(Loc, T, Loc), LexerError>>`,
 // where `T` is the token type specified in the lexer definition (`Token` in
-// this case), and `usize`s indicate byte indices of beginning and end of the
-// lexemes.
+// this case), and `Loc`s indicate line, column, and byte indices of
+// beginning and end of the lexemes.
 assert_eq!(
     lexer.next(),
-    Some(Ok((1, Token::Id("abc123Q-t".to_owned()), 10)))
+    Some(Ok((
+        Loc { line: 0, col: 1, byte_idx: 1 },
+        Token::Id("abc123Q-t".to_owned()),
+        Loc { line: 0, col: 10, byte_idx: 10 }
+    )))
 );
 assert_eq!(
     lexer.next(),
-    Some(Ok((12, Token::Id("z9_9".to_owned()), 16)))
+    Some(Ok((
+        Loc { line: 0, col: 12, byte_idx: 12 },
+        Token::Id("z9_9".to_owned()),
+        Loc { line: 0, col: 16, byte_idx: 16 }
+    )))
 );
 assert_eq!(lexer.next(), None);
 ```
@@ -63,8 +72,8 @@ generator.
 
 ## Usage
 
-lexgen doesn't require a build step. Just add it as a dependency in your
-`Cargo.toml`.
+lexgen doesn't require a build step. Add same versions of `lexgen` and
+`lexgen_util` as dependencies in your `Cargo.toml`.
 
 ## Lexer syntax
 
@@ -203,13 +212,12 @@ XID_Continue]:
 ## Rule syntax
 
 - `<regex> => <user action>,`: `<regex>` syntax is as described above. `<user
-  action>` is any Rust code with type `fn(LexerHandle) ->
-  LexerAction<LexerReturn>`. More on `LexerHandle` and `LexerAction` types
-  below. `LexerReturn` is the type declared at the beginning of the lexer with
-  `Lexer -> LexerReturn;`.
+  action>` is any Rust code with type `fn(&mut Lexer) ->
+  SemanticActionResult<Token>`. More on `SemanticActionResult` type in the next
+  section.
 
 - `<regex> =? <user action>,`: fallible actions. This syntax is similar to the
-  syntax above, except `<user action>` has type `fn(LexerHandle) ->
+  syntax above, except `<user action>` has type `fn(&mut Lexer) ->
   LexerAction<Result<Token, UserError>>`. When using rules of this kind, the
   error type needs to be declared at the beginning of the lexer with the `type
   Error = UserError;` syntax.
@@ -218,7 +226,7 @@ XID_Continue]:
   caller of the lexer's `next` method.
 
 - `<regex>,`: Syntactic sugar for `<regex> => |lexer| lexer.continue_(),`.
-  Useful for skipping whitespace.
+  Useful for skipping characters (e.g. whitespace).
 
 - `<regex> = <token>,`: Syntactic sugar for `<regex> => |lexer|
   lexer.return_(<token>),`. Useful for matching keywords, punctuation
@@ -226,36 +234,35 @@ XID_Continue]:
 
 ## Handle, rule, error, and action types
 
-The `lexer` macro generates a few types with names derived from the lexer name
-and type specified by the user. If the lexer type is declared as `Lexer(State)
--> Token` at the beginning of lexer, the generated types are:
+The `lexer` macro generates a struct with the name specified by the user in the
+first line of the lexer definition. In the example at the beginning (`Lexer ->
+Token;`), name of the struct is `Lexer`.
 
-- `LexerAction`: this is the type returned by user actions. You don't need to
-  worry about the detail of this type as the handle type has methods for
-  generating `LexerAction`s.
+A mut reference to this type is passed to semantic action functions. In the
+implementation of a semantic action, you should use one of the methods below
+drive the lexer and return tokens:
 
-- `LexerRule`: see the `LexerHandle::switch` method below.
+- `fn match_(&self) -> &str`: returns the current match
+- `fn peek(&mut self) -> Option<char>`: looks ahead one character
+- `fn state(&mut self) -> &mut <user state type>`: returns a mutable reference
+  to the user state
+- `fn return_(&self, token: <user token type>) -> SemanticActionResult`:
+  returns the passed token as a match.
+- `fn continue_(&self) -> SemanticActionResult`: ignores the current match and
+  continues lexing in the same lexer state. Useful for skipping characters.
+- `fn switch(&mut self, rule: LexerRule) -> SemanticActionResult`: used for
+  switching between lexer states. The `LexerRule` (where `Lexer` part is the
+  name of the lexer as specified by the user) is an enum with a variant for
+  each rule set name, for example, `LexerRule::Init`. See the stateful lexer
+  example below.
+- `fn switch_and_return(&mut self, rule: LexerRule, token: <user token type>)
+  -> SemanticActionResult`: switches to the given lexer state and returns the
+  given token.
+- `fn reset_match(&mut self)`: resets the current match. E.g. if you call
+  `match_()` right after `reset_match()` it will return an empty string.
 
-- `LexerHandle`: this type is the argument type of user actions. It provides
-  methods for manipulating user and lexer states, and getting the current match.
-  The API is:
-
-  - `fn match_(&self) -> &str`: returns the current match
-  - `fn peek(&mut self) -> Option<char>`: looks ahead one character
-  - `fn state(&mut self) -> &mut <user state type>`: returns a mutable reference
-    to the user state
-  - `fn return_(&self, token: <user token type>) -> LexerAction`: returns
-    the passed token as a match.
-  - `fn continue_(&self) -> LexerAction`: ignores the current match and
-    continues lexing in the same lexer state. Useful for skipping whitespace and comments.
-  - `fn switch(&mut self, rule: LexerRule) -> LexerAction`: used for switching
-    between lexer states. The `LexerRule` is an enum with a variant for each
-    rule set name, for example, `LexerRule::Init`. See the stateful lexer
-    example below.
-  - `fn switch_and_return(&mut self, rule: LexerRule, token: <user token type>)
-    -> LexerAction`: switches to the given lexer state and returns the given token.
-  - `fn reset_match(&mut self)`: resets the current match. E.g. if you call
-    `match_()` right after `reset_match()` it will return an empty string.
+Semantic action functions should return a `SemanticActionResult` value obtained
+from one of the methods listed above.
 
 ## Stateful lexer example
 
@@ -289,9 +296,30 @@ lexer! {
 }
 
 let mut lexer = Lexer::new("[[ [=[ [==[");
-assert_eq!(lexer.next(), Some(Ok((0, 0, 2))));
-assert_eq!(lexer.next(), Some(Ok((3, 1, 6))));
-assert_eq!(lexer.next(), Some(Ok((7, 2, 11))));
+assert_eq!(
+    lexer.next(),
+    Some(Ok((
+        Loc { line: 0, col: 0, byte_idx: 0 },
+        0,
+        Loc { line: 0, col: 2, byte_idx: 2 },
+    )))
+);
+assert_eq!(
+    lexer.next(),
+    Some(Ok((
+        Loc { line: 0, col: 3, byte_idx: 3 },
+        1,
+        Loc { line: 0, col: 6, byte_idx: 6 },
+    )))
+);
+assert_eq!(
+    lexer.next(),
+    Some(Ok((
+        Loc { line: 0, col: 7, byte_idx: 7 },
+        2,
+        Loc { line: 0, col: 11, byte_idx: 11 },
+    )))
+);
 assert_eq!(lexer.next(), None);
 ```
 
@@ -300,35 +328,6 @@ initialize the user state (line 8) and switch to the `Count` state (line 9). In
 `Count`, each `=` increments the user state by one (line 16) and skips the
 match (line 17). A `[` in the `Count` state returns the current number and
 switches to the `Init` state (line 22).
-
-## Implementation details
-
-lexgen's implementation should be fairly standard. Each rule set is compiled to
-a separate NFA. NFAs are then compiled to DFAs. DFAs are added to the same `DFA`
-type but there are no transitions between nodes of different DFAs: transitions
-between DFAs are done by user action, using the `switch` method of lexer
-handles, as described above.
-
-Generated code for a DFA is basically a loop that iterates over characters of
-the input string:
-
-```
-loop {
-    match <lexer state> {
-        S1 => {
-            match <next character> {
-                C1 => ...                  // transition to next state
-
-                ...                        // other characters expected in this state
-
-                _ => ...                   // for an accepting state, run user
-                                           // action, for a non-accepting, fail
-            }
-        },
-        ...                                // same stuff for other DFA states
-    }
-}
-```
 
 [1]: https://github.com/osa1/lexgen/blob/main/tests/tests.rs
 [2]: https://github.com/osa1/lexgen/blob/main/tests/lua_5_1.rs
