@@ -66,10 +66,10 @@ pub struct Lexer<'input, Token, State, Error, Wrapper> {
     iter: std::iter::Peekable<std::str::CharIndices<'input>>,
 
     // Start of the current match
-    pub __current_match_start: Loc,
+    current_match_start: Loc,
 
     // End of the current match
-    pub __current_match_end: Loc,
+    current_match_end: Loc,
 
     // If we skipped an accepting state, this holds the triple:
     //
@@ -103,12 +103,12 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
                 byte_idx: 0,
             },
             iter: input.char_indices().peekable(),
-            __current_match_start: Loc {
+            current_match_start: Loc {
                 line: 0,
                 col: 0,
                 byte_idx: 0,
             },
-            __current_match_end: Loc {
+            current_match_end: Loc {
                 line: 0,
                 col: 0,
                 byte_idx: 0,
@@ -123,15 +123,14 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
             None => None,
             Some((char_idx, char)) => {
                 let char_idx = self.iter_loc.byte_idx + char_idx;
-                self.__current_match_end.byte_idx += char.len_utf8();
+                self.current_match_end.byte_idx += char.len_utf8();
                 if char == '\n' {
-                    self.__current_match_end.line += 1;
-                    self.__current_match_end.col = 0;
+                    self.current_match_end.line += 1;
+                    self.current_match_end.col = 0;
                 } else if char == '\t' {
-                    self.__current_match_end.col += 4; // TODO: Make this configurable?
+                    self.current_match_end.col += 4; // TODO: Make this configurable?
                 } else {
-                    self.__current_match_end.col +=
-                        UnicodeWidthChar::width(char).unwrap_or(1) as u32;
+                    self.current_match_end.col += UnicodeWidthChar::width(char).unwrap_or(1) as u32;
                 }
                 Some((char_idx, char))
             }
@@ -149,12 +148,12 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
     {
         match self.last_match.take() {
             None => Err(LexerError::InvalidToken {
-                location: self.__current_match_start,
+                location: self.current_match_start,
             }),
             Some((match_start, semantic_action, match_end)) => {
                 self.__done = false;
-                self.__current_match_start = match_start;
-                self.__current_match_end = match_end;
+                self.current_match_start = match_start;
+                self.current_match_end = match_end;
                 self.iter = self.input[match_end.byte_idx..].char_indices().peekable();
                 self.iter_loc = match_end;
                 Ok(semantic_action)
@@ -167,18 +166,22 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
         semantic_action_fn: for<'lexer> fn(&'lexer mut W) -> SemanticActionResult<Result<T, E>>,
     ) {
         self.last_match = Some((
-            self.__current_match_start,
+            self.current_match_start,
             semantic_action_fn,
-            self.__current_match_end,
+            self.current_match_end,
         ));
     }
 
     pub fn reset_match(&mut self) {
-        self.__current_match_start = self.__current_match_end;
+        self.current_match_start = self.current_match_end;
     }
 
     pub fn match_(&self) -> &'input str {
-        &self.input[self.__current_match_start.byte_idx..self.__current_match_end.byte_idx]
+        &self.input[self.current_match_start.byte_idx..self.current_match_end.byte_idx]
+    }
+
+    pub fn match_loc(&self) -> (Loc, Loc) {
+        (self.current_match_start, self.current_match_end)
     }
 
     pub fn state(&mut self) -> &mut S {
