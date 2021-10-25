@@ -763,7 +763,6 @@ fn loc_tracking() {
 
             _,
 
-            // TODO: See end_of_input_in_rule
             $ => |lexer| {
                 let match_ = lexer.match_();
                 lexer.return_(match_)
@@ -781,23 +780,3 @@ fn loc_tracking() {
         Some(Ok((loc(1, 0, 17), "ｗｏｒｌｄ!!!", loc(1, 13, 35))))
     );
 }
-
-// FIXME
-// #[test]
-// fn end_of_input_in_rule() {
-//     lexer! {
-//         Lexer -> &'input str;
-//
-//         rule Init {
-//             _ => |lexer| lexer.switch(LexerRule::Rule1),
-//         }
-//
-//         rule Rule1 {
-//             _,
-//             $,
-//         }
-//     }
-//
-//     let mut lexer = Lexer::new("aaa");
-//     assert_eq!(lexer.next(), Some(Ok((loc(0, 0, 0), "aaa", loc(0, 3, 3)))));
-// }
