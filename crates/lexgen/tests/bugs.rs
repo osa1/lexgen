@@ -1,7 +1,7 @@
 mod test_utils;
 
 use lexgen::lexer;
-use test_utils::next;
+use test_utils::{loc, next};
 
 #[test]
 fn failure_confusion_1() {
@@ -107,13 +107,13 @@ fn failure_confusion_3_1() {
     }
 
     let mut lexer = Lexer::new("a ab abc");
-    assert_eq!(lexer.next(), Some(Ok((0, 2, 1))));
-    assert_eq!(lexer.next(), Some(Ok((1, 0, 2))));
-    assert_eq!(lexer.next(), Some(Ok((2, 1, 4))));
-    assert_eq!(lexer.next(), Some(Ok((4, 0, 5))));
-    assert_eq!(lexer.next(), Some(Ok((5, 1, 7))));
-    assert_eq!(lexer.next(), Some(Ok((7, 2, 8))));
-    assert_eq!(lexer.next(), None);
+    assert_eq!(next(&mut lexer), Some(Ok(2)));
+    assert_eq!(next(&mut lexer), Some(Ok(0)));
+    assert_eq!(next(&mut lexer), Some(Ok(1)));
+    assert_eq!(next(&mut lexer), Some(Ok(0)));
+    assert_eq!(next(&mut lexer), Some(Ok(1)));
+    assert_eq!(next(&mut lexer), Some(Ok(2)));
+    assert_eq!(next(&mut lexer), None);
 }
 
 #[test]
@@ -129,9 +129,9 @@ fn failure_confusion_3_2() {
     }
 
     let mut lexer = Lexer::new("f,");
-    assert_eq!(lexer.next(), Some(Ok((0, 1, 1))));
-    assert_eq!(lexer.next(), Some(Ok((1, 2, 2))));
-    assert_eq!(lexer.next(), None);
+    assert_eq!(next(&mut lexer), Some(Ok(1)));
+    assert_eq!(next(&mut lexer), Some(Ok(2)));
+    assert_eq!(next(&mut lexer), None);
 }
 
 #[test]
@@ -147,10 +147,10 @@ fn failure_confusion_4() {
 
     let mut lexer = Lexer::new("aaa aa a");
 
-    assert_eq!(lexer.next(), Some(Ok((0, 1, 3))));
-    assert_eq!(lexer.next(), Some(Ok((4, 2, 6))));
-    assert_eq!(lexer.next(), Some(Ok((7, 3, 8))));
-    assert_eq!(lexer.next(), None);
+    assert_eq!(next(&mut lexer), Some(Ok(1)));
+    assert_eq!(next(&mut lexer), Some(Ok(2)));
+    assert_eq!(next(&mut lexer), Some(Ok(3)));
+    assert_eq!(next(&mut lexer), None);
 }
 
 #[test]
@@ -303,7 +303,13 @@ fn end_of_input_handling() {
     }
 
     let mut lexer = Lexer::new("aa");
-    assert_eq!(lexer.next(), Some(Ok((0, (0, "a"), 1))));
-    assert_eq!(lexer.next(), Some(Ok((1, (1, "a"), 2))));
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((loc(0, 0, 0), (0, "a"), loc(0, 1, 1))))
+    );
+    assert_eq!(
+        lexer.next(),
+        Some(Ok((loc(0, 1, 1), (1, "a"), loc(0, 2, 2))))
+    );
     assert_eq!(lexer.next(), None);
 }

@@ -185,7 +185,7 @@ pub fn reify(
         #semantic_action_fns
 
         impl<'input> Iterator for #lexer_name<'input> {
-            type Item = Result<(usize, #token_type, usize), ::lexgen_util::LexerError<#error_type>>;
+            type Item = Result<(::lexgen_util::Loc, #token_type, ::lexgen_util::Loc), ::lexgen_util::LexerError<#error_type>>;
 
             fn next(&mut self) -> Option<Self::Item> {
                 loop {
@@ -511,7 +511,7 @@ fn generate_semantic_action_call(action_fn: &TokenStream) -> TokenStream {
 
 fn generate_action_result_handler(action_result: TokenStream) -> TokenStream {
     let map_res = quote!(match res {
-        Ok(tok) => Ok((match_start.byte_idx, tok, match_end.byte_idx)),
+        Ok(tok) => Ok((match_start, tok, match_end)),
         Err(err) => Err(::lexgen_util::LexerError::Custom(err)),
     });
 
