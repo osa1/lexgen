@@ -3,9 +3,10 @@ name = "lexgen"
 version = "0.7.0"
 authors = ["Ömer Sinan Ağacan <omeragacan@gmail.com>"]
 description = "A fully-featured lexer generator implemented as a proc macro"
-edition = "2018"
+edition = "2021"
 license = "MIT"
 homepage = "https://github.com/osa1/lexgen"
+categories = ["compilers", "development-tools", "parsing"]
 
 [lib]
 proc_macro = true
@@ -14,7 +15,7 @@ proc_macro = true
 fxhash = "0.2"
 proc-macro2 = "1.0"
 quote = "1.0"
-syn = { version = "1.0", features = ["full", "extra-traits"] }
+syn = { version = "1.0", features = ["extra-traits"] }
 
 [dev-dependencies]
 criterion = "0.3"
