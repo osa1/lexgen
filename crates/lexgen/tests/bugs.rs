@@ -1,6 +1,7 @@
 mod test_utils;
 
 use lexgen::lexer;
+use lexgen_util::LexerError;
 use test_utils::{loc, next};
 
 #[test]
@@ -308,4 +309,41 @@ fn end_of_input_handling() {
         Some(Ok((loc(0, 1, 1), (1, "a"), loc(0, 2, 2))))
     );
     assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn empty_rule_simpification_issue_27() {
+    // Tests that:
+    //
+    // 1. Simplifier doesn't eliminate empty (i.e. no outgoing transitions) initial states without
+    //    incoming transitions. Since initial states can be switched to in semantic actions we
+    //    cannot know that we won't ever switch to them, so we cannot eliminate them.
+    //
+    // 2. When running a semantic action we reset `last_match` so if the next state is empty we
+    //    fail, instead of backtracking.
+
+    lexer! {
+        Lexer -> &'input str;
+
+        rule Init {
+            "0x" => |lexer| lexer.switch(LexerRule::HexInt),
+            '0' => |lexer| lexer.switch(LexerRule::DecInt),
+        }
+
+        rule DecInt {
+            _ => |lexer| lexer.return_("wat"),
+        }
+
+        rule HexInt {}
+    }
+
+    let mut lexer = Lexer::new("0xff");
+
+    // This used to return `Some("wat")` with the bug
+    assert_eq!(
+        next(&mut lexer),
+        Some(Err(LexerError::InvalidToken {
+            location: loc(0, 0, 0)
+        }))
+    );
 }

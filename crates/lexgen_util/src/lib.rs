@@ -157,6 +157,10 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
         }
     }
 
+    pub fn reset_accepting_state(&mut self) {
+        self.last_match = None;
+    }
+
     pub fn set_accepting_state(
         &mut self,
         semantic_action_fn: for<'lexer> fn(&'lexer mut W) -> SemanticActionResult<Result<T, E>>,

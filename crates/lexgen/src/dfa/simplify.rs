@@ -18,7 +18,7 @@ pub fn simplify<K>(
     let mut non_empty_states: Vec<(StateIdx, State<StateIdx, SemanticActionIdx>)> = vec![];
 
     for (state_idx, state) in dfa.into_state_indices() {
-        if state.has_no_transitions() {
+        if state.has_no_transitions() && !state.initial {
             empty_states.push((state_idx, state.accepting));
         } else {
             non_empty_states.push((state_idx, state));

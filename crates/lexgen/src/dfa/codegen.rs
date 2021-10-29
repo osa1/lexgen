@@ -501,21 +501,23 @@ fn generate_state_char_arms(
 
 /// Generate call to the semantic action function with the given index and handle the result.
 fn generate_rhs_code(ctx: &CgCtx, action: SemanticActionIdx) -> TokenStream {
-    generate_semantic_action_call(&ctx.semantic_action_fn_ident(action).into_token_stream())
+    let semantic_action_call =
+        generate_semantic_action_call(&ctx.semantic_action_fn_ident(action).into_token_stream());
+
+    quote!(
+        self.0.reset_accepting_state();
+        #semantic_action_call
+    )
 }
 
 /// Generate call to the given semantic action function and handle the result.
 fn generate_semantic_action_call(action_fn: &TokenStream) -> TokenStream {
-    generate_action_result_handler(quote!(#action_fn(self)))
-}
-
-fn generate_action_result_handler(action_result: TokenStream) -> TokenStream {
     let map_res = quote!(match res {
         Ok(tok) => Ok((match_start, tok, match_end)),
         Err(err) => Err(::lexgen_util::LexerError::Custom(err)),
     });
 
-    quote!(match #action_result {
+    quote!(match #action_fn(self) {
         ::lexgen_util::SemanticActionResult::Continue => {
             self.0.__state = self.0.__initial_state;
         }
