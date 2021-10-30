@@ -1,6 +1,6 @@
 # 2021/10/30: 0.8.0
 
-- **Breaking change**: Starting with this release, lexgen-generated lexers now
+- **Breaking change:** Starting with this release, lexgen-generated lexers now
   depend on `lexgen_util` package of the same version. If you are using lexgen
   version 0.8 or newer, make sure to add `lexgen_util = "..."` to your
   `Cargo.toml`, using the same version number as `lexgen`.
@@ -8,9 +8,9 @@
 - Common code in generated code is moved to a new crate `lexgen_util`.
   lexgen-generated lexers now depend on `lexgen_util`.
 
-- Line and column tracking implemented. Iterator implementation now yields
-  `(Loc, Token, Loc)`, where `Loc` is defined in `lexgen_util` as `struct Loc {
-  line: u32, col: u32, byte_idx: usize }`.
+- **Breaking change:** Line and column tracking implemented. Iterator
+  implementation now yields `(Loc, Token, Loc)`, where `Loc` is defined in
+  `lexgen_util` as `struct Loc { line: u32, col: u32, byte_idx: usize }`.
 
 - Fixed a bug when initial state of a rule does not have any transitions (rule
   is empty). (#27, 001ea51)
