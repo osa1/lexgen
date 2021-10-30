@@ -347,3 +347,18 @@ fn empty_rule_simpification_issue_27() {
         }))
     );
 }
+
+#[test]
+fn range_any_overlap_issue_31() {
+    lexer! {
+        Lexer -> usize;
+
+        "'" _ "'" = 1,
+        "'" ['a'-'z']+ = 2,
+    }
+
+    let input = "'a'";
+    let mut lexer = Lexer::new(input);
+    assert_eq!(lexer.next(), Some(Ok((loc(0, 0, 0), 1, loc(0, 3, 3)))));
+    assert_eq!(lexer.next(), None);
+}

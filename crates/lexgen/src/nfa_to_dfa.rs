@@ -110,9 +110,16 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<DfaStateIdx, A> {
         }
 
         for range in range_transitions.into_iter() {
-            let state_set: FxHashSet<NfaStateIdx> = range.values.into_iter().collect();
-            let closure: BTreeSet<NfaStateIdx> =
-                nfa.compute_state_closure(&state_set).into_iter().collect();
+            let mut range_states: FxHashSet<NfaStateIdx> = range.values.into_iter().collect();
+
+            for any_next in &any_transitions {
+                range_states.insert(*any_next);
+            }
+
+            let closure: BTreeSet<NfaStateIdx> = nfa
+                .compute_state_closure(&range_states)
+                .into_iter()
+                .collect();
             let dfa_state = dfa_state_of_nfa_states(&mut dfa, &mut state_map, closure.clone());
             dfa.add_range_transition(current_dfa_state, range.start, range.end, dfa_state);
 
