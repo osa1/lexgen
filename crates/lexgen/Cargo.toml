@@ -8,6 +8,7 @@ license = "MIT"
 homepage = "https://github.com/osa1/lexgen"
 categories = ["compilers", "development-tools", "parsing"]
 readme = "../../README.md"
+repository = "https://github.com/osa1/lexgen"
 
 [lib]
 proc_macro = true
