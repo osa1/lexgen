@@ -64,30 +64,6 @@ impl<T, A> State<T, A> {
             && self.any_transition.is_none()
             && self.end_of_input_transition.is_none()
     }
-
-    pub fn map_semantic_action<B, F>(self, f: F) -> State<T, B>
-    where
-        F: FnMut(A) -> B,
-    {
-        let State {
-            initial,
-            char_transitions,
-            range_transitions,
-            any_transition,
-            end_of_input_transition,
-            accepting,
-            predecessors,
-        } = self;
-        State {
-            initial,
-            char_transitions,
-            range_transitions,
-            any_transition,
-            end_of_input_transition,
-            accepting: accepting.map(f),
-            predecessors,
-        }
-    }
 }
 
 impl<A> DFA<StateIdx, A> {

@@ -9,7 +9,6 @@ mod dfa;
 mod display;
 mod nfa;
 mod nfa_to_dfa;
-mod number_semantic_actions;
 mod range_map;
 mod regex_to_nfa;
 mod semantic_action_table;
@@ -17,32 +16,39 @@ mod semantic_action_table;
 #[cfg(test)]
 mod tests;
 
-use ast::{Lexer, Regex, Rule, RuleRhs, SingleRule, Var};
+use ast::{Lexer, Regex, Rule, SingleRule, Var};
 use dfa::{StateIdx as DfaStateIdx, DFA};
 use nfa::NFA;
 use nfa_to_dfa::nfa_to_dfa;
+use semantic_action_table::{SemanticActionIdx, SemanticActionTable};
 
 use std::collections::hash_map::Entry;
 
 use fxhash::FxHashMap;
 use proc_macro::TokenStream;
+use syn::parse::Parser;
 
 #[proc_macro]
 pub fn lexer(input: TokenStream) -> TokenStream {
+    let mut semantic_action_table = SemanticActionTable::new();
+
     let Lexer {
         public,
         type_name,
         user_state_type,
         token_type,
         rules: top_level_rules,
-    } = syn::parse_macro_input!(input as Lexer<RuleRhs>);
+    } = match ast::make_lexer_parser(&mut semantic_action_table).parse(input) {
+        Ok(lexer) => lexer,
+        Err(error) => return TokenStream::from(error.to_compile_error()),
+    };
 
     // Maps DFA names to their initial states in the final DFA
     let mut dfas: FxHashMap<String, dfa::StateIdx> = Default::default();
 
     let mut bindings: FxHashMap<Var, Regex> = Default::default();
 
-    let mut dfa: Option<DFA<DfaStateIdx, RuleRhs>> = None;
+    let mut dfa: Option<DFA<DfaStateIdx, SemanticActionIdx>> = None;
 
     let mut user_error_type: Option<syn::Type> = None;
 
@@ -65,7 +71,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                     if dfa.is_some() {
                         panic!("\"Init\" rule set can only be defined once");
                     }
-                    let mut nfa: NFA<RuleRhs> = NFA::new();
+                    let mut nfa: NFA<SemanticActionIdx> = NFA::new();
                     for SingleRule { lhs, rhs } in rules {
                         nfa.add_regex(&bindings, &lhs, rhs);
                     }
@@ -86,7 +92,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                         None => panic!("First rule set should be named \"Init\""),
                         Some(dfa) => dfa,
                     };
-                    let mut nfa: NFA<RuleRhs> = NFA::new();
+                    let mut nfa: NFA<SemanticActionIdx> = NFA::new();
 
                     for SingleRule { lhs, rhs } in rules {
                         nfa.add_regex(&bindings, &lhs, rhs);
@@ -113,7 +119,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                     );
                 }
 
-                let mut nfa: NFA<RuleRhs> = NFA::new();
+                let mut nfa: NFA<SemanticActionIdx> = NFA::new();
                 for SingleRule { lhs, rhs } in rules {
                     nfa.add_regex(&bindings, &lhs, rhs);
                 }
@@ -148,10 +154,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
         );
     }
 
-    let (dfa, semantic_action_table) =
-        number_semantic_actions::number_semantic_actions(dfa.unwrap());
-
-    let dfa = dfa::simplify::simplify(dfa, &mut dfas);
+    let dfa = dfa::simplify::simplify(dfa.unwrap(), &mut dfas);
 
     dfa::codegen::reify(
         dfa,
