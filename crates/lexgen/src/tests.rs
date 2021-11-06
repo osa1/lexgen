@@ -1,9 +1,8 @@
 use crate::ast::{CharOrRange, CharSet, Regex, Var};
+use crate::collections::Map;
 use crate::nfa::simulate::{ErrorLoc, Matches};
 use crate::nfa::NFA;
 use crate::nfa_to_dfa::nfa_to_dfa;
-
-use fxhash::FxHashMap;
 
 fn test_simulate<'input, A: Copy + std::fmt::Debug + Eq>(
     nfa: &NFA<A>,
@@ -313,7 +312,7 @@ fn multiple_accepting_states_2() {
 
 #[test]
 fn simulate_variables() {
-    let mut bindings: FxHashMap<Var, Regex> = Default::default();
+    let mut bindings: Map<Var, Regex> = Default::default();
     bindings.insert(
         Var("initial".to_owned()),
         Regex::CharSet(CharSet(vec![CharOrRange::Range('a', 'z')])),

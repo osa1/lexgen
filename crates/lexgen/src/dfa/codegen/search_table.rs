@@ -1,9 +1,9 @@
+use crate::collections::Map;
+
 use std::collections::hash_map::Entry;
 
-use fxhash::FxHashMap;
-
 pub struct SearchTableSet {
-    tables: FxHashMap<Vec<(char, char)>, syn::Ident>,
+    tables: Map<Vec<(char, char)>, syn::Ident>,
 }
 
 impl SearchTableSet {

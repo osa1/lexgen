@@ -2,10 +2,9 @@
 pub mod simulate;
 
 use crate::ast::{Regex, Var};
+use crate::collections::{Map, Set};
 use crate::display::HashSetDisplay;
 use crate::regex_to_nfa;
-
-use fxhash::{FxHashMap, FxHashSet};
 
 /// Non-deterministic finite automate, parameterized on values of accepting states.
 #[derive(Debug)]
@@ -19,11 +18,11 @@ pub struct StateIdx(usize);
 
 #[derive(Debug)]
 struct State<A> {
-    char_transitions: FxHashMap<char, FxHashSet<StateIdx>>,
-    range_transitions: FxHashMap<(char, char), FxHashSet<StateIdx>>,
-    empty_transitions: FxHashSet<StateIdx>,
-    any_transitions: FxHashSet<StateIdx>,
-    end_of_input_transitions: FxHashSet<StateIdx>,
+    char_transitions: Map<char, Set<StateIdx>>,
+    range_transitions: Map<(char, char), Set<StateIdx>>,
+    empty_transitions: Set<StateIdx>,
+    any_transitions: Set<StateIdx>,
+    end_of_input_transitions: Set<StateIdx>,
     accepting: Option<A>,
 }
 
@@ -58,14 +57,14 @@ impl<A> NFA<A> {
     pub fn char_transitions(
         &self,
         state: StateIdx,
-    ) -> impl Iterator<Item = (&char, &FxHashSet<StateIdx>)> {
+    ) -> impl Iterator<Item = (&char, &Set<StateIdx>)> {
         self.states[state.0].char_transitions.iter()
     }
 
     pub fn range_transitions(
         &self,
         state: StateIdx,
-    ) -> impl Iterator<Item = (&(char, char), &FxHashSet<StateIdx>)> {
+    ) -> impl Iterator<Item = (&(char, char), &Set<StateIdx>)> {
         self.states[state.0].range_transitions.iter()
     }
 
@@ -86,7 +85,7 @@ impl<A> NFA<A> {
         new_state_idx
     }
 
-    pub fn add_regex(&mut self, bindings: &FxHashMap<Var, Regex>, re: &Regex, value: A) {
+    pub fn add_regex(&mut self, bindings: &Map<Var, Regex>, re: &Regex, value: A) {
         let re_accepting_state = self.new_state();
         self.make_state_accepting(re_accepting_state, value);
 
@@ -147,9 +146,9 @@ impl<A> NFA<A> {
         self.states[state.0].accepting = Some(value);
     }
 
-    pub fn compute_state_closure(&self, states: &FxHashSet<StateIdx>) -> FxHashSet<StateIdx> {
+    pub fn compute_state_closure(&self, states: &Set<StateIdx>) -> Set<StateIdx> {
         let mut worklist: Vec<StateIdx> = states.iter().copied().collect();
-        let mut closure: FxHashSet<StateIdx> = states.clone();
+        let mut closure: Set<StateIdx> = states.clone();
 
         while let Some(work) = worklist.pop() {
             for next_state in self.next_empty_states(work) {
@@ -162,7 +161,7 @@ impl<A> NFA<A> {
         closure
     }
 
-    fn next_empty_states(&self, state: StateIdx) -> &FxHashSet<StateIdx> {
+    fn next_empty_states(&self, state: StateIdx) -> &Set<StateIdx> {
         let state = &self.states[state.0];
         &state.empty_transitions
     }

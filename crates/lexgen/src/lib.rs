@@ -5,6 +5,7 @@
 mod ast;
 mod builtin;
 mod char_ranges;
+mod collections;
 mod dfa;
 mod display;
 mod nfa;
@@ -17,6 +18,7 @@ mod semantic_action_table;
 mod tests;
 
 use ast::{Lexer, Regex, Rule, SingleRule, Var};
+use collections::Map;
 use dfa::{StateIdx as DfaStateIdx, DFA};
 use nfa::NFA;
 use nfa_to_dfa::nfa_to_dfa;
@@ -24,7 +26,6 @@ use semantic_action_table::{SemanticActionIdx, SemanticActionTable};
 
 use std::collections::hash_map::Entry;
 
-use fxhash::FxHashMap;
 use proc_macro::TokenStream;
 use syn::parse::Parser;
 
@@ -44,9 +45,9 @@ pub fn lexer(input: TokenStream) -> TokenStream {
     };
 
     // Maps DFA names to their initial states in the final DFA
-    let mut dfas: FxHashMap<String, dfa::StateIdx> = Default::default();
+    let mut dfas: Map<String, dfa::StateIdx> = Default::default();
 
-    let mut bindings: FxHashMap<Var, Regex> = Default::default();
+    let mut bindings: Map<Var, Regex> = Default::default();
 
     let mut dfa: Option<DFA<DfaStateIdx, SemanticActionIdx>> = None;
 

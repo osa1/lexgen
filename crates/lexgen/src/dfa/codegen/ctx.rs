@@ -2,10 +2,9 @@ use super::search_table::SearchTableSet;
 use super::StateIdx;
 use super::DFA;
 use crate::ast::RuleRhs;
+use crate::collections::Map;
 use crate::dfa::simplify::Trans;
 use crate::semantic_action_table::{SemanticActionIdx, SemanticActionTable};
-
-use fxhash::FxHashMap;
 
 /// Code generation state
 pub struct CgCtx {
@@ -23,7 +22,7 @@ pub struct CgCtx {
 
     /// Maps user-written rule names (e.g. `rule MyRule { ... }`) to their initial states in the
     /// final DFA.
-    rule_states: FxHashMap<String, StateIdx>,
+    rule_states: Map<String, StateIdx>,
 
     /// Sorted vector of states with only one predecessor. These states will be inlined in the
     /// predecessor states and won't appear in the final code. Inlining these states significantly
@@ -50,7 +49,7 @@ impl CgCtx {
         lexer_name: syn::Ident,
         token_type: syn::Type,
         user_error_type: Option<syn::Type>,
-        rule_states: FxHashMap<String, StateIdx>,
+        rule_states: Map<String, StateIdx>,
     ) -> CgCtx {
         let inlined_states: Vec<StateIdx> = dfa
             .states
@@ -109,7 +108,7 @@ impl CgCtx {
         std::mem::replace(&mut self.codegen_state.search_tables, SearchTableSet::new())
     }
 
-    pub fn rule_states(&self) -> &FxHashMap<String, StateIdx> {
+    pub fn rule_states(&self) -> &Map<String, StateIdx> {
         &self.rule_states
     }
 

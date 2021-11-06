@@ -4,12 +4,11 @@ pub mod simplify;
 #[cfg(test)]
 pub mod simulate;
 
+use crate::collections::{Map, Set};
 use crate::range_map::{Range, RangeMap};
 
 use std::convert::TryFrom;
 use std::iter::{FromIterator, IntoIterator};
-
-use fxhash::{FxHashMap, FxHashSet};
 
 /// Deterministic finite automate, parameterized on values of accepting states.
 #[derive(Debug)]
@@ -35,14 +34,14 @@ pub struct State<T, A> {
     // Is this the initial state of a rule set? This is important as failure transitions in initial
     // states consume the current character, but failure transitions in other states don't.
     initial: bool,
-    char_transitions: FxHashMap<char, T>,
+    char_transitions: Map<char, T>,
     range_transitions: RangeMap<T>,
     any_transition: Option<T>,
     end_of_input_transition: Option<T>,
     accepting: Option<A>,
     // Predecessors of the state, used to inline code for a state with one predecessor in the
     // predecessor's code
-    predecessors: FxHashSet<StateIdx>,
+    predecessors: Set<StateIdx>,
 }
 
 impl<T, A> State<T, A> {
@@ -183,7 +182,7 @@ impl<A> DFA<StateIdx, A> {
             predecessors,
         } in other.states
         {
-            let mut new_char_transitions: FxHashMap<char, StateIdx> = Default::default();
+            let mut new_char_transitions: Map<char, StateIdx> = Default::default();
             let mut new_range_transitions: RangeMap<StateIdx> = Default::default();
             let mut new_any_transition: Option<StateIdx> = None;
             let mut new_end_of_input_transition: Option<StateIdx> = None;

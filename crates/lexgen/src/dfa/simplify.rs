@@ -1,7 +1,6 @@
 use super::{State, StateIdx, DFA};
+use crate::collections::Map;
 use crate::semantic_action_table::SemanticActionIdx;
-
-use fxhash::FxHashMap;
 
 #[derive(Debug)]
 pub enum Trans {
@@ -12,7 +11,7 @@ pub enum Trans {
 /// Removes accepting states with no transitions, makes the transitions to those states accepting.
 pub fn simplify<K>(
     dfa: DFA<StateIdx, SemanticActionIdx>,
-    dfa_state_indices: &mut FxHashMap<K, StateIdx>,
+    dfa_state_indices: &mut Map<K, StateIdx>,
 ) -> DFA<Trans, SemanticActionIdx> {
     let mut empty_states: Vec<(StateIdx, Option<SemanticActionIdx>)> = vec![];
     let mut non_empty_states: Vec<(StateIdx, State<StateIdx, SemanticActionIdx>)> = vec![];

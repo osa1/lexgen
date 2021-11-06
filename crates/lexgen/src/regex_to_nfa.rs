@@ -1,14 +1,13 @@
 use crate::ast::{CharOrRange, Regex, Var};
 use crate::builtin::BUILTIN_RANGES;
+use crate::collections::Map;
 use crate::nfa::{StateIdx, NFA};
 
 use std::convert::TryFrom;
 
-use fxhash::FxHashMap;
-
 pub fn add_re<A>(
     nfa: &mut NFA<A>,
-    bindings: &FxHashMap<Var, Regex>,
+    bindings: &Map<Var, Regex>,
     re: &Regex,
     current: StateIdx,
     cont: StateIdx,

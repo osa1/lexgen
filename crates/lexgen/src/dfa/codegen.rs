@@ -7,12 +7,12 @@ use super::simplify::Trans;
 use super::{State, StateIdx, DFA};
 
 use crate::ast::{RuleKind, RuleRhs};
+use crate::collections::Map;
 use crate::range_map::RangeMap;
 use crate::semantic_action_table::{SemanticActionIdx, SemanticActionTable};
 
 use std::convert::TryFrom;
 
-use fxhash::FxHashMap;
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
 
@@ -34,7 +34,7 @@ pub fn reify(
     semantic_actions: SemanticActionTable,
     user_state_type: Option<syn::Type>,
     user_error_type: Option<syn::Type>,
-    rule_states: FxHashMap<String, StateIdx>,
+    rule_states: Map<String, StateIdx>,
     lexer_name: syn::Ident,
     token_type: syn::Type,
     public: bool,
@@ -398,7 +398,7 @@ fn generate_any_transition(
 fn generate_state_char_arms(
     ctx: &mut CgCtx,
     states: &[State<Trans, SemanticActionIdx>],
-    char_transitions: &FxHashMap<char, Trans>,
+    char_transitions: &Map<char, Trans>,
     range_transitions: &RangeMap<Trans>,
     // RHS of the default alternative for this `match` (_ => <default_rhs>)
     default_rhs: &TokenStream,
@@ -408,7 +408,7 @@ fn generate_state_char_arms(
 
     // Add char transitions. Collect characters for next states, to be able to use or
     // patterns in arms and reduce code size
-    let mut state_chars: FxHashMap<StateIdx, Vec<char>> = Default::default();
+    let mut state_chars: Map<StateIdx, Vec<char>> = Default::default();
     for (char, next) in char_transitions {
         match next {
             Trans::Accept(action) => {
@@ -443,7 +443,7 @@ fn generate_state_char_arms(
     }
 
     // Add range transitions. Same as above, use chain of "or"s for ranges with same transition.
-    let mut state_ranges: FxHashMap<StateIdx, Vec<(char, char)>> = Default::default();
+    let mut state_ranges: Map<StateIdx, Vec<(char, char)>> = Default::default();
     for range in range_transitions.iter() {
         assert_eq!(range.values.len(), 1);
         match &range.values[0] {

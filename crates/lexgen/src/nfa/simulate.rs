@@ -1,6 +1,5 @@
 use super::{StateIdx, NFA};
-
-use fxhash::FxHashSet as Set;
+use crate::collections::Set;
 
 pub type Matches<'input, A> = Vec<(&'input str, A)>;
 

@@ -1,3 +1,4 @@
+use crate::collections::{Map, Set};
 use crate::dfa::DFA;
 use crate::nfa::NFA;
 use crate::range_map::RangeMap;
@@ -8,13 +9,11 @@ use crate::nfa::StateIdx as NfaStateIdx;
 use std::collections::hash_map::Entry;
 use std::collections::BTreeSet;
 
-use fxhash::{FxHashMap, FxHashSet};
-
 pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<DfaStateIdx, A> {
     let initial_state = nfa.initial_state();
 
     let initial_states: BTreeSet<NfaStateIdx> = {
-        let mut initial_states: FxHashSet<NfaStateIdx> = Default::default();
+        let mut initial_states: Set<NfaStateIdx> = Default::default();
         initial_states.insert(initial_state);
 
         nfa.compute_state_closure(&initial_states)
@@ -25,11 +24,11 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<DfaStateIdx, A> {
     let (mut dfa, dfa_initial_state): (DFA<DfaStateIdx, A>, DfaStateIdx) = DFA::new();
 
     // Maps sets NFA states to their states in the DFA
-    let mut state_map: FxHashMap<BTreeSet<NfaStateIdx>, DfaStateIdx> = Default::default();
+    let mut state_map: Map<BTreeSet<NfaStateIdx>, DfaStateIdx> = Default::default();
     state_map.insert(initial_states.clone(), dfa_initial_state);
 
     let mut work_list: Vec<BTreeSet<NfaStateIdx>> = vec![initial_states];
-    let mut finished_dfa_states: FxHashSet<DfaStateIdx> = Default::default();
+    let mut finished_dfa_states: Set<DfaStateIdx> = Default::default();
 
     while let Some(current_nfa_states) = work_list.pop() {
         let current_dfa_state = match state_map.get(&current_nfa_states) {
@@ -47,10 +46,10 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<DfaStateIdx, A> {
 
         finished_dfa_states.insert(current_dfa_state);
 
-        let mut char_transitions: FxHashMap<char, FxHashSet<NfaStateIdx>> = Default::default();
+        let mut char_transitions: Map<char, Set<NfaStateIdx>> = Default::default();
         let mut range_transitions: RangeMap<NfaStateIdx> = Default::default();
-        let mut any_transitions: FxHashSet<NfaStateIdx> = Default::default();
-        let mut end_of_input_transitions: FxHashSet<NfaStateIdx> = Default::default();
+        let mut any_transitions: Set<NfaStateIdx> = Default::default();
+        let mut end_of_input_transitions: Set<NfaStateIdx> = Default::default();
 
         for nfa_state in current_nfa_states.iter().copied() {
             if let Some(value) = nfa.get_accepting_state(nfa_state) {
@@ -110,7 +109,7 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<DfaStateIdx, A> {
         }
 
         for range in range_transitions.into_iter() {
-            let mut range_states: FxHashSet<NfaStateIdx> = range.values.into_iter().collect();
+            let mut range_states: Set<NfaStateIdx> = range.values.into_iter().collect();
 
             for any_next in &any_transitions {
                 range_states.insert(*any_next);
@@ -158,7 +157,7 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<DfaStateIdx, A> {
 
 fn dfa_state_of_nfa_states<A>(
     dfa: &mut DFA<DfaStateIdx, A>,
-    state_map: &mut FxHashMap<BTreeSet<NfaStateIdx>, DfaStateIdx>,
+    state_map: &mut Map<BTreeSet<NfaStateIdx>, DfaStateIdx>,
     states: BTreeSet<NfaStateIdx>,
 ) -> DfaStateIdx {
     match state_map.entry(states) {
