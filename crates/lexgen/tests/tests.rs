@@ -20,7 +20,7 @@ fn readme_1() {
         // Rule sets have names. Each rule set is compiled to a separate DFA.
         // Switching between rule sets is done explicitly in user actions.
         rule Init {
-            // Rules without a right-hand sides for skipping whitespace,
+            // Rules without a right-hand side for skipping whitespace,
             // comments, etc.
             [' ' '\t' '\n']+,
 
