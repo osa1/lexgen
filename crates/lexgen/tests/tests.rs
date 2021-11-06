@@ -569,7 +569,7 @@ fn rule_kind_mix() {
 }
 
 #[test]
-fn overlapping_ranges() {
+fn overlapping_ranges_1() {
     lexer! {
         Lexer -> usize;
 
@@ -596,6 +596,27 @@ fn overlapping_ranges() {
 }
 
 #[test]
+fn overlapping_ranges_2() {
+    lexer! {
+        Lexer -> usize;
+
+        ' ',
+        'a' = 1,
+        ['a'-'b'] = 2,
+        ['a'-'c'] = 3,
+        ['b'-'c'] = 4,
+        'b' = 5,
+        'c' = 6,
+    }
+
+    let mut lexer = Lexer::new("a b c");
+    assert_eq!(next(&mut lexer), Some(Ok(1)));
+    assert_eq!(next(&mut lexer), Some(Ok(2)));
+    assert_eq!(next(&mut lexer), Some(Ok(3)));
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
 fn builtin_alphabetic() {
     lexer! {
         Lexer -> ();
@@ -605,7 +626,6 @@ fn builtin_alphabetic() {
     }
 
     // Test characters copied from Rust std documentation
-
     let mut lexer = Lexer::new("a 京 💝");
     assert_eq!(lexer.next(), Some(Ok((loc(0, 0, 0), (), loc(0, 1, 1)))));
     assert_eq!(lexer.next(), Some(Ok((loc(0, 2, 2), (), loc(0, 4, 5)))));

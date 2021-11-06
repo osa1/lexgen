@@ -71,6 +71,10 @@ pub struct Range<A> {
 }
 
 impl<A> Range<A> {
+    pub fn contains(&self, char: char) -> bool {
+        char as u32 >= self.start && char as u32 <= self.end
+    }
+
     fn with_values(start: u32, end: u32, values: Vec<A>) -> Range<A> {
         Range { start, end, values }
     }

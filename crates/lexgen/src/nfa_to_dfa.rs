@@ -67,7 +67,7 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<DfaStateIdx, A> {
 
             // Collect range transitions
             for ((range_begin, range_end), next_states) in nfa.range_transitions(nfa_state) {
-                let next_states = next_states.iter().copied().collect::<Vec<NfaStateIdx>>();
+                let next_states: Vec<NfaStateIdx> = next_states.iter().copied().collect();
                 range_transitions.insert_values(
                     *range_begin as u32,
                     *range_end as u32,
@@ -87,7 +87,7 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<DfaStateIdx, A> {
             // For ranges that also cover the char we need to add the range transitions to the char
             // transition
             for range in range_transitions.iter() {
-                if char as u32 >= range.start && char as u32 <= range.end {
+                if range.contains(char) {
                     for range_state in &range.values {
                         char_states.insert(*range_state);
                     }
