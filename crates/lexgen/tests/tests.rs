@@ -617,6 +617,41 @@ fn overlapping_ranges_2() {
 }
 
 #[test]
+fn overlapping_ranges_3() {
+    lexer! {
+        Lexer1 -> usize;
+
+        ' ',
+        ['a'-'b'] = 1,
+        (['a'-'b'] | ['a'-'b']) = 2,
+    }
+
+    let mut lexer = Lexer1::new("a b");
+    assert_eq!(next(&mut lexer), Some(Ok(1)));
+    assert_eq!(next(&mut lexer), Some(Ok(1)));
+    assert_eq!(lexer.next(), None);
+
+    // Compile test (compilation shouldn't panic). Tests the same case as above. Extracted from
+    // Rust lexer.
+    lexer! {
+        Lexer2 -> &'input str;
+
+        let oct_digit = ['0'-'7'];
+        let dec_digit = ['0'-'9'];
+        let hex_digit = ['0'-'9' 'a'-'f' 'A'-'F'];
+        let bin_digit = '0' | '1';
+        let digit = $oct_digit | $dec_digit | $hex_digit | $bin_digit;
+
+        let id = $$XID_Start $$XID_Continue*;
+
+        ("0b" | "0o" | "0x")? ($digit | '_')* $id? => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_(match_)
+        },
+    }
+}
+
+#[test]
 fn builtin_alphabetic() {
     lexer! {
         Lexer -> ();
