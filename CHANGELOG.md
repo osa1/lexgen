@@ -1,3 +1,8 @@
+# 2021/10/30: 0.8.1
+
+New version published to fix broken README pages for lexgen and lexgen_tuil in
+crates.io.
+
 # 2021/10/30: 0.8.0
 
 - **Breaking change:** Starting with this release, lexgen-generated lexers now
