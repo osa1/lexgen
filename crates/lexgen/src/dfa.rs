@@ -267,7 +267,11 @@ impl<A> Display for DFA<StateIdx, A> {
             let mut first = true;
 
             for (char, next) in char_transitions.iter() {
-                first = false;
+                if !first {
+                    write!(f, "      ")?;
+                } else {
+                    first = false;
+                }
 
                 writeln!(f, "{:?} -> {}", char, next)?;
             }
