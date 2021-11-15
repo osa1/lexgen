@@ -4,6 +4,7 @@ pub mod simulate;
 use crate::ast::{Regex, Var};
 use crate::collections::{Map, Set};
 use crate::display::HashSetDisplay;
+use crate::range_map::{Range, RangeMap};
 use crate::regex_to_nfa;
 
 /// Non-deterministic finite automate, parameterized on values of accepting states.
@@ -19,7 +20,7 @@ pub struct StateIdx(usize);
 #[derive(Debug)]
 struct State<A> {
     char_transitions: Map<char, Set<StateIdx>>,
-    range_transitions: Map<(char, char), Set<StateIdx>>,
+    range_transitions: RangeMap<Set<StateIdx>>,
     empty_transitions: Set<StateIdx>,
     any_transitions: Set<StateIdx>,
     end_of_input_transitions: Set<StateIdx>,
@@ -64,7 +65,7 @@ impl<A> NFA<A> {
     pub fn range_transitions(
         &self,
         state: StateIdx,
-    ) -> impl Iterator<Item = (&(char, char), &Set<StateIdx>)> {
+    ) -> impl Iterator<Item = &Range<Set<StateIdx>>> {
         self.states[state.0].range_transitions.iter()
     }
 
@@ -114,13 +115,14 @@ impl<A> NFA<A> {
         range_end: char,
         next: StateIdx,
     ) {
-        let not_exists = self.states[state.0]
-            .range_transitions
-            .entry((range_begin, range_end))
-            .or_default()
-            .insert(next);
-
-        assert!(not_exists, "add_range_transition");
+        let mut set: Set<StateIdx> = Default::default();
+        set.insert(next);
+        self.states[state.0].range_transitions.insert(
+            range_begin as u32,
+            range_end as u32,
+            set,
+            |values_1, values_2| values_1.extend(values_2.into_iter()),
+        );
     }
 
     pub fn add_empty_transition(&mut self, state: StateIdx, next: StateIdx) {
@@ -215,7 +217,7 @@ impl<A> Display for NFA<A> {
                 writeln!(f, "{:?} -> {}", char, HashSetDisplay(next))?;
             }
 
-            for ((range_begin, range_end), next) in range_transitions.iter() {
+            for range in range_transitions.iter() {
                 if !first {
                     write!(f, "     ")?;
                 } else {
@@ -225,9 +227,9 @@ impl<A> Display for NFA<A> {
                 writeln!(
                     f,
                     "{:?} - {:?} -> {}",
-                    range_begin,
-                    range_end,
-                    HashSetDisplay(next)
+                    range.start,
+                    range.end,
+                    HashSetDisplay(&range.value)
                 )?;
             }
 

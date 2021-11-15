@@ -116,9 +116,14 @@ impl<A> DFA<StateIdx, A> {
         range_end: u32,
         next: StateIdx,
     ) {
-        self.states[state.0]
-            .range_transitions
-            .insert(range_begin, range_end, next);
+        self.states[state.0].range_transitions.insert(
+            range_begin,
+            range_end,
+            next,
+            |_states_1, _states_2| {
+                panic!("Overlapping range transition in DFA::add_range_transition")
+            },
+        );
 
         self.states[next.0].predecessors.insert(state);
     }
@@ -192,12 +197,11 @@ impl<A> DFA<StateIdx, A> {
             }
 
             for range in range_transitions.iter() {
-                let values = &range.values;
-                assert_eq!(values.len(), 1);
                 new_range_transitions.insert(
                     range.start,
                     range.end,
-                    StateIdx(values[0].0 + n_current_states),
+                    StateIdx(range.value.0 + n_current_states),
+                    |_states_1, _states_2| panic!("Overlapping range transition in DFA::add_dfa"),
                 );
             }
 
@@ -276,20 +280,19 @@ impl<A> Display for DFA<StateIdx, A> {
                 writeln!(f, "{:?} -> {}", char, next)?;
             }
 
-            for Range { start, end, values } in range_transitions.iter() {
+            for Range { start, end, value } in range_transitions.iter() {
                 if !first {
                     write!(f, "      ")?;
                 } else {
                     first = false;
                 }
 
-                assert_eq!(values.len(), 1);
                 writeln!(
                     f,
                     "{:?} - {:?} -> {}",
                     char::try_from(*start).unwrap(),
                     char::try_from(*end).unwrap(),
-                    values[0]
+                    value,
                 )?;
             }
 

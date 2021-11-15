@@ -10,6 +10,14 @@ pub struct RangeMap<A> {
     ranges: Vec<Range<A>>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Range<A> {
+    pub start: u32,
+    // Inclusive
+    pub end: u32,
+    pub value: A,
+}
+
 impl<A> Default for RangeMap<A> {
     fn default() -> Self {
         RangeMap::new()
@@ -41,22 +49,12 @@ impl<A> RangeMap<A> {
             ranges: self
                 .ranges
                 .into_iter()
-                .map(|Range { start, end, values }| Range {
-                    start,
-                    end,
-                    values: values.into_iter().filter_map(&mut f).collect(),
+                .filter_map(|Range { start, end, value }| {
+                    f(value).map(|value| Range { start, end, value })
                 })
                 .collect(),
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Range<A> {
-    pub start: u32,
-    // Inclusive
-    pub end: u32,
-    pub values: Vec<A>,
 }
 
 impl<A> Range<A> {
@@ -67,7 +65,10 @@ impl<A> Range<A> {
 
 impl<A: Clone> RangeMap<A> {
     /// O(n) where n is the number of existing ranges in the map
-    pub fn insert_values(&mut self, mut new_range_start: u32, new_range_end: u32, values: &[A]) {
+    pub fn insert<F>(&mut self, mut new_range_start: u32, new_range_end: u32, value: A, merge: F)
+    where
+        F: Fn(&mut A, A),
+    {
         let old_ranges = std::mem::replace(&mut self.ranges, vec![]);
         let mut new_ranges = Vec::with_capacity(old_ranges.len() + 2);
 
@@ -80,7 +81,7 @@ impl<A: Clone> RangeMap<A> {
                 new_ranges.push(Range {
                     start: new_range_start,
                     end: new_range_end,
-                    values: values.to_owned(),
+                    value,
                 });
                 new_ranges.push(range);
                 new_ranges.extend(range_iter);
@@ -105,7 +106,7 @@ impl<A: Clone> RangeMap<A> {
                     new_ranges.push(Range {
                         start: new_range_start,
                         end: *overlap.start() - 1,
-                        values: values.to_owned(),
+                        value: value.clone(),
                     });
                 }
                 // (2)
@@ -113,17 +114,17 @@ impl<A: Clone> RangeMap<A> {
                     new_ranges.push(Range {
                         start: range.start,
                         end: overlap.start() - 1,
-                        values: range.values.clone(),
+                        value: range.value.clone(),
                     });
                 }
 
                 // (3)
-                let mut overlap_values = range.values.clone();
-                overlap_values.extend(values.iter().cloned());
+                let mut overlap_values = range.value.clone();
+                merge(&mut overlap_values, value.clone());
                 new_ranges.push(Range {
                     start: *overlap.start(),
                     end: *overlap.end(),
-                    values: overlap_values,
+                    value: overlap_values,
                 });
 
                 // (4)
@@ -131,7 +132,7 @@ impl<A: Clone> RangeMap<A> {
                     new_ranges.push(Range {
                         start: *overlap.end() + 1,
                         end: range.end,
-                        values: range.values,
+                        value: range.value,
                     });
                 }
                 // (5)
@@ -155,42 +156,44 @@ impl<A: Clone> RangeMap<A> {
             new_ranges.push(Range {
                 start: new_range_start,
                 end: new_range_end,
-                values: values.to_owned(),
+                value,
             });
         }
 
         self.ranges = new_ranges;
     }
-
-    /// O(n) where n is the number of existing ranges in the map
-    pub fn insert(&mut self, new_range_start: u32, new_range_end: u32, value: A) {
-        self.insert_values(new_range_start, new_range_end, std::slice::from_ref(&value))
-    }
 }
 
 #[cfg(test)]
-fn to_tuple<A: Clone>(range: &Range<A>) -> (u32, u32, Vec<A>) {
-    (range.start, range.end, range.values.clone())
+fn to_tuple<A: Clone>(range: &Range<Vec<A>>) -> (u32, u32, Vec<A>) {
+    (range.start, range.end, range.value.clone())
 }
 
 #[cfg(test)]
-fn to_vec<A: Clone>(map: &RangeMap<A>) -> Vec<(u32, u32, Vec<A>)> {
+fn to_vec<A: Clone>(map: &RangeMap<Vec<A>>) -> Vec<(u32, u32, Vec<A>)> {
     map.iter().map(to_tuple).collect()
+}
+
+#[cfg(test)]
+fn insert<A: Clone>(map: &mut RangeMap<Vec<A>>, range_start: u32, range_end: u32, value: A) {
+    map.insert(range_start, range_end, vec![value], |values_1, values_2| {
+        values_1.extend(values_2.into_iter())
+    });
 }
 
 #[test]
 fn overlap_left() {
-    let mut ranges: RangeMap<u32> = RangeMap::new();
+    let mut ranges: RangeMap<Vec<u32>> = RangeMap::new();
 
-    ranges.insert(10, 20, 0);
-    ranges.insert(5, 15, 1);
+    insert(&mut ranges, 10, 20, 0);
+    insert(&mut ranges, 5, 15, 1);
 
     assert_eq!(
         to_vec(&ranges),
         vec![(5, 9, vec![1]), (10, 15, vec![0, 1]), (16, 20, vec![0])]
     );
 
-    ranges.insert(5, 5, 2);
+    insert(&mut ranges, 5, 5, 2);
 
     assert_eq!(
         to_vec(&ranges),
@@ -202,10 +205,10 @@ fn overlap_left() {
         ]
     );
 
-    let mut ranges: RangeMap<u32> = RangeMap::new();
+    let mut ranges: RangeMap<Vec<u32>> = RangeMap::new();
 
-    ranges.insert(10, 20, 0);
-    ranges.insert(10, 15, 1);
+    insert(&mut ranges, 10, 20, 0);
+    insert(&mut ranges, 10, 15, 1);
 
     assert_eq!(
         to_vec(&ranges),
@@ -215,20 +218,20 @@ fn overlap_left() {
 
 #[test]
 fn overlap_right() {
-    let mut ranges: RangeMap<u32> = RangeMap::new();
+    let mut ranges: RangeMap<Vec<u32>> = RangeMap::new();
 
-    ranges.insert(5, 15, 1);
+    insert(&mut ranges, 5, 15, 1);
 
     assert_eq!(to_vec(&ranges), vec![(5, 15, vec![1])]);
 
-    ranges.insert(10, 20, 0);
+    insert(&mut ranges, 10, 20, 0);
 
     assert_eq!(
         to_vec(&ranges),
         vec![(5, 9, vec![1]), (10, 15, vec![1, 0]), (16, 20, vec![0])]
     );
 
-    ranges.insert(20, 20, 2);
+    insert(&mut ranges, 20, 20, 2);
 
     assert_eq!(
         to_vec(&ranges),
@@ -240,10 +243,10 @@ fn overlap_right() {
         ]
     );
 
-    let mut ranges: RangeMap<u32> = RangeMap::new();
+    let mut ranges: RangeMap<Vec<u32>> = RangeMap::new();
 
-    ranges.insert(10, 15, 1);
-    ranges.insert(10, 20, 0);
+    insert(&mut ranges, 10, 15, 1);
+    insert(&mut ranges, 10, 20, 0);
 
     assert_eq!(
         to_vec(&ranges),
@@ -253,30 +256,30 @@ fn overlap_right() {
 
 #[test]
 fn add_non_overlapping() {
-    let mut ranges: RangeMap<u32> = RangeMap::new();
+    let mut ranges: RangeMap<Vec<u32>> = RangeMap::new();
 
-    ranges.insert(0, 10, 1);
-    ranges.insert(20, 30, 0);
+    insert(&mut ranges, 0, 10, 1);
+    insert(&mut ranges, 20, 30, 0);
 
     assert_eq!(to_vec(&ranges), vec![(0, 10, vec![1]), (20, 30, vec![0]),]);
 }
 
 #[test]
 fn add_non_overlapping_reverse() {
-    let mut ranges: RangeMap<u32> = RangeMap::new();
+    let mut ranges: RangeMap<Vec<u32>> = RangeMap::new();
 
-    ranges.insert(20, 30, 0);
-    ranges.insert(0, 10, 1);
+    insert(&mut ranges, 20, 30, 0);
+    insert(&mut ranges, 0, 10, 1);
 
     assert_eq!(to_vec(&ranges), vec![(0, 10, vec![1]), (20, 30, vec![0]),]);
 }
 
 #[test]
 fn add_overlapping_1() {
-    let mut ranges: RangeMap<u32> = RangeMap::new();
+    let mut ranges: RangeMap<Vec<u32>> = RangeMap::new();
 
-    ranges.insert(0, 10, 0);
-    ranges.insert(10, 20, 1);
+    insert(&mut ranges, 0, 10, 0);
+    insert(&mut ranges, 10, 20, 1);
 
     assert_eq!(
         to_vec(&ranges),
@@ -286,10 +289,10 @@ fn add_overlapping_1() {
 
 #[test]
 fn add_overlapping_1_reverse() {
-    let mut ranges: RangeMap<u32> = RangeMap::new();
+    let mut ranges: RangeMap<Vec<u32>> = RangeMap::new();
 
-    ranges.insert(10, 20, 1);
-    ranges.insert(0, 10, 0);
+    insert(&mut ranges, 10, 20, 1);
+    insert(&mut ranges, 0, 10, 0);
 
     assert_eq!(
         to_vec(&ranges),
@@ -299,20 +302,20 @@ fn add_overlapping_1_reverse() {
 
 #[test]
 fn add_overlapping_2() {
-    let mut ranges: RangeMap<u32> = RangeMap::new();
+    let mut ranges: RangeMap<Vec<u32>> = RangeMap::new();
 
-    ranges.insert(50, 100, 0);
+    insert(&mut ranges, 50, 100, 0);
 
     assert_eq!(to_vec(&ranges), vec![(50, 100, vec![0])]);
 
-    ranges.insert(40, 60, 1);
+    insert(&mut ranges, 40, 60, 1);
 
     assert_eq!(
         to_vec(&ranges),
         vec![(40, 49, vec![1]), (50, 60, vec![0, 1]), (61, 100, vec![0]),]
     );
 
-    ranges.insert(90, 110, 2);
+    insert(&mut ranges, 90, 110, 2);
 
     assert_eq!(
         to_vec(&ranges),
@@ -325,7 +328,7 @@ fn add_overlapping_2() {
         ]
     );
 
-    ranges.insert(70, 80, 3);
+    insert(&mut ranges, 70, 80, 3);
 
     assert_eq!(
         to_vec(&ranges),
@@ -343,11 +346,11 @@ fn add_overlapping_2() {
 
 #[test]
 fn large_range_multiple_overlaps() {
-    let mut ranges: RangeMap<u32> = RangeMap::new();
+    let mut ranges: RangeMap<Vec<u32>> = RangeMap::new();
 
-    ranges.insert(10, 20, 0);
-    ranges.insert(21, 30, 1);
-    ranges.insert(5, 35, 2);
+    insert(&mut ranges, 10, 20, 0);
+    insert(&mut ranges, 21, 30, 1);
+    insert(&mut ranges, 5, 35, 2);
 
     assert_eq!(
         to_vec(&ranges),
@@ -362,10 +365,10 @@ fn large_range_multiple_overlaps() {
 
 #[test]
 fn overlap_middle() {
-    let mut ranges: RangeMap<u32> = RangeMap::new();
+    let mut ranges: RangeMap<Vec<u32>> = RangeMap::new();
 
-    ranges.insert(10, 20, 0);
-    ranges.insert(15, 15, 1);
+    insert(&mut ranges, 10, 20, 0);
+    insert(&mut ranges, 15, 15, 1);
 
     assert_eq!(
         to_vec(&ranges),
@@ -375,10 +378,10 @@ fn overlap_middle() {
 
 #[test]
 fn overlap_exact() {
-    let mut ranges: RangeMap<u32> = RangeMap::new();
+    let mut ranges: RangeMap<Vec<u32>> = RangeMap::new();
 
-    ranges.insert(10, 20, 0);
-    ranges.insert(10, 20, 1);
+    insert(&mut ranges, 10, 20, 0);
+    insert(&mut ranges, 10, 20, 1);
 
     assert_eq!(to_vec(&ranges), vec![(10, 20, vec![0, 1])]);
 }

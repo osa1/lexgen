@@ -47,7 +47,7 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<DfaStateIdx, A> {
         finished_dfa_states.insert(current_dfa_state);
 
         let mut char_transitions: Map<char, Set<NfaStateIdx>> = Default::default();
-        let mut range_transitions: RangeMap<NfaStateIdx> = Default::default();
+        let mut range_transitions: RangeMap<Set<NfaStateIdx>> = Default::default();
         let mut any_transitions: Set<NfaStateIdx> = Default::default();
         let mut end_of_input_transitions: Set<NfaStateIdx> = Default::default();
 
@@ -65,12 +65,12 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<DfaStateIdx, A> {
             }
 
             // Collect range transitions
-            for ((range_begin, range_end), next_states) in nfa.range_transitions(nfa_state) {
-                let next_states: Vec<NfaStateIdx> = next_states.iter().copied().collect();
-                range_transitions.insert_values(
-                    *range_begin as u32,
-                    *range_end as u32,
-                    &next_states,
+            for range in nfa.range_transitions(nfa_state) {
+                range_transitions.insert(
+                    range.start,
+                    range.end,
+                    range.value.clone(),
+                    |states_1, states_2| states_1.extend(states_2.into_iter()),
                 );
             }
 
@@ -87,7 +87,7 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<DfaStateIdx, A> {
             // transition
             for range in range_transitions.iter() {
                 if range.contains(char) {
-                    for range_state in &range.values {
+                    for range_state in &range.value {
                         char_states.insert(*range_state);
                     }
                 }
@@ -109,7 +109,7 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<DfaStateIdx, A> {
         }
 
         for range in range_transitions.into_iter() {
-            let mut range_states: Set<NfaStateIdx> = range.values.into_iter().collect();
+            let mut range_states: Set<NfaStateIdx> = range.value;
 
             for any_next in &any_transitions {
                 range_states.insert(*any_next);

@@ -445,14 +445,13 @@ fn generate_state_char_arms(
     // Add range transitions. Same as above, use chain of "or"s for ranges with same transition.
     let mut state_ranges: Map<StateIdx, Vec<(char, char)>> = Default::default();
     for range in range_transitions.iter() {
-        assert_eq!(range.values.len(), 1);
-        match &range.values[0] {
-            Trans::Trans(state_idx) => state_ranges.entry(*state_idx).or_default().push((
+        match range.value {
+            Trans::Trans(state_idx) => state_ranges.entry(state_idx).or_default().push((
                 char::try_from(range.start).unwrap(),
                 char::try_from(range.end).unwrap(),
             )),
             Trans::Accept(action) => {
-                let action_code = generate_rhs_code(ctx, *action);
+                let action_code = generate_rhs_code(ctx, action);
                 let range_start = char::from_u32(range.start).unwrap();
                 let range_end = char::from_u32(range.end).unwrap();
                 state_char_arms.push(quote!(
