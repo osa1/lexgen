@@ -2,8 +2,10 @@
 
 use crate::semantic_action_table::{SemanticActionIdx, SemanticActionTable};
 
-use std::fmt;
 use syn::parse::ParseStream;
+
+use std::fmt;
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Var(pub String);
 
