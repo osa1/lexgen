@@ -991,3 +991,51 @@ fn loc_tracking() {
         Some(Ok((loc(1, 0, 17), "ｗｏｒｌｄ!!!", loc(1, 13, 35))))
     );
 }
+
+#[test]
+fn diff_1() {
+    lexer! {
+        Lexer -> &'input str;
+
+        ['0'-'9'] # ['3'-'7'] => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_(match_)
+        },
+    }
+
+    let mut lexer = Lexer::new("01289");
+    assert_eq!(next(&mut lexer), Some(Ok("0")));
+    assert_eq!(next(&mut lexer), Some(Ok("1")));
+    assert_eq!(next(&mut lexer), Some(Ok("2")));
+    assert_eq!(next(&mut lexer), Some(Ok("8")));
+    assert_eq!(next(&mut lexer), Some(Ok("9")));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("34567");
+    assert!(matches!(next(&mut lexer), Some(Err(_))));
+    assert!(matches!(next(&mut lexer), Some(Err(_))));
+    assert!(matches!(next(&mut lexer), Some(Err(_))));
+    assert!(matches!(next(&mut lexer), Some(Err(_))));
+    assert!(matches!(next(&mut lexer), Some(Err(_))));
+    assert!(matches!(next(&mut lexer), None));
+}
+
+#[test]
+fn diff_2() {
+    lexer! {
+        Lexer -> &'input str;
+
+        _ # 'a' => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_(match_)
+        },
+    }
+
+    let mut lexer = Lexer::new("b");
+    assert_eq!(next(&mut lexer), Some(Ok("b")));
+    assert!(matches!(next(&mut lexer), None));
+
+    let mut lexer = Lexer::new("a");
+    assert!(matches!(next(&mut lexer), Some(Err(_))));
+    assert!(matches!(next(&mut lexer), None));
+}

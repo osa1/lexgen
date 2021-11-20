@@ -210,7 +210,7 @@ fn regex_to_range_map(bindings: &Map<Var, Regex>, re: &Regex) -> RangeMap<()> {
 
         Regex::Any => {
             let mut map = RangeMap::new();
-            map.insert(0, u32::MAX, (), merge_values);
+            map.insert(0, char::MAX as u32, (), merge_values);
             map
         }
 
