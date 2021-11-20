@@ -2,10 +2,8 @@
 
 use crate::semantic_action_table::{SemanticActionIdx, SemanticActionTable};
 
-use syn::parse::ParseStream;
-
 use std::fmt;
-
+use syn::parse::ParseStream;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Var(pub String);
 
@@ -120,6 +118,10 @@ pub enum Regex {
     Or(Box<Regex>, Box<Regex>),
     Any, // any character
     EndOfInput,
+
+    /// Difference, or exclusion: characters in the first regex, excluding characters in the second
+    /// regex.
+    Diff(Box<Regex>, Box<Regex>),
 }
 
 #[derive(Debug, Clone)]
@@ -191,8 +193,21 @@ fn parse_regex_2(input: ParseStream) -> syn::Result<Regex> {
     Ok(re)
 }
 
-// re_3 -> ( re_0 ) | $ | $x | $$x | _ | 'x' | "..." | [...]
+// re_3 -> re_4 | re_4 # re_4 (left associative)
 fn parse_regex_3(input: ParseStream) -> syn::Result<Regex> {
+    let mut re = parse_regex_4(input)?;
+
+    while input.peek(syn::token::Pound) {
+        let _ = input.parse::<syn::token::Pound>()?;
+        let re_2 = parse_regex_4(input)?;
+        re = Regex::Diff(Box::new(re), Box::new(re_2));
+    }
+
+    Ok(re)
+}
+
+// re_4 -> ( re_0 ) | $ | $x | $$x | _ | 'x' | "..." | [...]
+fn parse_regex_4(input: ParseStream) -> syn::Result<Regex> {
     if input.peek(syn::token::Paren) {
         let parenthesized;
         syn::parenthesized!(parenthesized in input);

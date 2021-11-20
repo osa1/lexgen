@@ -26,7 +26,7 @@ impl<A> Default for RangeMap<A> {
 }
 
 impl<A> RangeMap<A> {
-    fn new() -> RangeMap<A> {
+    pub fn new() -> RangeMap<A> {
         RangeMap { ranges: vec![] }
     }
 
@@ -164,7 +164,6 @@ impl<A: Clone> RangeMap<A> {
         self.ranges = new_ranges;
     }
 
-    #[cfg(test)]
     pub fn remove_ranges<B>(&mut self, other: &RangeMap<B>) {
         let old_ranges = replace(&mut self.ranges, vec![]);
         let mut new_ranges: Vec<Range<A>> = Vec::with_capacity(old_ranges.len());
