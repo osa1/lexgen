@@ -1,4 +1,5 @@
 use std::cmp::{max, min};
+use std::mem::replace;
 
 /// A map of inclusive ranges, with insertion and iteration operations. Insertion allows
 /// overlapping ranges. When two ranges overlap, value of the overlapping parts is the union of
@@ -69,7 +70,7 @@ impl<A: Clone> RangeMap<A> {
     where
         F: Fn(&mut A, A),
     {
-        let old_ranges = std::mem::replace(&mut self.ranges, vec![]);
+        let old_ranges = replace(&mut self.ranges, vec![]);
         let mut new_ranges = Vec::with_capacity(old_ranges.len() + 2);
 
         let mut range_iter = old_ranges.into_iter();
@@ -162,6 +163,80 @@ impl<A: Clone> RangeMap<A> {
 
         self.ranges = new_ranges;
     }
+
+    #[cfg(test)]
+    pub fn remove_ranges<B>(&mut self, other: &RangeMap<B>) {
+        let old_ranges = replace(&mut self.ranges, vec![]);
+        let mut new_ranges: Vec<Range<A>> = Vec::with_capacity(old_ranges.len());
+
+        let mut removed_ranges_iter = other.ranges.iter();
+        let mut removed_range = removed_ranges_iter.next();
+
+        let mut old_ranges_iter = old_ranges.into_iter();
+        let mut old_range = old_ranges_iter.next();
+
+        loop {
+            match (&mut old_range, removed_range) {
+                (Some(ref mut old_range_), Some(removed_range_)) => {
+                    if old_range_.end < removed_range_.start {
+                        new_ranges.push(old_range_.clone());
+                        old_range = old_ranges_iter.next();
+                    } else if removed_range_.end < old_range_.start {
+                        removed_range = removed_ranges_iter.next();
+                    } else {
+                        let overlap = max(old_range_.start, removed_range_.start)
+                            ..=min(old_range_.end, removed_range_.end);
+
+                        // Three cases to consider:
+                        //
+                        // (1) overlap starts from the left end of old range:
+                        //     update A, increment B
+                        //
+                        // (2) overlap ends at the right end of old range:
+                        //     push left of overlap, increment A
+                        //
+                        // (3) overlap is in the middle of old range:
+                        //     push left of overlap, update A
+
+                        // (1)
+                        if *overlap.start() == old_range_.start {
+                            old_range_.start = *overlap.end() + 1;
+                            removed_range = removed_ranges_iter.next();
+                        }
+                        // (2)
+                        else if *overlap.end() == old_range_.end {
+                            let new_range = Range {
+                                start: old_range_.start,
+                                end: *overlap.start() - 1,
+                                value: old_range_.value.clone(),
+                            };
+                            new_ranges.push(new_range);
+                            old_range = old_ranges_iter.next();
+                        }
+                        // (3)
+                        else {
+                            let new_range = Range {
+                                start: old_range_.start,
+                                end: *overlap.start() - 1,
+                                value: old_range_.value.clone(),
+                            };
+                            new_ranges.push(new_range);
+                            old_range_.start = overlap.end() + 1;
+                        }
+                    }
+                }
+                (Some(old_range_), None) => {
+                    new_ranges.push(old_range_.clone());
+                    new_ranges.extend(old_ranges_iter);
+                    break;
+                }
+                (None, Some(_removed_range_)) => break,
+                (None, None) => break,
+            }
+        }
+
+        self.ranges = new_ranges;
+    }
 }
 
 #[cfg(test)]
@@ -179,6 +254,21 @@ fn insert<A: Clone>(map: &mut RangeMap<Vec<A>>, range_start: u32, range_end: u32
     map.insert(range_start, range_end, vec![value], |values_1, values_2| {
         values_1.extend(values_2.into_iter())
     });
+}
+
+#[cfg(test)]
+fn remove<A: Clone>(map: &mut RangeMap<Vec<A>>, removed_ranges: &[(u32, u32)]) {
+    let mut removed_range_map: RangeMap<()> = RangeMap::new();
+    for (removed_range_start, removed_range_end) in removed_ranges {
+        removed_range_map.insert(
+            *removed_range_start,
+            *removed_range_end,
+            (),
+            |_, _| panic!(),
+        );
+    }
+
+    map.remove_ranges(&removed_range_map);
 }
 
 #[test]
@@ -384,4 +474,60 @@ fn overlap_exact() {
     insert(&mut ranges, 10, 20, 1);
 
     assert_eq!(to_vec(&ranges), vec![(10, 20, vec![0, 1])]);
+}
+
+#[test]
+fn remove_no_overlap() {
+    let mut ranges: RangeMap<Vec<u32>> = RangeMap::new();
+
+    insert(&mut ranges, 10, 20, 0);
+    insert(&mut ranges, 30, 40, 1);
+
+    remove(&mut ranges, &[(0, 9), (21, 29), (41, 50)]);
+
+    assert_eq!(to_vec(&ranges), vec![(10, 20, vec![0]), (30, 40, vec![1])]);
+}
+
+#[test]
+fn remove_overlap_left() {
+    let mut ranges: RangeMap<Vec<u32>> = RangeMap::new();
+
+    insert(&mut ranges, 10, 20, 0);
+    insert(&mut ranges, 30, 40, 1);
+
+    remove(&mut ranges, &[(10, 15), (30, 35)]);
+
+    assert_eq!(to_vec(&ranges), vec![(16, 20, vec![0]), (36, 40, vec![1])]);
+}
+
+#[test]
+fn remove_overlap_right() {
+    let mut ranges: RangeMap<Vec<u32>> = RangeMap::new();
+
+    insert(&mut ranges, 10, 20, 0);
+    insert(&mut ranges, 30, 40, 1);
+
+    remove(&mut ranges, &[(15, 20), (35, 40)]);
+
+    assert_eq!(to_vec(&ranges), vec![(10, 14, vec![0]), (30, 34, vec![1])]);
+}
+
+#[test]
+fn remove_overlap_middle() {
+    let mut ranges: RangeMap<Vec<u32>> = RangeMap::new();
+
+    insert(&mut ranges, 10, 20, 0);
+    insert(&mut ranges, 30, 40, 1);
+
+    remove(&mut ranges, &[(12, 15), (32, 35)]);
+
+    assert_eq!(
+        to_vec(&ranges),
+        vec![
+            (10, 11, vec![0]),
+            (16, 20, vec![0]),
+            (30, 31, vec![1]),
+            (36, 40, vec![1])
+        ]
+    );
 }
