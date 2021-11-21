@@ -206,10 +206,7 @@ fn regex_to_range_map(bindings: &Map<Var, Regex>, re: &Regex) -> RangeMap<()> {
             let mut map1 = regex_to_range_map(bindings, re1);
             let map2 = regex_to_range_map(bindings, re2);
 
-            // TODO: Quadratic behavior below, `RangeMap::insert` is O(number of ranges)
-            for range_2 in map2.into_iter() {
-                map1.insert(range_2.start, range_2.end, (), merge_values);
-            }
+            map1.insert_ranges(map2.into_iter(), merge_values);
 
             map1
         }
