@@ -179,7 +179,6 @@ impl<A> DFA<StateIdx, A> {
         } in other.states
         {
             let mut new_char_transitions: Map<char, StateIdx> = Default::default();
-            let mut new_range_transitions: RangeMap<StateIdx> = Default::default();
             let mut new_any_transition: Option<StateIdx> = None;
             let mut new_end_of_input_transition: Option<StateIdx> = None;
 
@@ -187,15 +186,8 @@ impl<A> DFA<StateIdx, A> {
                 new_char_transitions.insert(char, StateIdx(next.0 + n_current_states));
             }
 
-            // TODO: Quadratic code below
-            for range in range_transitions.iter() {
-                new_range_transitions.insert(
-                    range.start,
-                    range.end,
-                    StateIdx(range.value.0 + n_current_states),
-                    |_states_1, _states_2| panic!("Overlapping range transition in DFA::add_dfa"),
-                );
-            }
+            let new_range_transitions =
+                range_transitions.map(|state_idx| StateIdx(state_idx.0 + n_current_states));
 
             if let Some(next) = any_transition {
                 new_any_transition = Some(StateIdx(next.0 + n_current_states));
