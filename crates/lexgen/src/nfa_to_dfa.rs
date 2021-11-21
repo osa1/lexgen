@@ -1,7 +1,7 @@
 use crate::collections::{Map, Set};
 use crate::dfa::DFA;
 use crate::nfa::NFA;
-use crate::range_map::RangeMap;
+use crate::range_map::{Range, RangeMap};
 
 use crate::dfa::StateIdx as DfaStateIdx;
 use crate::nfa::StateIdx as NfaStateIdx;
@@ -108,6 +108,9 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<DfaStateIdx, A> {
             work_list.push(closure);
         }
 
+        let mut dfa_range_transitions: Vec<Range<DfaStateIdx>> =
+            Vec::with_capacity(range_transitions.len());
+
         for range in range_transitions.into_iter() {
             let mut range_states: Set<NfaStateIdx> = range.value;
 
@@ -119,11 +122,22 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<DfaStateIdx, A> {
                 .compute_state_closure(&range_states)
                 .into_iter()
                 .collect();
+
             let dfa_state = dfa_state_of_nfa_states(&mut dfa, &mut state_map, closure.clone());
-            dfa.add_range_transition(current_dfa_state, range.start, range.end, dfa_state);
+
+            dfa_range_transitions.push(Range {
+                start: range.start,
+                end: range.end,
+                value: dfa_state,
+            });
 
             work_list.push(closure);
         }
+
+        dfa.set_range_transition(
+            current_dfa_state,
+            RangeMap::from_non_overlapping_sorted_ranges(dfa_range_transitions),
+        );
 
         {
             let closure: BTreeSet<NfaStateIdx> = nfa

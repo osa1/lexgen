@@ -109,23 +109,14 @@ impl<A> DFA<StateIdx, A> {
         self.states[next.0].predecessors.insert(state);
     }
 
-    pub fn add_range_transition(
-        &mut self,
-        state: StateIdx,
-        range_begin: u32,
-        range_end: u32,
-        next: StateIdx,
-    ) {
-        self.states[state.0].range_transitions.insert(
-            range_begin,
-            range_end,
-            next,
-            |_states_1, _states_2| {
-                panic!("Overlapping range transition in DFA::add_range_transition")
-            },
-        );
+    pub fn set_range_transition(&mut self, state: StateIdx, range_map: RangeMap<StateIdx>) {
+        assert!(self.states[state.0].range_transitions.is_empty());
 
-        self.states[next.0].predecessors.insert(state);
+        for range in range_map.iter() {
+            self.states[range.value.0].predecessors.insert(state);
+        }
+
+        self.states[state.0].range_transitions = range_map;
     }
 
     pub fn set_any_transition(&mut self, state: StateIdx, next: StateIdx) {

@@ -45,6 +45,10 @@ impl<A> RangeMap<A> {
         RangeMap { ranges }
     }
 
+    pub fn len(&self) -> usize {
+        self.ranges.len()
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = &Range<A>> {
         self.ranges.iter()
     }
