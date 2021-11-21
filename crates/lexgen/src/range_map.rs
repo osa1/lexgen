@@ -134,12 +134,20 @@ impl<A: Clone> RangeMap<A> {
                                     value: merged_value,
                                 };
                                 new_ranges.push(merged_range);
-                                if range1_.end > range2_.end {
-                                    range2 = ranges2_iter.next();
-                                    range1_.start = overlap.end() + 1;
-                                } else {
-                                    range1 = ranges1_iter.next();
-                                    range2_.start = overlap.end() + 1;
+
+                                match range1_.end.cmp(&range2_.end) {
+                                    Ordering::Less => {
+                                        range1 = ranges1_iter.next();
+                                        range2_.start = overlap.end() + 1;
+                                    }
+                                    Ordering::Greater => {
+                                        range2 = ranges2_iter.next();
+                                        range1_.start = overlap.end() + 1;
+                                    }
+                                    Ordering::Equal => {
+                                        range1 = ranges1_iter.next();
+                                        range2 = ranges2_iter.next();
+                                    }
                                 }
                             }
                         }
@@ -347,7 +355,10 @@ fn to_vec<A: Clone>(map: &RangeMap<Vec<A>>) -> Vec<(u32, u32, Vec<A>)> {
 
 #[cfg(test)]
 fn insert<A: Clone>(map: &mut RangeMap<Vec<A>>, range_start: u32, range_end: u32, value: A) {
-    map.insert(range_start, range_end, vec![value], |values_1, values_2| {
+    let mut map2: RangeMap<Vec<A>> = RangeMap::new();
+    map2.insert(range_start, range_end, vec![value], |_, _| panic!());
+
+    map.insert_ranges(map2.into_iter(), |values_1, values_2| {
         values_1.extend(values_2.into_iter())
     });
 }
