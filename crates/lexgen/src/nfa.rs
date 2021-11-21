@@ -125,23 +125,17 @@ impl<A> NFA<A> {
         );
     }
 
-    pub fn add_range_transitions(
-        &mut self,
-        state: StateIdx,
-        ranges: &RangeMap<()>,
-        next: StateIdx,
-    ) {
+    pub fn add_range_transitions(&mut self, state: StateIdx, ranges: RangeMap<()>, next: StateIdx) {
         let mut set: Set<StateIdx> = Default::default();
         set.insert(next);
-        // TODO: Quadratic behavior below, `RangeMap::insert` is O(number of ranges)
-        for range in ranges.iter() {
-            self.states[state.0].range_transitions.insert(
-                range.start as u32,
-                range.end as u32,
-                set.clone(),
-                |values_1, values_2| values_1.extend(values_2.into_iter()),
-            );
-        }
+
+        let ranges = ranges.map(|()| set.clone());
+
+        self.states[state.0]
+            .range_transitions
+            .insert_ranges(ranges.into_iter(), |values_1, values_2| {
+                values_1.extend(values_2.into_iter())
+            });
     }
 
     pub fn add_empty_transition(&mut self, state: StateIdx, next: StateIdx) {

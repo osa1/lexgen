@@ -71,6 +71,23 @@ impl<A> RangeMap<A> {
                 .collect(),
         }
     }
+
+    pub fn map<F, B>(self, mut f: F) -> RangeMap<B>
+    where
+        F: FnMut(A) -> B,
+    {
+        RangeMap {
+            ranges: self
+                .ranges
+                .into_iter()
+                .map(|Range { start, end, value }| Range {
+                    start,
+                    end,
+                    value: f(value),
+                })
+                .collect(),
+        }
+    }
 }
 
 impl<A> Range<A> {

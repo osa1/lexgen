@@ -4,8 +4,6 @@ use crate::collections::Map;
 use crate::nfa::{StateIdx, NFA};
 use crate::range_map::{Range, RangeMap};
 
-use std::convert::TryFrom;
-
 pub fn add_re<A>(
     nfa: &mut NFA<A>,
     bindings: &Map<Var, Regex>,
@@ -17,14 +15,20 @@ pub fn add_re<A>(
         Regex::Builtin(builtin_name) => {
             let builtin = get_builtin_regex(builtin_name);
 
-            for (range_start, range_end) in builtin.get_ranges() {
-                nfa.add_range_transition(
-                    current,
-                    char::try_from(*range_start).unwrap(),
-                    char::try_from(*range_end).unwrap(),
-                    cont,
-                );
-            }
+            let ranges: Vec<Range<()>> = builtin
+                .get_ranges()
+                .iter()
+                .copied()
+                .map(|(start, end)| Range {
+                    start,
+                    end,
+                    value: (),
+                })
+                .collect();
+
+            let map = RangeMap::from_non_overlapping_sorted_ranges(ranges);
+
+            nfa.add_range_transitions(current, map, cont);
         }
 
         Regex::Var(var) => {
@@ -117,7 +121,7 @@ pub fn add_re<A>(
 
         Regex::Diff(_, _) => {
             let map = regex_to_range_map(bindings, re);
-            nfa.add_range_transitions(current, &map, cont);
+            nfa.add_range_transitions(current, map, cont);
         }
     }
 }
