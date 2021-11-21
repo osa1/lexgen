@@ -134,7 +134,7 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<DfaStateIdx, A> {
             work_list.push(closure);
         }
 
-        dfa.set_range_transition(
+        dfa.set_range_transitions(
             current_dfa_state,
             RangeMap::from_non_overlapping_sorted_ranges(dfa_range_transitions),
         );

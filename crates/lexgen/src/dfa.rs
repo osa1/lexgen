@@ -109,7 +109,7 @@ impl<A> DFA<StateIdx, A> {
         self.states[next.0].predecessors.insert(state);
     }
 
-    pub fn set_range_transition(&mut self, state: StateIdx, range_map: RangeMap<StateIdx>) {
+    pub fn set_range_transitions(&mut self, state: StateIdx, range_map: RangeMap<StateIdx>) {
         assert!(self.states[state.0].range_transitions.is_empty());
 
         for range in range_map.iter() {
@@ -187,6 +187,7 @@ impl<A> DFA<StateIdx, A> {
                 new_char_transitions.insert(char, StateIdx(next.0 + n_current_states));
             }
 
+            // TODO: Quadratic code below
             for range in range_transitions.iter() {
                 new_range_transitions.insert(
                     range.start,
