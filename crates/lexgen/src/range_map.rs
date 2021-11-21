@@ -1,4 +1,4 @@
-use std::cmp::{max, min};
+use std::cmp::{max, min, Ordering};
 use std::mem::replace;
 
 /// A map of inclusive ranges, with insertion and iteration operations. Insertion allows
@@ -65,6 +65,103 @@ impl<A> Range<A> {
 }
 
 impl<A: Clone> RangeMap<A> {
+    /// O(N+M) where N is the number of current ranges and M is the number of inserted ranges
+    pub fn insert_ranges<F, I>(&mut self, mut ranges2_iter: I, merge: F)
+    where
+        F: Fn(&mut A, A),
+        I: Iterator<Item = Range<A>>,
+    {
+        let mut new_ranges: Vec<Range<A>> = vec![];
+        let old_ranges = replace(&mut self.ranges, vec![]);
+
+        let mut ranges1_iter = old_ranges.into_iter();
+
+        let mut range1 = ranges1_iter.next();
+        let mut range2 = ranges2_iter.next();
+
+        loop {
+            match (&mut range1, &mut range2) {
+                (Some(ref mut range1_), Some(ref mut range2_)) => {
+                    // - No overlap: push the range that comes first, increment its iterator
+                    //
+                    // - Overlap: push at most 3 ranges:
+                    //
+                    //   1. Part of range 1 or 2 that comes before the overlap. Update the range.
+                    //      Do not increment iterators.
+                    //   2. Part of range 1 and 2 that overlap. Push merged range, update both
+                    //      ranges. Increment iterators for the ranges that are now empty.
+                    //   3. Part of range 1 or 2 that comes after the overlap. Increment the
+                    //      iterator for the range.
+
+                    if range1_.end < range2_.start {
+                        // No overlap, range 1 comes first
+                        new_ranges.push(range1_.clone());
+                        range1 = ranges1_iter.next();
+                    } else if range2_.end < range1_.start {
+                        // No overlap, range 2 comes first
+                        new_ranges.push(range2_.clone());
+                        range2 = ranges2_iter.next();
+                    } else {
+                        let overlap =
+                            max(range1_.start, range2_.start)..=min(range1_.end, range2_.end);
+
+                        match range1_.start.cmp(&range2_.start) {
+                            Ordering::Less => {
+                                // Range 1 comes first
+                                new_ranges.push(Range {
+                                    start: range1_.start,
+                                    end: *overlap.start() - 1,
+                                    value: range1_.value.clone(),
+                                });
+                                range1_.start = *overlap.start();
+                            }
+                            Ordering::Greater => {
+                                // Range 2 comes first
+                                new_ranges.push(Range {
+                                    start: range2_.start,
+                                    end: *overlap.start() - 1,
+                                    value: range2_.value.clone(),
+                                });
+                                range2_.start = *overlap.start();
+                            }
+                            Ordering::Equal => {
+                                // Ranges start at the same point
+                                let mut merged_value = range1_.value.clone();
+                                merge(&mut merged_value, range2_.value.clone());
+                                let merged_range = Range {
+                                    start: *overlap.start(),
+                                    end: *overlap.end(),
+                                    value: merged_value,
+                                };
+                                new_ranges.push(merged_range);
+                                if range1_.end > range2_.end {
+                                    range2 = ranges2_iter.next();
+                                    range1_.start = overlap.end() + 1;
+                                } else {
+                                    range1 = ranges1_iter.next();
+                                    range2_.start = overlap.end() + 1;
+                                }
+                            }
+                        }
+                    }
+                }
+                (Some(range1_), None) => {
+                    new_ranges.push(range1_.clone());
+                    new_ranges.extend(ranges1_iter);
+                    break;
+                }
+                (None, Some(range2_)) => {
+                    new_ranges.push(range2_.clone());
+                    new_ranges.extend(ranges2_iter);
+                    break;
+                }
+                (None, None) => break,
+            }
+        }
+
+        self.ranges = new_ranges;
+    }
+
     /// O(n) where n is the number of existing ranges in the map
     pub fn insert<F>(&mut self, mut new_range_start: u32, new_range_end: u32, value: A, merge: F)
     where
@@ -96,7 +193,6 @@ impl<A: Clone> RangeMap<A> {
                 // (3) push overlapping part
                 // (4) push old_range after the overlap
                 // (5) push new_range after the overlap
-                //
                 //
                 // 1 and 2, 4 and 5 can't happen at once. 5 needs to be handled in the next
                 // iteration as there may be other overlapping ranges with new_range after the
@@ -164,7 +260,7 @@ impl<A: Clone> RangeMap<A> {
         self.ranges = new_ranges;
     }
 
-    /// O(N+M) where N is the number of current ranges and M number of removed ranges.
+    /// O(N+M) where N is the number of current ranges and M is the number of removed ranges
     pub fn remove_ranges<B>(&mut self, other: &RangeMap<B>) {
         let old_ranges = replace(&mut self.ranges, vec![]);
         let mut new_ranges: Vec<Range<A>> = Vec::with_capacity(old_ranges.len());
