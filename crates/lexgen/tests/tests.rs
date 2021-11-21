@@ -1,7 +1,7 @@
 mod test_utils;
 
 use lexgen::lexer;
-use lexgen_util::Loc;
+use lexgen_util::{LexerError, Loc};
 use test_utils::{loc, next};
 
 use std::convert::TryFrom;
@@ -1065,4 +1065,29 @@ fn diff_3() {
     let mut lexer = Lexer::new("'a'");
     assert_eq!(next(&mut lexer), Some(Ok("'a'")));
     assert_eq!(next(&mut lexer), None);
+}
+
+#[test]
+fn diff_4() {
+    lexer! {
+        Lexer -> &'input str;
+
+        "//" (_ # '\n')* $? => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_(match_)
+        },
+    }
+
+    let mut lexer = Lexer::new("// asdf");
+    assert_eq!(next(&mut lexer), Some(Ok("// asdf")));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("// asdf\n");
+    assert_eq!(next(&mut lexer), Some(Ok("// asdf")));
+    assert_eq!(
+        next(&mut lexer),
+        Some(Err(LexerError::InvalidToken {
+            location: loc(0, 7, 7)
+        }))
+    );
 }
