@@ -142,6 +142,7 @@ fn regex_to_range_map(bindings: &Map<Var, Regex>, re: &Regex) -> RangeMap<()> {
 
             let builtin = get_builtin_regex(builtin);
 
+            // TODO: Quadratic behavior below, `RangeMap::insert` is O(number of ranges)
             for (range_start, range_end) in builtin.get_ranges() {
                 map.insert(*range_start, *range_end, (), merge_values);
             }
@@ -167,6 +168,7 @@ fn regex_to_range_map(bindings: &Map<Var, Regex>, re: &Regex) -> RangeMap<()> {
         Regex::CharSet(char_set) => {
             let mut map = RangeMap::new();
 
+            // TODO: Quadratic behavior below, `RangeMap::insert` is O(number of ranges)
             for char_or_range in char_set.0.iter() {
                 match char_or_range {
                     CharOrRange::Char(char) => {
@@ -201,6 +203,7 @@ fn regex_to_range_map(bindings: &Map<Var, Regex>, re: &Regex) -> RangeMap<()> {
             let mut map1 = regex_to_range_map(bindings, re1);
             let map2 = regex_to_range_map(bindings, re2);
 
+            // TODO: Quadratic behavior below, `RangeMap::insert` is O(number of ranges)
             for range_2 in map2.into_iter() {
                 map1.insert(range_2.start, range_2.end, (), merge_values);
             }
