@@ -1,7 +1,7 @@
 mod test_utils;
 
 use lexgen::lexer;
-use lexgen_util::Loc;
+use lexgen_util::{LexerError, Loc};
 use test_utils::{loc, next};
 
 use std::convert::TryFrom;
@@ -989,5 +989,105 @@ fn loc_tracking() {
     assert_eq!(
         lexer.next(),
         Some(Ok((loc(1, 0, 17), "ｗｏｒｌｄ!!!", loc(1, 13, 35))))
+    );
+}
+
+#[test]
+fn diff_1() {
+    lexer! {
+        Lexer -> &'input str;
+
+        let exclude = ['3'-'7'];
+
+        ['0'-'9'] # $exclude => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_(match_)
+        },
+    }
+
+    let mut lexer = Lexer::new("01289");
+    assert_eq!(next(&mut lexer), Some(Ok("0")));
+    assert_eq!(next(&mut lexer), Some(Ok("1")));
+    assert_eq!(next(&mut lexer), Some(Ok("2")));
+    assert_eq!(next(&mut lexer), Some(Ok("8")));
+    assert_eq!(next(&mut lexer), Some(Ok("9")));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("34567");
+    assert!(matches!(next(&mut lexer), Some(Err(_))));
+    assert!(matches!(next(&mut lexer), Some(Err(_))));
+    assert!(matches!(next(&mut lexer), Some(Err(_))));
+    assert!(matches!(next(&mut lexer), Some(Err(_))));
+    assert!(matches!(next(&mut lexer), Some(Err(_))));
+    assert!(matches!(next(&mut lexer), None));
+}
+
+#[test]
+fn diff_2() {
+    lexer! {
+        Lexer -> &'input str;
+
+        _ # 'a' => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_(match_)
+        },
+    }
+
+    let mut lexer = Lexer::new("b");
+    assert_eq!(next(&mut lexer), Some(Ok("b")));
+    assert!(matches!(next(&mut lexer), None));
+
+    let mut lexer = Lexer::new("a");
+    assert!(matches!(next(&mut lexer), Some(Err(_))));
+    assert!(matches!(next(&mut lexer), None));
+}
+
+#[test]
+fn diff_3() {
+    lexer! {
+        Lexer -> &'input str;
+
+        "'" (_ # ('\t' | '\n' | '\\' | '\'')) "'" => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_(match_)
+        },
+    }
+
+    let mut lexer = Lexer::new("''");
+    assert!(matches!(next(&mut lexer), Some(Err(_))));
+
+    let mut lexer = Lexer::new("'''");
+    assert!(matches!(next(&mut lexer), Some(Err(_))));
+
+    let mut lexer = Lexer::new("'\t'");
+    assert!(matches!(next(&mut lexer), Some(Err(_))));
+
+    let mut lexer = Lexer::new("'a'");
+    assert_eq!(next(&mut lexer), Some(Ok("'a'")));
+    assert_eq!(next(&mut lexer), None);
+}
+
+#[test]
+fn diff_4() {
+    lexer! {
+        Lexer -> &'input str;
+
+        "//" (_ # '\n')* $? => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_(match_)
+        },
+    }
+
+    let mut lexer = Lexer::new("// asdf");
+    assert_eq!(next(&mut lexer), Some(Ok("// asdf")));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("// asdf\n");
+    assert_eq!(next(&mut lexer), Some(Ok("// asdf")));
+    assert_eq!(
+        next(&mut lexer),
+        Some(Err(LexerError::InvalidToken {
+            location: loc(0, 7, 7)
+        }))
     );
 }
