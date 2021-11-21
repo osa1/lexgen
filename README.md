@@ -160,7 +160,7 @@ of rules. The syntax is:
 - `<regex> | <regex>` for alternation: match the first one, or the second one.
 - `<regex> # <regex>` for difference: match characters in the first regex that
   are not in the second regex. Note that regexes on the left and right of `#`
-  should be "characters sets", i.e. `*`, `+`, `?`, `"..."`, `|`, and
+  should be "characters sets", i.e. `*`, `+`, `?`, `"..."`, `$`, and
   concatenation are not allowed. Variables that are bound to character sets are
   allowed.
 

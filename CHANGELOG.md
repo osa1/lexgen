@@ -2,7 +2,7 @@
 
 - New regex syntax `#` added for character set difference, e.g. `re1 # re2`
   matches characters in `re1` that are not in `re2`. `re1` and `re2` need to be
-  "character sets", i.e. `*`, `+`, `?`, `"..."`, `|`, and concatenation are not
+  "character sets", i.e. `*`, `+`, `?`, `"..."`, `$`, and concatenation are not
   allowed.
 
 # 2021/11/30: 0.8.1
