@@ -120,19 +120,24 @@ pub enum Regex {
     Or(Box<Regex>, Box<Regex>),
     Any, // any character
     EndOfInput,
-
-    /// Difference, or exclusion: characters in the first regex, excluding characters in the second
-    /// regex.
-    Diff(Box<Regex>, Box<Regex>),
 }
 
 #[derive(Debug, Clone)]
-pub struct CharSet(pub Vec<CharOrRange>);
+pub enum CharSet {
+    /// A variable. Needs to resolve to a `Regex::CharSet`.
+    Var(Var),
 
-#[derive(Debug, Clone, Copy)]
-pub enum CharOrRange {
+    /// A single character: `'a'`
     Char(char),
+
+    /// A range of characters: `'a'-'z'`
     Range(char, char),
+
+    /// Alternation: `<charset> <charset>` (juxtaposition)
+    Or(Box<CharSet>, Box<CharSet>),
+
+    /// Exclusion: `<charset> # <charset>`
+    Diff(Box<CharSet>, Box<CharSet>),
 }
 
 /// Parses a regex terminated with: `=>` (used in rules with RHSs), `,` (used in rules without
@@ -195,21 +200,8 @@ fn parse_regex_2(input: ParseStream) -> syn::Result<Regex> {
     Ok(re)
 }
 
-// re_3 -> re_4 | re_4 # re_4 (left associative)
+// re_3 -> ( re_0 ) | $ | $x | $$x | _ | 'x' | "..." | [...]
 fn parse_regex_3(input: ParseStream) -> syn::Result<Regex> {
-    let mut re = parse_regex_4(input)?;
-
-    while input.peek(syn::token::Pound) {
-        let _ = input.parse::<syn::token::Pound>()?;
-        let re_2 = parse_regex_4(input)?;
-        re = Regex::Diff(Box::new(re), Box::new(re_2));
-    }
-
-    Ok(re)
-}
-
-// re_4 -> ( re_0 ) | $ | $x | $$x | _ | 'x' | "..." | [...]
-fn parse_regex_4(input: ParseStream) -> syn::Result<Regex> {
     if input.peek(syn::token::Paren) {
         let parenthesized;
         syn::parenthesized!(parenthesized in input);
@@ -247,21 +239,52 @@ fn parse_regex_4(input: ParseStream) -> syn::Result<Regex> {
 }
 
 fn parse_charset(input: ParseStream) -> syn::Result<CharSet> {
-    let mut chars = vec![];
-    while !input.is_empty() {
-        chars.push(parse_char_or_range(input)?);
-    }
-    Ok(CharSet(chars))
+    parse_charset_0(input)
 }
 
-fn parse_char_or_range(input: ParseStream) -> syn::Result<CharOrRange> {
-    let char = input.parse::<syn::LitChar>()?.value();
-    if input.peek(syn::token::Sub) {
-        let _ = input.parse::<syn::token::Sub>()?;
-        let char2 = input.parse::<syn::LitChar>()?.value();
-        Ok(CharOrRange::Range(char, char2))
-    } else {
-        Ok(CharOrRange::Char(char))
+// charset_0 -> charset_1 | charset_1 # charset_1
+fn parse_charset_0(input: ParseStream) -> syn::Result<CharSet> {
+    let mut charset = parse_charset_1(input)?;
+
+    while input.peek(syn::token::Pound) {
+        let _ = input.parse::<syn::token::Pound>()?;
+        let charset2 = parse_charset_1(input)?;
+        charset = CharSet::Diff(Box::new(charset), Box::new(charset2)); // left associative
+    }
+
+    Ok(charset)
+}
+
+// charset_1 -> charset_2 | charset_2 charset_2 (alternation, juxtaposition)
+fn parse_charset_1(input: ParseStream) -> syn::Result<CharSet> {
+    let mut charset = parse_charset_2(input)?;
+
+    // Parse alternations
+    while input.peek(syn::LitChar) || input.peek(syn::token::Dollar) {
+        let charset2 = parse_charset_2(input)?;
+        charset = CharSet::Or(Box::new(charset), Box::new(charset2));
+    }
+
+    Ok(charset)
+}
+
+// charset_2 -> 'a' (char) | 'a'-'z' (char range) | $var
+fn parse_charset_2(input: ParseStream) -> syn::Result<CharSet> {
+    match input.parse::<syn::LitChar>() {
+        Err(_) => {
+            input.parse::<syn::token::Dollar>()?;
+            let ident = input.parse::<syn::Ident>()?;
+            Ok(CharSet::Var(Var(ident.to_string())))
+        }
+        Ok(char) => {
+            if input.peek(syn::token::Sub) {
+                let _ = input.parse::<syn::token::Sub>()?;
+                let char2 = input.parse::<syn::LitChar>()?;
+                Ok(CharSet::Range(char.value(), char2.value()))
+            } else {
+                Ok(CharSet::Char(char.value()))
+            }
+        }
     }
 }
 

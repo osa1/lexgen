@@ -1,4 +1,4 @@
-use crate::ast::{CharOrRange, CharSet, Regex, Var};
+use crate::ast::{CharSet, Regex, Var};
 use crate::collections::Map;
 use crate::nfa::simulate::{ErrorLoc, Matches};
 use crate::nfa::NFA;
@@ -133,10 +133,11 @@ fn simulate_string() {
 
 #[test]
 fn simulate_char_set_char() {
-    let re = Regex::CharSet(CharSet(vec![
-        CharOrRange::Char('a'),
-        CharOrRange::Char('b'),
-    ]));
+    let re = Regex::CharSet(CharSet::Or(
+        Box::new(CharSet::Char('a')),
+        Box::new(CharSet::Char('b')),
+    ));
+
     let mut nfa: NFA<usize> = NFA::new();
     nfa.add_regex(&Default::default(), &re, 1);
 
@@ -153,11 +154,14 @@ fn simulate_char_set_char() {
 
 #[test]
 fn simulate_char_set_range() {
-    let re = Regex::CharSet(CharSet(vec![
-        CharOrRange::Char('a'),
-        CharOrRange::Char('b'),
-        CharOrRange::Range('0', '9'),
-    ]));
+    let re = Regex::CharSet(CharSet::Or(
+        Box::new(CharSet::Or(
+            Box::new(CharSet::Char('a')),
+            Box::new(CharSet::Char('b')),
+        )),
+        Box::new(CharSet::Range('0', '9')),
+    ));
+
     let mut nfa: NFA<usize> = NFA::new();
     nfa.add_regex(&Default::default(), &re, 1);
 
@@ -294,7 +298,7 @@ fn multiple_accepting_states_2() {
         Box::new(Regex::OneOrMore(Box::new(Regex::Char('a')))),
         Box::new(Regex::Char('b')),
     );
-    let re2 = Regex::CharSet(CharSet(vec![CharOrRange::Range('0', '9')]));
+    let re2 = Regex::CharSet(CharSet::Range('0', '9'));
     let mut nfa: NFA<usize> = NFA::new();
     nfa.add_regex(&Default::default(), &re1, 1);
     nfa.add_regex(&Default::default(), &re2, 2);
@@ -315,17 +319,23 @@ fn simulate_variables() {
     let mut bindings: Map<Var, Regex> = Default::default();
     bindings.insert(
         Var("initial".to_owned()),
-        Regex::CharSet(CharSet(vec![CharOrRange::Range('a', 'z')])),
+        Regex::CharSet(CharSet::Range('a', 'z')),
     );
     bindings.insert(
         Var("subsequent".to_owned()),
-        Regex::CharSet(CharSet(vec![
-            CharOrRange::Range('a', 'z'),
-            CharOrRange::Range('A', 'Z'),
-            CharOrRange::Range('0', '9'),
-            CharOrRange::Char('-'),
-            CharOrRange::Char('_'),
-        ])),
+        Regex::CharSet(CharSet::Or(
+            Box::new(CharSet::Or(
+                Box::new(CharSet::Or(
+                    Box::new(CharSet::Or(
+                        Box::new(CharSet::Range('a', 'a')),
+                        Box::new(CharSet::Range('A', 'Z')),
+                    )),
+                    Box::new(CharSet::Range('0', '9')),
+                )),
+                Box::new(CharSet::Char('-')),
+            )),
+            Box::new(CharSet::Char('_')),
+        )),
     );
     let re = Regex::Concat(
         Box::new(Regex::Var(Var("initial".to_owned()))),
@@ -512,9 +522,7 @@ fn range_and_char_confusion() {
     nfa.add_regex(&Default::default(), &Regex::String("ab".to_owned()), 1);
     nfa.add_regex(
         &Default::default(),
-        &Regex::OneOrMore(Box::new(Regex::CharSet(CharSet(vec![CharOrRange::Range(
-            'a', 'z',
-        )])))),
+        &Regex::OneOrMore(Box::new(Regex::CharSet(CharSet::Range('a', 'z')))),
         2,
     );
 
@@ -531,7 +539,7 @@ fn overlapping_ranges() {
     nfa.add_regex(
         &Default::default(),
         &Regex::Concat(
-            Box::new(Regex::CharSet(CharSet(vec![CharOrRange::Range('a', 'b')]))),
+            Box::new(Regex::CharSet(CharSet::Range('a', 'b'))),
             Box::new(Regex::Char('1')),
         ),
         1,
@@ -539,7 +547,7 @@ fn overlapping_ranges() {
     nfa.add_regex(
         &Default::default(),
         &Regex::Concat(
-            Box::new(Regex::CharSet(CharSet(vec![CharOrRange::Range('a', 'c')]))),
+            Box::new(Regex::CharSet(CharSet::Range('a', 'c'))),
             Box::new(Regex::Char('2')),
         ),
         2,
