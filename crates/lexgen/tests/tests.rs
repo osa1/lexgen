@@ -997,7 +997,9 @@ fn diff_1() {
     lexer! {
         Lexer -> &'input str;
 
-        ['0'-'9'] # ['3'-'7'] => |lexer| {
+        let exclude = ['3'-'7'];
+
+        ['0'-'9'] # $exclude => |lexer| {
             let match_ = lexer.match_();
             lexer.return_(match_)
         },
@@ -1038,4 +1040,29 @@ fn diff_2() {
     let mut lexer = Lexer::new("a");
     assert!(matches!(next(&mut lexer), Some(Err(_))));
     assert!(matches!(next(&mut lexer), None));
+}
+
+#[test]
+fn diff_3() {
+    lexer! {
+        Lexer -> &'input str;
+
+        "'" (_ # ('\t' | '\n' | '\\' | '\'')) "'" => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_(match_)
+        },
+    }
+
+    let mut lexer = Lexer::new("''");
+    assert!(matches!(next(&mut lexer), Some(Err(_))));
+
+    let mut lexer = Lexer::new("'''");
+    assert!(matches!(next(&mut lexer), Some(Err(_))));
+
+    let mut lexer = Lexer::new("'\t'");
+    assert!(matches!(next(&mut lexer), Some(Err(_))));
+
+    let mut lexer = Lexer::new("'a'");
+    assert_eq!(next(&mut lexer), Some(Ok("'a'")));
+    assert_eq!(next(&mut lexer), None);
 }
