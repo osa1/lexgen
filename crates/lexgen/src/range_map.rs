@@ -30,6 +30,21 @@ impl<A> RangeMap<A> {
         RangeMap { ranges: vec![] }
     }
 
+    /// Create a range map from given non-overlapping and sorted ranges. These properties
+    /// (non-overlapping, sorted) are checked in debug mode but not in release mode.
+    ///
+    /// O(1)
+    pub fn from_non_overlapping_sorted_ranges(ranges: Vec<Range<A>>) -> RangeMap<A> {
+        #[cfg(debug_assertions)]
+        for ranges in ranges.windows(2) {
+            let range1 = &ranges[0];
+            let range2 = &ranges[1];
+            assert!(range1.end < range2.start);
+        }
+
+        RangeMap { ranges }
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = &Range<A>> {
         self.ranges.iter()
     }

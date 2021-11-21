@@ -2,7 +2,7 @@ use crate::ast::{Builtin, CharOrRange, Regex, Var};
 use crate::builtin::{BuiltinCharRange, BUILTIN_RANGES};
 use crate::collections::Map;
 use crate::nfa::{StateIdx, NFA};
-use crate::range_map::RangeMap;
+use crate::range_map::{Range, RangeMap};
 
 use std::convert::TryFrom;
 
@@ -138,15 +138,18 @@ fn get_builtin_regex(builtin: &Builtin) -> BuiltinCharRange {
 fn regex_to_range_map(bindings: &Map<Var, Regex>, re: &Regex) -> RangeMap<()> {
     match re {
         Regex::Builtin(builtin) => {
-            let mut map = RangeMap::new();
-
             let builtin = get_builtin_regex(builtin);
-
-            // TODO: Quadratic behavior below, `RangeMap::insert` is O(number of ranges)
-            for (range_start, range_end) in builtin.get_ranges() {
-                map.insert(*range_start, *range_end, (), merge_values);
-            }
-            map
+            let ranges: Vec<Range<()>> = builtin
+                .get_ranges()
+                .iter()
+                .copied()
+                .map(|(start, end)| Range {
+                    start,
+                    end,
+                    value: (),
+                })
+                .collect();
+            RangeMap::from_non_overlapping_sorted_ranges(ranges)
         }
 
         Regex::Var(var) => {
