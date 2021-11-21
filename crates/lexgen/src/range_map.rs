@@ -164,6 +164,7 @@ impl<A: Clone> RangeMap<A> {
         self.ranges = new_ranges;
     }
 
+    /// O(N+M) where N is the number of current ranges and M number of removed ranges.
     pub fn remove_ranges<B>(&mut self, other: &RangeMap<B>) {
         let old_ranges = replace(&mut self.ranges, vec![]);
         let mut new_ranges: Vec<Range<A>> = Vec::with_capacity(old_ranges.len());
