@@ -997,7 +997,7 @@ fn diff_1() {
     lexer! {
         Lexer -> &'input str;
 
-        ['0'-'9' # '3'-'7'] => |lexer| {
+        ['0'-'9'] # ['3'-'7'] => |lexer| {
             let match_ = lexer.match_();
             lexer.return_(match_)
         },
@@ -1020,13 +1020,12 @@ fn diff_1() {
     assert!(matches!(next(&mut lexer), None));
 }
 
-/*
 #[test]
 fn diff_2() {
     lexer! {
         Lexer -> &'input str;
 
-        [_ # 'a'] => |lexer| {
+        _ # 'a' => |lexer| {
             let match_ = lexer.match_();
             lexer.return_(match_)
         },
@@ -1040,4 +1039,3 @@ fn diff_2() {
     assert!(matches!(next(&mut lexer), Some(Err(_))));
     assert!(matches!(next(&mut lexer), None));
 }
-*/

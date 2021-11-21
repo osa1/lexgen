@@ -1,8 +1,10 @@
-use crate::ast::{Builtin, CharSet, Regex, Var};
+use crate::ast::{Builtin, CharOrRange, Regex, Var};
 use crate::builtin::{BuiltinCharRange, BUILTIN_RANGES};
 use crate::collections::Map;
 use crate::nfa::{StateIdx, NFA};
 use crate::range_map::RangeMap;
+
+use std::convert::TryFrom;
 
 pub fn add_re<A>(
     nfa: &mut NFA<A>,
@@ -16,7 +18,12 @@ pub fn add_re<A>(
             let builtin = get_builtin_regex(builtin_name);
 
             for (range_start, range_end) in builtin.get_ranges() {
-                nfa.add_range_transition(current, *range_start, *range_end, cont);
+                nfa.add_range_transition(
+                    current,
+                    char::try_from(*range_start).unwrap(),
+                    char::try_from(*range_end).unwrap(),
+                    cont,
+                );
             }
         }
 
@@ -46,9 +53,17 @@ pub fn add_re<A>(
             }
         }
 
-        Regex::CharSet(charset) => {
-            let range_map = charset_to_range_map(bindings, charset);
-            nfa.add_range_transitions(current, &range_map, cont);
+        Regex::CharSet(set) => {
+            for char in &set.0 {
+                match char {
+                    CharOrRange::Char(char) => {
+                        nfa.add_char_transition(current, *char, cont);
+                    }
+                    CharOrRange::Range(range_start, range_end) => {
+                        nfa.add_range_transition(current, *range_start, *range_end, cont);
+                    }
+                }
+            }
         }
 
         Regex::ZeroOrMore(re) => {
@@ -99,6 +114,11 @@ pub fn add_re<A>(
         Regex::EndOfInput => {
             nfa.add_end_of_input_transition(current, cont);
         }
+
+        Regex::Diff(_, _) => {
+            let map = regex_to_range_map(bindings, re);
+            nfa.add_range_transitions(current, &map, cont);
+        }
     }
 }
 
@@ -115,52 +135,19 @@ fn get_builtin_regex(builtin: &Builtin) -> BuiltinCharRange {
         .unwrap_or_else(|| panic!("Unknown builtin regex: {}", builtin.0))
 }
 
-fn charset_to_range_map(bindings: &Map<Var, Regex>, charset: &CharSet) -> RangeMap<()> {
-    match charset {
-        CharSet::Var(var) => {
-            let re = bindings
-                .get(var)
-                .unwrap_or_else(|| panic!("Unbound variable {:?}", var.0));
-
-            regex_to_range_map(bindings, re)
-        }
-
-        CharSet::Char(char) => {
-            let mut map = RangeMap::new();
-            map.insert(*char as u32, *char as u32, (), merge_values);
-            map
-        }
-
-        CharSet::Range(range_start, range_end) => {
-            let mut map = RangeMap::new();
-            map.insert(*range_start as u32, *range_end as u32, (), merge_values);
-            map
-        }
-
-        CharSet::Or(charset1, charset2) => {
-            let mut map1 = charset_to_range_map(bindings, charset1);
-            let map2 = charset_to_range_map(bindings, charset2);
-
-            for range in map2.into_iter() {
-                map1.insert(range.start, range.end, range.value, merge_values);
-            }
-
-            map1
-        }
-
-        CharSet::Diff(charset1, charset2) => {
-            let mut map1 = charset_to_range_map(bindings, charset1);
-            let map2 = charset_to_range_map(bindings, charset2);
-
-            map1.remove_ranges(&map2);
-
-            map1
-        }
-    }
-}
-
 fn regex_to_range_map(bindings: &Map<Var, Regex>, re: &Regex) -> RangeMap<()> {
     match re {
+        Regex::Builtin(builtin) => {
+            let mut map = RangeMap::new();
+
+            let builtin = get_builtin_regex(builtin);
+
+            for (range_start, range_end) in builtin.get_ranges() {
+                map.insert(*range_start, *range_end, (), merge_values);
+            }
+            map
+        }
+
         Regex::Var(var) => {
             let re = bindings
                 .get(var)
@@ -169,31 +156,72 @@ fn regex_to_range_map(bindings: &Map<Var, Regex>, re: &Regex) -> RangeMap<()> {
             regex_to_range_map(bindings, re)
         }
 
-        Regex::Builtin(builtin_name) => {
-            let builtin = get_builtin_regex(builtin_name);
+        Regex::Char(char) => {
+            let mut map = RangeMap::new();
+            map.insert(*char as u32, *char as u32, (), merge_values);
+            map
+        }
 
+        Regex::String(_) => panic!("strings cannot be used in char sets (`#`)"),
+
+        Regex::CharSet(char_set) => {
             let mut map = RangeMap::new();
 
-            // TODO: Quadratic behavior below, `RangeMap::insert` is O(number of ranges).
-            for (range_start, range_end) in builtin.get_ranges() {
-                map.insert(*range_start, *range_end, (), merge_values);
+            for char_or_range in char_set.0.iter() {
+                match char_or_range {
+                    CharOrRange::Char(char) => {
+                        map.insert(*char as u32, *char as u32, (), merge_values);
+                    }
+                    CharOrRange::Range(start, end) => {
+                        map.insert(*start as u32, *end as u32, (), merge_values);
+                    }
+                }
             }
 
             map
         }
 
-        Regex::CharSet(charset) => charset_to_range_map(bindings, charset),
+        Regex::ZeroOrMore(_) => {
+            panic!("`*` cannot be used in char sets (`#`)");
+        }
 
-        // TODO: Some of the cases below could be handled
-        Regex::Char(char) => panic!("Regex {:?} cannot be converted to charset", char),
-        Regex::String(str) => panic!("Regex {:?} cannot be converted to charset", str),
-        Regex::ZeroOrMore(_) => panic!("Regex with '*' cannot be converted to charset"),
-        Regex::OneOrMore(_) => panic!("Regex with '+' cannot be converted to charset"),
-        Regex::ZeroOrOne(_) => panic!("Regex with '?' cannot be converted to charset"),
-        Regex::Concat(_, _) => panic!("Regex with concatenation cannot be converted to charset"),
-        Regex::Or(_, _) => panic!("Regex with `|` cannot be converted to charset"),
-        Regex::Any => panic!("Regex '_' cannot be converted to charset"),
-        Regex::EndOfInput => panic!("Regex '$' cannot be converted to charset"),
+        Regex::OneOrMore(_) => {
+            panic!("`+` cannot be used in char sets (`#`)");
+        }
+
+        Regex::ZeroOrOne(_) => {
+            panic!("`?` cannot be used in char sets (`#`)");
+        }
+
+        Regex::Concat(_, _) => {
+            panic!("concatenation (`<re1> <re2>`) cannot be used in char sets (`#`)");
+        }
+
+        Regex::Or(re1, re2) => {
+            let mut map1 = regex_to_range_map(bindings, re1);
+            let map2 = regex_to_range_map(bindings, re2);
+
+            for range_2 in map2.into_iter() {
+                map1.insert(range_2.start, range_2.end, (), merge_values);
+            }
+
+            map1
+        }
+
+        Regex::Any => {
+            let mut map = RangeMap::new();
+            map.insert(0, char::MAX as u32, (), merge_values);
+            map
+        }
+
+        Regex::EndOfInput => panic!("`$` cannot be used in char sets (`#`)"),
+
+        Regex::Diff(re1, re2) => {
+            let mut map1 = regex_to_range_map(bindings, re1);
+            let map2 = regex_to_range_map(bindings, re2);
+            map1.remove_ranges(&map2);
+            map1
+        }
     }
 }
 
