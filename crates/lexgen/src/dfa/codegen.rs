@@ -513,7 +513,10 @@ fn generate_rhs_code(ctx: &CgCtx, action: SemanticActionIdx) -> TokenStream {
 fn generate_semantic_action_call(action_fn: &TokenStream) -> TokenStream {
     let map_res = quote!(match res {
         Ok(tok) => Ok((match_start, tok, match_end)),
-        Err(err) => Err(::lexgen_util::LexerError::Custom(err)),
+        Err(err) => Err(::lexgen_util::LexerError {
+            location: self.0.match_loc().0,
+            kind: ::lexgen_util::LexerErrorKind::Custom(err),
+        }),
     });
 
     quote!(match #action_fn(self) {

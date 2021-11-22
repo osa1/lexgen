@@ -1,10 +1,15 @@
 use unicode_width::UnicodeWidthChar;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum LexerError<E> {
-    InvalidToken {
-        location: Loc,
-    },
+pub struct LexerError<E> {
+    pub location: Loc,
+    pub kind: LexerErrorKind<E>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LexerErrorKind<E> {
+    /// Lexer error, raised by lexgen-generated code
+    InvalidToken,
 
     /// Custom error, raised by a semantic action
     Custom(E),
@@ -143,8 +148,9 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
     ) -> Result<for<'lexer> fn(&'lexer mut W) -> SemanticActionResult<Result<T, E>>, LexerError<E>>
     {
         match self.last_match.take() {
-            None => Err(LexerError::InvalidToken {
+            None => Err(LexerError {
                 location: self.current_match_start,
+                kind: LexerErrorKind::InvalidToken,
             }),
             Some((match_start, semantic_action, match_end)) => {
                 self.__done = false;
