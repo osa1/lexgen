@@ -1,7 +1,7 @@
 mod test_utils;
 
 use lexgen::lexer;
-use lexgen_util::{LexerError, Loc};
+use lexgen_util::{LexerError, LexerErrorKind, Loc};
 use test_utils::{loc, next};
 
 use std::convert::TryFrom;
@@ -465,7 +465,10 @@ fn rule_kind_fallible_no_lifetimes() {
     );
     assert!(matches!(
         lexer.next(),
-        Some(Err(::lexgen_util::LexerError::Custom(_)))
+        Some(Err(LexerError {
+            kind: LexerErrorKind::Custom(_),
+            ..
+        }))
     ));
     assert_eq!(lexer.next(), None);
 }
@@ -502,7 +505,10 @@ fn rule_kind_fallible_with_lifetimes() {
     );
     assert!(matches!(
         lexer.next(),
-        Some(Err(::lexgen_util::LexerError::Custom(UserError("blah"))))
+        Some(Err(LexerError {
+            kind: LexerErrorKind::Custom(UserError("blah")),
+            ..
+        }))
     ));
     assert_eq!(lexer.next(), None);
 }
@@ -552,7 +558,10 @@ fn rule_kind_mix() {
     );
     assert!(matches!(
         lexer.next(),
-        Some(Err(::lexgen_util::LexerError::Custom(UserError("blah"))))
+        Some(Err(LexerError {
+            kind: LexerErrorKind::Custom(UserError("blah")),
+            ..
+        }))
     ));
     assert_eq!(lexer.next(), None);
 
@@ -1086,8 +1095,9 @@ fn diff_4() {
     assert_eq!(next(&mut lexer), Some(Ok("// asdf")));
     assert_eq!(
         next(&mut lexer),
-        Some(Err(LexerError::InvalidToken {
-            location: loc(0, 7, 7)
+        Some(Err(LexerError {
+            location: loc(0, 7, 7),
+            kind: LexerErrorKind::InvalidToken,
         }))
     );
 }

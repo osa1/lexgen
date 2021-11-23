@@ -1,7 +1,7 @@
 mod test_utils;
 
 use lexgen::lexer;
-use lexgen_util::LexerError;
+use lexgen_util::{LexerError, LexerErrorKind};
 use test_utils::{loc, next};
 
 #[test]
@@ -342,8 +342,9 @@ fn empty_rule_simpification_issue_27() {
     // This used to return `Some("wat")` with the bug
     assert_eq!(
         next(&mut lexer),
-        Some(Err(LexerError::InvalidToken {
-            location: loc(0, 0, 0)
+        Some(Err(LexerError {
+            location: loc(0, 0, 0),
+            kind: LexerErrorKind::InvalidToken,
         }))
     );
 }

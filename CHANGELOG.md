@@ -5,6 +5,40 @@
   "character sets", i.e. `*`, `+`, `?`, `"..."`, `$`, and concatenation are not
   allowed.
 
+- **Breaking change:** `LexerError` type is refactored to add location
+  information to all errors, not just `InvalidToken`. Previously the type was:
+
+  ```rust
+  #[derive(Debug, Clone, PartialEq, Eq)]
+  pub enum LexerError<E> {
+      InvalidToken {
+          location: Loc,
+      },
+  
+      /// Custom error, raised by a semantic action
+      Custom(E),
+  }
+  ```
+
+  with this change, it is now:
+
+  ```rust
+  #[derive(Debug, Clone, PartialEq, Eq)]
+  pub struct LexerError<E> {
+      pub location: Loc,
+      pub kind: LexerErrorKind<E>,
+  }
+  
+  #[derive(Debug, Clone, PartialEq, Eq)]
+  pub enum LexerErrorKind<E> {
+      /// Lexer error, raised by lexgen-generated code
+      InvalidToken,
+  
+      /// Custom error, raised by a semantic action
+      Custom(E),
+  }
+  ```
+
 # 2021/11/30: 0.8.1
 
 New version published to fix broken README pages for lexgen and lexgen_util in
