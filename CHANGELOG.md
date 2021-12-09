@@ -14,7 +14,7 @@
       InvalidToken {
           location: Loc,
       },
-  
+
       /// Custom error, raised by a semantic action
       Custom(E),
   }
@@ -28,12 +28,12 @@
       pub location: Loc,
       pub kind: LexerErrorKind<E>,
   }
-  
+
   #[derive(Debug, Clone, PartialEq, Eq)]
   pub enum LexerErrorKind<E> {
       /// Lexer error, raised by lexgen-generated code
       InvalidToken,
-  
+
       /// Custom error, raised by a semantic action
       Custom(E),
   }
