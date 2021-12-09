@@ -64,7 +64,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                     panic!("Variable {:?} is defined multiple times", entry.key().0);
                 }
                 Entry::Vacant(entry) => {
-                    entry.insert(re);
+                    entry.insert(re.re);
                 }
             },
             Rule::RuleSet { name, rules } => {
@@ -74,7 +74,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                     }
                     let mut nfa: NFA<SemanticActionIdx> = NFA::new();
                     for SingleRule { lhs, rhs } in rules {
-                        nfa.add_regex(&bindings, &lhs, rhs);
+                        nfa.add_regex(&bindings, &lhs.re, rhs);
                     }
 
                     // println!("NFA=\n{}", nfa);
@@ -96,7 +96,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                     let mut nfa: NFA<SemanticActionIdx> = NFA::new();
 
                     for SingleRule { lhs, rhs } in rules {
-                        nfa.add_regex(&bindings, &lhs, rhs);
+                        nfa.add_regex(&bindings, &lhs.re, rhs);
                     }
 
                     // println!("NFA=\n{}", nfa);
@@ -122,7 +122,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
 
                 let mut nfa: NFA<SemanticActionIdx> = NFA::new();
                 for SingleRule { lhs, rhs } in rules {
-                    nfa.add_regex(&bindings, &lhs, rhs);
+                    nfa.add_regex(&bindings, &lhs.re, rhs);
                 }
 
                 // println!("NFA=\n{}", nfa);

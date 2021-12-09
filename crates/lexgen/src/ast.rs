@@ -22,7 +22,7 @@ pub struct Lexer {
 
 pub enum Rule {
     /// `let <ident> = <regex>;`
-    Binding { var: Var, re: Regex },
+    Binding { var: Var, re: RegexCtx },
 
     /// `type Error = UserError;`
     ErrorType {
@@ -41,8 +41,15 @@ pub enum Rule {
 }
 
 pub struct SingleRule {
-    pub lhs: Regex,
+    pub lhs: RegexCtx,
     pub rhs: SemanticActionIdx,
+}
+
+/// Regular expression with optional right context (lookahead)
+#[derive(Debug, Clone)]
+pub struct RegexCtx {
+    pub re: Regex,
+    pub right_ctx: Option<Regex>,
 }
 
 #[derive(Debug, Clone)]
@@ -135,13 +142,30 @@ pub enum CharOrRange {
     Range(char, char),
 }
 
-/// Parses a regex terminated with: `=>` (used in rules with RHSs), `,` (used in rules without
-/// RHSs), or `;` (used in let bindings)
+/// Parses a regex with optional right context: `re_ctx -> re [> re]`
+fn parse_regex_ctx(input: ParseStream) -> syn::Result<RegexCtx> {
+    let re = parse_regex(input)?;
+    if input.peek(syn::token::Gt) {
+        input.parse::<syn::token::Gt>()?;
+        let right_ctx = parse_regex(input)?;
+        Ok(RegexCtx {
+            re,
+            right_ctx: Some(right_ctx),
+        })
+    } else {
+        Ok(RegexCtx {
+            re,
+            right_ctx: None,
+        })
+    }
+}
+
+/// Parses a regex
 fn parse_regex(input: ParseStream) -> syn::Result<Regex> {
     parse_regex_0(input)
 }
 
-// re_0 -> re_1 | re_1 `|` re_1 (alternation)
+// re_0 -> re_1 | re_0 `|` re_1 (alternation)
 fn parse_regex_0(input: ParseStream) -> syn::Result<Regex> {
     let mut re = parse_regex_1(input)?;
 
@@ -154,7 +178,7 @@ fn parse_regex_0(input: ParseStream) -> syn::Result<Regex> {
     Ok(re)
 }
 
-// re_1 -> re_2 | re_2 re_2
+// re_1 -> re_2 | re_1 re_2 (concatenation)
 fn parse_regex_1(input: ParseStream) -> syn::Result<Regex> {
     let mut re = parse_regex_2(input)?;
 
@@ -213,7 +237,7 @@ fn parse_regex_4(input: ParseStream) -> syn::Result<Regex> {
     if input.peek(syn::token::Paren) {
         let parenthesized;
         syn::parenthesized!(parenthesized in input);
-        parse_regex(&parenthesized)
+        parse_regex(&parenthesized) // no right ctx
     } else if input.peek(syn::token::Dollar) {
         let _ = input.parse::<syn::token::Dollar>()?;
         if input.parse::<syn::token::Dollar>().is_ok() {
@@ -269,7 +293,7 @@ fn parse_single_rule(
     input: ParseStream,
     semantic_action_table: &mut SemanticActionTable,
 ) -> syn::Result<SingleRule> {
-    let lhs = parse_regex(input)?;
+    let lhs = parse_regex_ctx(input)?;
 
     let rhs = if input.parse::<syn::token::Comma>().is_ok() {
         RuleRhs::None
@@ -308,7 +332,7 @@ fn parse_rule(
         input.parse::<syn::token::Let>()?;
         let var = input.parse::<syn::Ident>()?;
         input.parse::<syn::token::Eq>()?;
-        let re = parse_regex(input)?;
+        let re = parse_regex_ctx(input)?;
         input.parse::<syn::token::Semi>()?;
         Ok(Rule::Binding {
             var: Var(var.to_string()),
