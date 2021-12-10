@@ -83,8 +83,18 @@ impl<A: Copy> DFA<StateIdx, A> {
                 // Check for accepting state
                 state = next;
                 if let Some(AcceptingState { value, right_ctx }) = &self.states[state.0].accepting {
-                    values.push((&input[match_start..], *value));
-                    break; // 'outer
+                    match right_ctx {
+                        None => {
+                            values.push((&input[match_start..], *value));
+                            break; // 'outer
+                        }
+                        Some(RightCtx { init, accept }) => {
+                            if simulate_right_ctx(self, *init, *accept, char_indices.clone()) {
+                                values.push((&input[match_start..], *value));
+                                break; // 'outer
+                            }
+                        }
+                    }
                 }
             }
 

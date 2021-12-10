@@ -72,6 +72,7 @@ impl<A: std::fmt::Debug + Copy> NFA<A> {
                                 None => {
                                     last_match =
                                         Some((match_start, *value, char_idx + char.len_utf8()));
+                                    break;
                                 }
                                 Some(RightCtx { init, accept }) => {
                                     if simulate_right_ctx(
@@ -82,11 +83,10 @@ impl<A: std::fmt::Debug + Copy> NFA<A> {
                                     ) {
                                         last_match =
                                             Some((match_start, *value, char_idx + char.len_utf8()));
+                                        break;
                                     }
                                 }
                             }
-
-                            break;
                         }
                     }
                 }
@@ -106,15 +106,15 @@ impl<A: std::fmt::Debug + Copy> NFA<A> {
                         match right_ctx {
                             None => {
                                 values.push((&input[match_start..], *value));
+                                break 'outer;
                             }
                             Some(RightCtx { init, accept }) => {
                                 if simulate_right_ctx(self, *init, *accept, char_indices.clone()) {
                                     values.push((&input[match_start..], *value));
+                                    break 'outer;
                                 }
                             }
                         }
-
-                        break 'outer;
                     }
                 }
             }

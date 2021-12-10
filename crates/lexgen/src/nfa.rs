@@ -256,10 +256,22 @@ impl<A> Display for NFA<A> {
                 accepting,
             } = state;
 
-            if accepting.is_some() {
-                write!(f, "{:>4}", format!("*{}", state_idx))?;
-            } else {
-                write!(f, "{:>4}:", state_idx)?;
+            match accepting {
+                Some(AcceptingState {
+                    value: _,
+                    right_ctx,
+                }) => match right_ctx {
+                    Some(RightCtx { init, accept }) => {
+                        write!(f, "{:>4}", format!("*{}", state_idx),)?;
+                        write!(f, " (ctx init={}, accept={})", init.0, accept.0)?;
+                    }
+                    None => {
+                        write!(f, "{:>4}", format!("*{}", state_idx))?;
+                    }
+                },
+                None => {
+                    write!(f, "{:>4}:", state_idx)?;
+                }
             }
 
             let mut first = true;
