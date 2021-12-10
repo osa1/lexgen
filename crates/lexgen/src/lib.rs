@@ -74,7 +74,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                     }
                     let mut nfa: NFA<SemanticActionIdx> = NFA::new();
                     for SingleRule { lhs, rhs } in rules {
-                        nfa.add_regex(&bindings, &lhs.re, rhs);
+                        nfa.add_regex(&bindings, &lhs.re, lhs.right_ctx.as_ref(), rhs);
                     }
 
                     // println!("NFA=\n{}", nfa);
@@ -96,7 +96,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                     let mut nfa: NFA<SemanticActionIdx> = NFA::new();
 
                     for SingleRule { lhs, rhs } in rules {
-                        nfa.add_regex(&bindings, &lhs.re, rhs);
+                        nfa.add_regex(&bindings, &lhs.re, lhs.right_ctx.as_ref(), rhs);
                     }
 
                     // println!("NFA=\n{}", nfa);
@@ -122,7 +122,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
 
                 let mut nfa: NFA<SemanticActionIdx> = NFA::new();
                 for SingleRule { lhs, rhs } in rules {
-                    nfa.add_regex(&bindings, &lhs.re, rhs);
+                    nfa.add_regex(&bindings, &lhs.re, lhs.right_ctx.as_ref(), rhs);
                 }
 
                 // println!("NFA=\n{}", nfa);

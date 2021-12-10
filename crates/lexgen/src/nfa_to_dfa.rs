@@ -52,8 +52,8 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<DfaStateIdx, A> {
         let mut end_of_input_transitions: Set<NfaStateIdx> = Default::default();
 
         for nfa_state in current_nfa_states.iter().copied() {
-            if let Some(value) = nfa.get_accepting_state(nfa_state) {
-                dfa.make_state_accepting(current_dfa_state, value.clone());
+            if let Some(accepting_state) = nfa.get_accepting_state(nfa_state) {
+                dfa.make_state_accepting(current_dfa_state, accepting_state.value.clone());
             }
 
             // Collect char transitions

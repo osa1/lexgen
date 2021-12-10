@@ -1,4 +1,4 @@
-use super::{StateIdx, NFA};
+use super::{AcceptingState, RightCtx, StateIdx, NFA};
 use crate::collections::Set;
 
 pub type Matches<'input, A> = Vec<(&'input str, A)>;
@@ -65,8 +65,27 @@ impl<A: std::fmt::Debug + Copy> NFA<A> {
                     let mut states_sorted: Vec<StateIdx> = states.iter().copied().collect();
                     states_sorted.sort();
                     for state in states_sorted {
-                        if let Some(value) = self.states[state.0].accepting {
-                            last_match = Some((match_start, value, char_idx + char.len_utf8()));
+                        if let Some(AcceptingState { value, right_ctx }) =
+                            &self.states[state.0].accepting
+                        {
+                            match right_ctx {
+                                None => {
+                                    last_match =
+                                        Some((match_start, *value, char_idx + char.len_utf8()));
+                                }
+                                Some(RightCtx { init, accept }) => {
+                                    if simulate_right_ctx(
+                                        self,
+                                        *init,
+                                        *accept,
+                                        char_indices.clone(),
+                                    ) {
+                                        last_match =
+                                            Some((match_start, *value, char_idx + char.len_utf8()));
+                                    }
+                                }
+                            }
+
                             break;
                         }
                     }
@@ -81,8 +100,20 @@ impl<A: std::fmt::Debug + Copy> NFA<A> {
                 states_sorted.sort();
 
                 for state in states_sorted {
-                    if let Some(value) = self.states[state.0].accepting {
-                        values.push((&input[match_start..], value));
+                    if let Some(AcceptingState { value, right_ctx }) =
+                        &self.states[state.0].accepting
+                    {
+                        match right_ctx {
+                            None => {
+                                values.push((&input[match_start..], *value));
+                            }
+                            Some(RightCtx { init, accept }) => {
+                                if simulate_right_ctx(self, *init, *accept, char_indices.clone()) {
+                                    values.push((&input[match_start..], *value));
+                                }
+                            }
+                        }
+
                         break 'outer;
                     }
                 }
@@ -147,4 +178,31 @@ fn next_end_of_input<A>(nfa: &NFA<A>, states: &Set<StateIdx>) -> Set<StateIdx> {
     }
 
     nfa.compute_state_closure(&next_states)
+}
+
+// Similar to `simulate`, but does not keep track of the last match as we don't need "longest
+// match" semantics and backtracking
+fn simulate_right_ctx<A>(
+    nfa: &NFA<A>,
+    init: StateIdx,
+    accept: StateIdx,
+    mut char_indices: std::str::CharIndices,
+) -> bool {
+    if init == accept {
+        return true;
+    }
+
+    let mut states: Set<StateIdx> = Default::default();
+    states.insert(init);
+
+    while let Some((_, char)) = char_indices.next() {
+        states = next(nfa, &states, char);
+        if states.contains(&accept) {
+            return true;
+        }
+    }
+
+    states = next_end_of_input(nfa, &states);
+
+    states.contains(&accept)
 }

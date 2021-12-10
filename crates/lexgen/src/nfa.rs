@@ -24,7 +24,19 @@ struct State<A> {
     empty_transitions: Set<StateIdx>,
     any_transitions: Set<StateIdx>,
     end_of_input_transitions: Set<StateIdx>,
-    accepting: Option<A>,
+    accepting: Option<AcceptingState<A>>,
+}
+
+#[derive(Debug)]
+pub struct AcceptingState<A> {
+    pub value: A,
+    pub right_ctx: Option<RightCtx>,
+}
+
+#[derive(Debug)]
+pub struct RightCtx {
+    pub init: StateIdx,
+    pub accept: StateIdx,
 }
 
 impl<A> State<A> {
@@ -51,7 +63,7 @@ impl<A> NFA<A> {
         StateIdx(0)
     }
 
-    pub fn get_accepting_state(&self, state: StateIdx) -> Option<&A> {
+    pub fn get_accepting_state(&self, state: StateIdx) -> Option<&AcceptingState<A>> {
         self.states[state.0].accepting.as_ref()
     }
 
@@ -86,16 +98,30 @@ impl<A> NFA<A> {
         new_state_idx
     }
 
-    pub fn add_regex(&mut self, bindings: &Map<Var, Regex>, re: &Regex, value: A) {
+    pub fn add_regex(
+        &mut self,
+        bindings: &Map<Var, Regex>,
+        re: &Regex,
+        right_ctx: Option<&Regex>,
+        value: A,
+    ) {
         let re_accepting_state = self.new_state();
-        self.make_state_accepting(re_accepting_state, value);
+
+        let right_ctx = right_ctx.map(|right_ctx_re| {
+            let init = self.new_state();
+            let accept = self.new_state();
+            regex_to_nfa::add_re(self, bindings, right_ctx_re, init, accept);
+            RightCtx { init, accept }
+        });
+
+        self.make_state_accepting(re_accepting_state, value, right_ctx);
 
         let re_initial_state = self.new_state();
         let nfa_initial_state = self.initial_state();
 
-        regex_to_nfa::add_re(self, bindings, re, re_initial_state, re_accepting_state);
-
         self.add_empty_transition(nfa_initial_state, re_initial_state);
+
+        regex_to_nfa::add_re(self, bindings, re, re_initial_state, re_accepting_state);
     }
 
     pub fn add_char_transition(&mut self, state: StateIdx, char: char, next: StateIdx) {
@@ -156,9 +182,12 @@ impl<A> NFA<A> {
         assert!(not_exists, "add_end_of_input_transition");
     }
 
-    fn make_state_accepting(&mut self, state: StateIdx, value: A) {
-        // TODO: Avoid overriding here?
-        self.states[state.0].accepting = Some(value);
+    fn make_state_accepting(&mut self, state: StateIdx, value: A, right_ctx: Option<RightCtx>) {
+        let old = self.states[state.0]
+            .accepting
+            .replace(AcceptingState { value, right_ctx });
+
+        assert!(old.is_none(), "make_state_accepting");
     }
 
     pub fn compute_state_closure(&self, states: &Set<StateIdx>) -> Set<StateIdx> {

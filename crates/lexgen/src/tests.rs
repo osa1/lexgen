@@ -43,10 +43,11 @@ fn simulate_backtracking() {
             Box::new(Regex::OneOrMore(Box::new(Regex::Char('a')))),
             Box::new(Regex::Char('b')),
         ),
+        None,
         1,
     );
 
-    nfa.add_regex(&Default::default(), &Regex::Char('a'), 2);
+    nfa.add_regex(&Default::default(), &Regex::Char('a'), None, 2);
 
     test_simulate(
         &nfa,
@@ -62,9 +63,24 @@ fn simulate_backtracking() {
 fn issue_16() {
     let mut nfa: NFA<usize> = NFA::new();
 
-    nfa.add_regex(&Default::default(), &Regex::String("xyzxyz".to_owned()), 1);
-    nfa.add_regex(&Default::default(), &Regex::String("xyz".to_owned()), 2);
-    nfa.add_regex(&Default::default(), &Regex::String("xya".to_owned()), 3);
+    nfa.add_regex(
+        &Default::default(),
+        &Regex::String("xyzxyz".to_owned()),
+        None,
+        1,
+    );
+    nfa.add_regex(
+        &Default::default(),
+        &Regex::String("xyz".to_owned()),
+        None,
+        2,
+    );
+    nfa.add_regex(
+        &Default::default(),
+        &Regex::String("xya".to_owned()),
+        None,
+        3,
+    );
 
     test_simulate(
         &nfa,
@@ -85,7 +101,12 @@ fn stuck_1() {
 fn stuck_2() {
     let mut nfa: NFA<usize> = NFA::new();
 
-    nfa.add_regex(&Default::default(), &Regex::String("ab".to_owned()), 1);
+    nfa.add_regex(
+        &Default::default(),
+        &Regex::String("ab".to_owned()),
+        None,
+        1,
+    );
 
     test_simulate(&nfa, vec![("aba", vec![("ab", 1)], Some(2))]);
 }
@@ -94,8 +115,13 @@ fn stuck_2() {
 fn stuck_3() {
     let mut nfa: NFA<usize> = NFA::new();
 
-    nfa.add_regex(&Default::default(), &Regex::String("aaab".to_owned()), 1);
-    nfa.add_regex(&Default::default(), &Regex::String("a".to_owned()), 2);
+    nfa.add_regex(
+        &Default::default(),
+        &Regex::String("aaab".to_owned()),
+        None,
+        1,
+    );
+    nfa.add_regex(&Default::default(), &Regex::String("a".to_owned()), None, 2);
 
     test_simulate(&nfa, vec![("aaabb", vec![("aaab", 1)], Some(4))]);
 }
@@ -104,7 +130,7 @@ fn stuck_3() {
 fn simulate_char() {
     let re = Regex::Char('a');
     let mut nfa: NFA<usize> = NFA::new();
-    nfa.add_regex(&Default::default(), &re, 1);
+    nfa.add_regex(&Default::default(), &re, None, 1);
 
     test_simulate(
         &nfa,
@@ -119,7 +145,7 @@ fn simulate_char() {
 fn simulate_string() {
     let re = Regex::String("ab".to_owned());
     let mut nfa: NFA<usize> = NFA::new();
-    nfa.add_regex(&Default::default(), &re, 1);
+    nfa.add_regex(&Default::default(), &re, None, 1);
 
     test_simulate(
         &nfa,
@@ -138,7 +164,7 @@ fn simulate_char_set_char() {
         CharOrRange::Char('b'),
     ]));
     let mut nfa: NFA<usize> = NFA::new();
-    nfa.add_regex(&Default::default(), &re, 1);
+    nfa.add_regex(&Default::default(), &re, None, 1);
 
     test_simulate(
         &nfa,
@@ -159,7 +185,7 @@ fn simulate_char_set_range() {
         CharOrRange::Range('0', '9'),
     ]));
     let mut nfa: NFA<usize> = NFA::new();
-    nfa.add_regex(&Default::default(), &re, 1);
+    nfa.add_regex(&Default::default(), &re, None, 1);
 
     test_simulate(
         &nfa,
@@ -171,7 +197,7 @@ fn simulate_char_set_range() {
 fn simulate_zero_or_more() {
     let re = Regex::ZeroOrMore(Box::new(Regex::Char('a')));
     let mut nfa: NFA<usize> = NFA::new();
-    nfa.add_regex(&Default::default(), &re, 1);
+    nfa.add_regex(&Default::default(), &re, None, 1);
 
     test_simulate(
         &nfa,
@@ -189,7 +215,7 @@ fn simulate_zero_or_more() {
 fn simulate_one_or_more() {
     let re = Regex::OneOrMore(Box::new(Regex::Char('a')));
     let mut nfa: NFA<usize> = NFA::new();
-    nfa.add_regex(&Default::default(), &re, 1);
+    nfa.add_regex(&Default::default(), &re, None, 1);
 
     test_simulate(
         &nfa,
@@ -206,7 +232,7 @@ fn simulate_one_or_more() {
 fn simulate_zero_or_one() {
     let re = Regex::ZeroOrOne(Box::new(Regex::Char('a')));
     let mut nfa: NFA<usize> = NFA::new();
-    nfa.add_regex(&Default::default(), &re, 1);
+    nfa.add_regex(&Default::default(), &re, None, 1);
 
     test_simulate(
         &nfa,
@@ -223,7 +249,7 @@ fn simulate_zero_or_one() {
 fn simulate_concat() {
     let re = Regex::Concat(Box::new(Regex::Char('a')), Box::new(Regex::Char('b')));
     let mut nfa: NFA<usize> = NFA::new();
-    nfa.add_regex(&Default::default(), &re, 1);
+    nfa.add_regex(&Default::default(), &re, None, 1);
 
     test_simulate(
         &nfa,
@@ -239,7 +265,7 @@ fn simulate_concat() {
 fn simulate_or() {
     let re = Regex::Or(Box::new(Regex::Char('a')), Box::new(Regex::Char('b')));
     let mut nfa: NFA<usize> = NFA::new();
-    nfa.add_regex(&Default::default(), &re, 1);
+    nfa.add_regex(&Default::default(), &re, None, 1);
 
     test_simulate(
         &nfa,
@@ -258,7 +284,7 @@ fn simulate_or_one_or_more_char() {
         Box::new(Regex::Char('b')),
     );
     let mut nfa: NFA<usize> = NFA::new();
-    nfa.add_regex(&Default::default(), &re, 1);
+    nfa.add_regex(&Default::default(), &re, None, 1);
 
     test_simulate(
         &nfa,
@@ -275,8 +301,8 @@ fn simulate_multiple_accepting_states_1() {
     let re1 = Regex::String("aaaa".to_owned());
     let re2 = Regex::String("aaab".to_owned());
     let mut nfa: NFA<usize> = NFA::new();
-    nfa.add_regex(&Default::default(), &re1, 1);
-    nfa.add_regex(&Default::default(), &re2, 2);
+    nfa.add_regex(&Default::default(), &re1, None, 1);
+    nfa.add_regex(&Default::default(), &re2, None, 2);
 
     test_simulate(
         &nfa,
@@ -296,8 +322,8 @@ fn multiple_accepting_states_2() {
     );
     let re2 = Regex::CharSet(CharSet(vec![CharOrRange::Range('0', '9')]));
     let mut nfa: NFA<usize> = NFA::new();
-    nfa.add_regex(&Default::default(), &re1, 1);
-    nfa.add_regex(&Default::default(), &re2, 2);
+    nfa.add_regex(&Default::default(), &re1, None, 1);
+    nfa.add_regex(&Default::default(), &re2, None, 2);
 
     test_simulate(
         &nfa,
@@ -334,7 +360,7 @@ fn simulate_variables() {
         ))))),
     );
     let mut nfa: NFA<usize> = NFA::new();
-    nfa.add_regex(&bindings, &re, 1);
+    nfa.add_regex(&bindings, &re, None, 1);
 
     test_simulate(
         &nfa,
@@ -355,7 +381,7 @@ fn zero_or_more_concat_confusion_1() {
         Box::new(Regex::Char('a')),
     );
 
-    nfa.add_regex(&Default::default(), &re, 1);
+    nfa.add_regex(&Default::default(), &re, None, 1);
 
     test_simulate(
         &nfa,
@@ -372,7 +398,7 @@ fn zero_or_more_concat_confusion_2() {
         Box::new(Regex::String("ab".to_owned())),
     );
 
-    nfa.add_regex(&Default::default(), &re, 1);
+    nfa.add_regex(&Default::default(), &re, None, 1);
 
     test_simulate(
         &nfa,
@@ -395,7 +421,7 @@ fn zero_or_more_concat_confusion_3() {
         Box::new(Regex::Char('a')),
     );
 
-    nfa.add_regex(&Default::default(), &re, 1);
+    nfa.add_regex(&Default::default(), &re, None, 1);
 
     test_simulate(
         &nfa,
@@ -411,8 +437,13 @@ fn zero_or_more_concat_confusion_3() {
 fn simulate_any_1() {
     let mut nfa: NFA<usize> = NFA::new();
 
-    nfa.add_regex(&Default::default(), &Regex::String("ab".to_owned()), 1);
-    nfa.add_regex(&Default::default(), &Regex::Any, 2);
+    nfa.add_regex(
+        &Default::default(),
+        &Regex::String("ab".to_owned()),
+        None,
+        1,
+    );
+    nfa.add_regex(&Default::default(), &Regex::Any, None, 2);
 
     test_simulate(
         &nfa,
@@ -437,6 +468,7 @@ fn simulate_any_2() {
                 Box::new(Regex::Char('\'')),
             )),
         ),
+        None,
         1,
     );
 
@@ -460,6 +492,7 @@ fn simulate_end_of_input_1() {
                 )),
             )),
         ),
+        None,
         1,
     );
 
@@ -477,10 +510,11 @@ fn simulate_end_of_input_1() {
 fn simulate_end_of_input_2() {
     let mut nfa: NFA<usize> = NFA::new();
 
-    nfa.add_regex(&Default::default(), &Regex::EndOfInput, 1);
+    nfa.add_regex(&Default::default(), &Regex::EndOfInput, None, 1);
     nfa.add_regex(
         &Default::default(),
         &Regex::ZeroOrMore(Box::new(Regex::Any)),
+        None,
         2,
     );
 
@@ -492,9 +526,24 @@ fn simulate_end_of_input_2() {
 fn simulate_multiple_accepting_states_3() {
     let mut nfa: NFA<usize> = NFA::new();
 
-    nfa.add_regex(&Default::default(), &Regex::String("aaa".to_owned()), 1);
-    nfa.add_regex(&Default::default(), &Regex::String("aaa".to_owned()), 2);
-    nfa.add_regex(&Default::default(), &Regex::String("aa".to_owned()), 3);
+    nfa.add_regex(
+        &Default::default(),
+        &Regex::String("aaa".to_owned()),
+        None,
+        1,
+    );
+    nfa.add_regex(
+        &Default::default(),
+        &Regex::String("aaa".to_owned()),
+        None,
+        2,
+    );
+    nfa.add_regex(
+        &Default::default(),
+        &Regex::String("aa".to_owned()),
+        None,
+        3,
+    );
 
     test_simulate(
         &nfa,
@@ -509,12 +558,18 @@ fn simulate_multiple_accepting_states_3() {
 fn range_and_char_confusion() {
     let mut nfa: NFA<usize> = NFA::new();
 
-    nfa.add_regex(&Default::default(), &Regex::String("ab".to_owned()), 1);
+    nfa.add_regex(
+        &Default::default(),
+        &Regex::String("ab".to_owned()),
+        None,
+        1,
+    );
     nfa.add_regex(
         &Default::default(),
         &Regex::OneOrMore(Box::new(Regex::CharSet(CharSet(vec![CharOrRange::Range(
             'a', 'z',
         )])))),
+        None,
         2,
     );
 
@@ -534,6 +589,7 @@ fn overlapping_ranges() {
             Box::new(Regex::CharSet(CharSet(vec![CharOrRange::Range('a', 'b')]))),
             Box::new(Regex::Char('1')),
         ),
+        None,
         1,
     );
     nfa.add_regex(
@@ -542,6 +598,7 @@ fn overlapping_ranges() {
             Box::new(Regex::CharSet(CharSet(vec![CharOrRange::Range('a', 'c')]))),
             Box::new(Regex::Char('2')),
         ),
+        None,
         2,
     );
 
