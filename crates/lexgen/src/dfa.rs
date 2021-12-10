@@ -32,7 +32,7 @@ impl StateIdx {
 #[derive(Debug)]
 pub struct State<T, A> {
     // Is this the initial state of a rule set? This is important as failure transitions in initial
-    // states consume the current character, but failure transitions in other states don't.
+    // states consume the current character, but failure transitions in other states don't. (#12)
     initial: bool,
     char_transitions: Map<char, T>,
     range_transitions: RangeMap<T>,
