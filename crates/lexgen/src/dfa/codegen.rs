@@ -8,6 +8,7 @@ use super::{State, StateIdx, DFA};
 
 use crate::ast::{RuleKind, RuleRhs};
 use crate::collections::Map;
+use crate::nfa::{AcceptingState, RightCtx};
 use crate::range_map::RangeMap;
 use crate::semantic_action_table::{SemanticActionIdx, SemanticActionTable};
 
@@ -306,7 +307,7 @@ fn generate_state_arm(
 
     let end_of_input_action = match end_of_input_transition {
         Some(end_of_input_transition) => match end_of_input_transition {
-            Trans::Accept(action) => generate_rhs_code(ctx, *action),
+            Trans::Accept(AcceptingState { value, right_ctx }) => generate_rhs_code(ctx, *value),
             Trans::Trans(next_state) => {
                 let StateIdx(next_state) = ctx.renumber_state(*next_state);
                 quote!(self.0.__state = #next_state;)
@@ -338,9 +339,9 @@ fn generate_state_arm(
                 }
             }
         )
-    } else if let Some(rhs) = accepting {
+    } else if let Some(AcceptingState { value, right_ctx }) = accepting {
         // Accepting state
-        let semantic_fn = ctx.semantic_action_fn_ident(*rhs);
+        let semantic_fn = ctx.semantic_action_fn_ident(*value);
 
         quote!(
             self.0.set_accepting_state(#semantic_fn);
@@ -386,7 +387,7 @@ fn generate_any_transition(
             }
         }
 
-        Trans::Accept(action) => generate_rhs_code(ctx, *action),
+        Trans::Accept(AcceptingState { value, right_ctx }) => generate_rhs_code(ctx, *value),
     };
 
     quote!(
@@ -411,8 +412,8 @@ fn generate_state_char_arms(
     let mut state_chars: Map<StateIdx, Vec<char>> = Default::default();
     for (char, next) in char_transitions {
         match next {
-            Trans::Accept(action) => {
-                let action_code = generate_rhs_code(ctx, *action);
+            Trans::Accept(AcceptingState { value, right_ctx }) => {
+                let action_code = generate_rhs_code(ctx, *value);
                 state_char_arms.push(quote!(
                     #char => {
                         #action_code
@@ -445,13 +446,13 @@ fn generate_state_char_arms(
     // Add range transitions. Same as above, use chain of "or"s for ranges with same transition.
     let mut state_ranges: Map<StateIdx, Vec<(char, char)>> = Default::default();
     for range in range_transitions.iter() {
-        match range.value {
-            Trans::Trans(state_idx) => state_ranges.entry(state_idx).or_default().push((
+        match &range.value {
+            Trans::Trans(state_idx) => state_ranges.entry(*state_idx).or_default().push((
                 char::try_from(range.start).unwrap(),
                 char::try_from(range.end).unwrap(),
             )),
-            Trans::Accept(action) => {
-                let action_code = generate_rhs_code(ctx, action);
+            Trans::Accept(AcceptingState { value, right_ctx }) => {
+                let action_code = generate_rhs_code(ctx, *value);
                 let range_start = char::from_u32(range.start).unwrap();
                 let range_end = char::from_u32(range.end).unwrap();
                 state_char_arms.push(quote!(

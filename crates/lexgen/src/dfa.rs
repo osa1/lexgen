@@ -5,6 +5,7 @@ pub mod simplify;
 pub mod simulate;
 
 use crate::collections::{Map, Set};
+use crate::nfa::{AcceptingState, RightCtx};
 use crate::range_map::{Range, RangeMap};
 
 use std::convert::TryFrom;
@@ -38,7 +39,7 @@ pub struct State<T, A> {
     range_transitions: RangeMap<T>,
     any_transition: Option<T>,
     end_of_input_transition: Option<T>,
-    accepting: Option<A>,
+    accepting: Option<AcceptingState<A, StateIdx>>,
     // Predecessors of the state, used to inline code for a state with one predecessor in the
     // predecessor's code
     predecessors: Set<StateIdx>,
@@ -81,11 +82,11 @@ impl<A> DFA<StateIdx, A> {
         StateIdx(0)
     }
 
-    pub fn make_state_accepting(&mut self, state: StateIdx, value: A) {
+    pub fn make_state_accepting(&mut self, state: StateIdx, accept: AcceptingState<A, StateIdx>) {
         // Give first rule priority
         let accepting = &mut self.states[state.0].accepting;
         if accepting.is_none() {
-            *accepting = Some(value);
+            *accepting = Some(accept);
         }
     }
 

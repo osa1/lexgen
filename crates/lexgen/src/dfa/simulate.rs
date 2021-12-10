@@ -1,6 +1,7 @@
 use super::{StateIdx, DFA};
 
 pub use crate::nfa::simulate::{ErrorLoc, Matches};
+use crate::nfa::{AcceptingState, RightCtx};
 use crate::range_map::Range;
 
 impl<A: Copy> DFA<StateIdx, A> {
@@ -52,8 +53,26 @@ impl<A: Copy> DFA<StateIdx, A> {
                         state = next_state;
 
                         // Check for accepting state
-                        if let Some(value) = self.states[state.0].accepting {
-                            last_match = Some((match_start, value, char_idx + char.len_utf8()));
+                        if let Some(AcceptingState { value, right_ctx }) =
+                            &self.states[state.0].accepting
+                        {
+                            match right_ctx {
+                                None => {
+                                    last_match =
+                                        Some((match_start, *value, char_idx + char.len_utf8()))
+                                }
+                                Some(RightCtx { init, accept }) => {
+                                    if simulate_right_ctx(
+                                        self,
+                                        *init,
+                                        *accept,
+                                        char_indices.clone(),
+                                    ) {
+                                        last_match =
+                                            Some((match_start, *value, char_idx + char.len_utf8()))
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -63,8 +82,8 @@ impl<A: Copy> DFA<StateIdx, A> {
             if let Some(next) = next_end_of_input(self, state) {
                 // Check for accepting state
                 state = next;
-                if let Some(value) = self.states[state.0].accepting {
-                    values.push((&input[match_start..], value));
+                if let Some(AcceptingState { value, right_ctx }) = &self.states[state.0].accepting {
+                    values.push((&input[match_start..], *value));
                     break; // 'outer
                 }
             }
@@ -119,4 +138,40 @@ fn next<A>(dfa: &DFA<StateIdx, A>, state: StateIdx, char: char) -> Option<StateI
 
 fn next_end_of_input<A>(dfa: &DFA<StateIdx, A>, state: StateIdx) -> Option<StateIdx> {
     dfa.states[state.0].end_of_input_transition
+}
+
+// Similar to `simulate`, but does not keep track of the last match as we don't need "longest
+// match" semantics and backtracking
+fn simulate_right_ctx<A>(
+    dfa: &DFA<StateIdx, A>,
+    init: StateIdx,
+    accept: StateIdx,
+    mut char_indices: std::str::CharIndices,
+) -> bool {
+    if init == accept {
+        return true;
+    }
+
+    let mut state = init;
+
+    while let Some((_, char)) = char_indices.next() {
+        match next(dfa, state, char) {
+            None => {
+                // Stuck
+                return false;
+            }
+            Some(next_state) => {
+                if next_state == accept {
+                    return true;
+                }
+
+                state = next_state;
+            }
+        }
+    }
+
+    match next_end_of_input(dfa, state) {
+        None => false,
+        Some(next_state) => next_state == accept,
+    }
 }

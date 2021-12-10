@@ -1,10 +1,11 @@
 use super::{State, StateIdx, DFA};
 use crate::collections::Map;
+use crate::nfa::AcceptingState;
 use crate::semantic_action_table::SemanticActionIdx;
 
 #[derive(Debug)]
 pub enum Trans {
-    Accept(SemanticActionIdx),
+    Accept(AcceptingState<SemanticActionIdx, StateIdx>),
     Trans(StateIdx),
 }
 
@@ -13,7 +14,10 @@ pub fn simplify<K>(
     dfa: DFA<StateIdx, SemanticActionIdx>,
     dfa_state_indices: &mut Map<K, StateIdx>,
 ) -> DFA<Trans, SemanticActionIdx> {
-    let mut empty_states: Vec<(StateIdx, Option<SemanticActionIdx>)> = vec![];
+    let mut empty_states: Vec<(
+        StateIdx,
+        Option<AcceptingState<SemanticActionIdx, StateIdx>>,
+    )> = vec![];
     let mut non_empty_states: Vec<(StateIdx, State<StateIdx, SemanticActionIdx>)> = vec![];
 
     for (state_idx, state) in dfa.into_state_indices() {
@@ -33,7 +37,7 @@ pub fn simplify<K>(
 
     let map_transition = |t: StateIdx| -> Option<Trans> {
         match empty_states.binary_search_by(|(state_idx, _action)| state_idx.cmp(&t)) {
-            Ok(idx) => empty_states[idx].1.map(Trans::Accept),
+            Ok(idx) => empty_states[idx].1.clone().map(Trans::Accept),
             Err(idx) => Some(Trans::Trans(t.map(|i| i - idx))),
         }
     };

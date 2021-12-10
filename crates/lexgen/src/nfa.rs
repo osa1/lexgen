@@ -24,19 +24,39 @@ struct State<A> {
     empty_transitions: Set<StateIdx>,
     any_transitions: Set<StateIdx>,
     end_of_input_transitions: Set<StateIdx>,
-    accepting: Option<AcceptingState<A>>,
+    accepting: Option<AcceptingState<A, StateIdx>>,
 }
 
-#[derive(Debug)]
-pub struct AcceptingState<A> {
+#[derive(Debug, Clone, Copy)]
+pub struct AcceptingState<A, I> {
     pub value: A,
-    pub right_ctx: Option<RightCtx>,
+    pub right_ctx: Option<RightCtx<I>>,
 }
 
-#[derive(Debug)]
-pub struct RightCtx {
-    pub init: StateIdx,
-    pub accept: StateIdx,
+#[derive(Debug, Clone, Copy)]
+pub struct RightCtx<I> {
+    pub init: I,
+    pub accept: I,
+}
+
+impl<A, I> AcceptingState<A, I> {
+    pub fn map_states<I2, F>(&self, mut f: F) -> AcceptingState<A, I2>
+    where
+        F: FnMut(I) -> I2,
+        A: Clone,
+        I: Clone,
+    {
+        AcceptingState {
+            value: self.value.clone(),
+            right_ctx: self
+                .right_ctx
+                .clone()
+                .map(|RightCtx { init, accept }| RightCtx {
+                    init: f(init),
+                    accept: f(accept),
+                }),
+        }
+    }
 }
 
 impl<A> State<A> {
@@ -63,7 +83,7 @@ impl<A> NFA<A> {
         StateIdx(0)
     }
 
-    pub fn get_accepting_state(&self, state: StateIdx) -> Option<&AcceptingState<A>> {
+    pub fn get_accepting_state(&self, state: StateIdx) -> Option<&AcceptingState<A, StateIdx>> {
         self.states[state.0].accepting.as_ref()
     }
 
@@ -182,7 +202,12 @@ impl<A> NFA<A> {
         assert!(not_exists, "add_end_of_input_transition");
     }
 
-    fn make_state_accepting(&mut self, state: StateIdx, value: A, right_ctx: Option<RightCtx>) {
+    fn make_state_accepting(
+        &mut self,
+        state: StateIdx,
+        value: A,
+        right_ctx: Option<RightCtx<StateIdx>>,
+    ) {
         let old = self.states[state.0]
             .accepting
             .replace(AcceptingState { value, right_ctx });
