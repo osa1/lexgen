@@ -607,3 +607,65 @@ fn overlapping_ranges() {
         vec![("a1", vec![("a1", 1)], None), ("a2", vec![("a2", 2)], None)],
     );
 }
+
+#[test]
+fn right_context_1() {
+    let mut nfa: NFA<usize> = NFA::new();
+
+    nfa.add_regex(
+        &Default::default(),
+        &Regex::Char('a'),
+        Some(&Regex::Char('a')),
+        1,
+    );
+
+    test_simulate(&nfa, vec![("aa", vec![("a", 1)], Some(1))]);
+    test_simulate(&nfa, vec![("ab", vec![], Some(0))]);
+}
+
+#[test]
+fn right_context_2() {
+    let mut nfa: NFA<usize> = NFA::new();
+
+    nfa.add_regex(&Default::default(), &Regex::Char('a'), Some(&Regex::Any), 1);
+
+    test_simulate(&nfa, vec![("aa", vec![("a", 1)], Some(1))]);
+    test_simulate(&nfa, vec![("ab", vec![("a", 1)], Some(1))]);
+    test_simulate(&nfa, vec![("a", vec![], Some(0))]);
+}
+
+#[test]
+fn right_context_3() {
+    let mut nfa: NFA<usize> = NFA::new();
+
+    nfa.add_regex(
+        &Default::default(),
+        &Regex::Char('a'),
+        Some(&Regex::EndOfInput),
+        1,
+    );
+
+    test_simulate(&nfa, vec![("a", vec![("a", 1)], None)]);
+    test_simulate(&nfa, vec![("ab", vec![], Some(0))]);
+}
+
+#[test]
+fn right_context_4() {
+    let mut nfa: NFA<usize> = NFA::new();
+
+    nfa.add_regex(
+        &Default::default(),
+        &Regex::Char('a'),
+        Some(&Regex::Char('a')),
+        1,
+    );
+
+    nfa.add_regex(
+        &Default::default(),
+        &Regex::Char('a'),
+        Some(&Regex::EndOfInput),
+        2,
+    );
+
+    test_simulate(&nfa, vec![("aa", vec![("a", 1), ("a", 2)], None)]);
+}
