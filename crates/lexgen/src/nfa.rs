@@ -157,8 +157,9 @@ impl<A> NFA<A> {
     }
 
     fn make_state_accepting(&mut self, state: StateIdx, value: A) {
-        // TODO: Avoid overriding here?
-        self.states[state.0].accepting = Some(value);
+        let old = self.states[state.0].accepting.replace(value);
+
+        debug_assert!(old.is_none(), "make_state_accepting");
     }
 
     pub fn compute_state_closure(&self, states: &Set<StateIdx>) -> Set<StateIdx> {
