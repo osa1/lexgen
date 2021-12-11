@@ -39,7 +39,7 @@ pub struct State<T, A> {
     range_transitions: RangeMap<T>,
     any_transition: Option<T>,
     end_of_input_transition: Option<T>,
-    accepting: Option<AcceptingState<A, StateIdx>>,
+    accepting: Vec<AcceptingState<A, StateIdx>>,
     // Predecessors of the state, used to inline code for a state with one predecessor in the
     // predecessor's code
     predecessors: Set<StateIdx>,
@@ -53,7 +53,7 @@ impl<T, A> State<T, A> {
             range_transitions: Default::default(),
             any_transition: None,
             end_of_input_transition: None,
-            accepting: None,
+            accepting: vec![],
             predecessors: Default::default(),
         }
     }
@@ -83,11 +83,7 @@ impl<A> DFA<StateIdx, A> {
     }
 
     pub fn make_state_accepting(&mut self, state: StateIdx, accept: AcceptingState<A, StateIdx>) {
-        // Give first rule priority
-        let accepting = &mut self.states[state.0].accepting;
-        if accepting.is_none() {
-            *accepting = Some(accept);
-        }
+        self.states[state.0].accepting.push(accept);
     }
 
     pub fn new_state(&mut self) -> StateIdx {
@@ -239,7 +235,7 @@ impl<A> Display for DFA<StateIdx, A> {
                 predecessors: _,
             } = state;
 
-            if accepting.is_some() {
+            if !accepting.is_empty() {
                 if *initial {
                     write!(f, "{:>5}:", format!("i*{}", state_idx))?;
                 } else {

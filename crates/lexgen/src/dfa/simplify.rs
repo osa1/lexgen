@@ -5,7 +5,7 @@ use crate::semantic_action_table::SemanticActionIdx;
 
 #[derive(Debug)]
 pub enum Trans {
-    Accept(AcceptingState<SemanticActionIdx, StateIdx>),
+    Accept(Vec<AcceptingState<SemanticActionIdx, StateIdx>>),
     Trans(StateIdx),
 }
 
@@ -14,10 +14,9 @@ pub fn simplify<K>(
     dfa: DFA<StateIdx, SemanticActionIdx>,
     dfa_state_indices: &mut Map<K, StateIdx>,
 ) -> DFA<Trans, SemanticActionIdx> {
-    let mut empty_states: Vec<(
-        StateIdx,
-        Option<AcceptingState<SemanticActionIdx, StateIdx>>,
-    )> = vec![];
+    let mut empty_states: Vec<(StateIdx, Vec<AcceptingState<SemanticActionIdx, StateIdx>>)> =
+        vec![];
+
     let mut non_empty_states: Vec<(StateIdx, State<StateIdx, SemanticActionIdx>)> = vec![];
 
     for (state_idx, state) in dfa.into_state_indices() {
@@ -35,10 +34,10 @@ pub fn simplify<K>(
         *t = t.map(|i| i - idx);
     }
 
-    let map_transition = |t: StateIdx| -> Option<Trans> {
+    let map_transition = |t: StateIdx| -> Trans {
         match empty_states.binary_search_by(|(state_idx, _action)| state_idx.cmp(&t)) {
-            Ok(idx) => empty_states[idx].1.clone().map(Trans::Accept),
-            Err(idx) => Some(Trans::Trans(t.map(|i| i - idx))),
+            Ok(idx) => Trans::Accept(empty_states[idx].1.clone()),
+            Err(idx) => Trans::Trans(t.map(|i| i - idx)),
         }
     };
 
@@ -57,19 +56,19 @@ pub fn simplify<K>(
 
             let char_transitions = char_transitions
                 .into_iter()
-                .filter_map(|(char, next)| map_transition(next).map(|next| (char, next)))
+                .map(|(char, next)| (char, map_transition(next)))
                 .collect();
 
-            let range_transitions = range_transitions.filter_map(map_transition);
+            let range_transitions = range_transitions.map(map_transition);
 
-            let any_transition = any_transition.and_then(map_transition);
+            let any_transition = any_transition.map(map_transition);
 
-            let end_of_input_transition = end_of_input_transition.and_then(map_transition);
+            let end_of_input_transition = end_of_input_transition.map(map_transition);
 
             let predecessors = predecessors
                 .into_iter()
                 .map(|pred| match map_transition(pred) {
-                    Some(Trans::Trans(pred)) => pred,
+                    Trans::Trans(pred) => pred,
                     _ => {
                         // This pass should only remove nodes without successors, so it's a bug if
                         // we remove a predecessor

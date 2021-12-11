@@ -53,13 +53,12 @@ impl<A: Copy> DFA<StateIdx, A> {
                         state = next_state;
 
                         // Check for accepting state
-                        if let Some(AcceptingState { value, right_ctx }) =
-                            &self.states[state.0].accepting
-                        {
+                        for AcceptingState { value, right_ctx } in &self.states[state.0].accepting {
                             match right_ctx {
                                 None => {
                                     last_match =
-                                        Some((match_start, *value, char_idx + char.len_utf8()))
+                                        Some((match_start, *value, char_idx + char.len_utf8()));
+                                    break;
                                 }
                                 Some(RightCtx { init, accept }) => {
                                     if simulate_right_ctx(
@@ -69,7 +68,8 @@ impl<A: Copy> DFA<StateIdx, A> {
                                         char_indices.clone(),
                                     ) {
                                         last_match =
-                                            Some((match_start, *value, char_idx + char.len_utf8()))
+                                            Some((match_start, *value, char_idx + char.len_utf8()));
+                                        break;
                                     }
                                 }
                             }
@@ -82,16 +82,16 @@ impl<A: Copy> DFA<StateIdx, A> {
             if let Some(next) = next_end_of_input(self, state) {
                 // Check for accepting state
                 state = next;
-                if let Some(AcceptingState { value, right_ctx }) = &self.states[state.0].accepting {
+                for AcceptingState { value, right_ctx } in &self.states[state.0].accepting {
                     match right_ctx {
                         None => {
                             values.push((&input[match_start..], *value));
-                            break; // 'outer
+                            break 'outer;
                         }
                         Some(RightCtx { init, accept }) => {
                             if simulate_right_ctx(self, *init, *accept, char_indices.clone()) {
                                 values.push((&input[match_start..], *value));
-                                break; // 'outer
+                                break 'outer;
                             }
                         }
                     }

@@ -307,7 +307,11 @@ fn generate_state_arm(
 
     let end_of_input_action = match end_of_input_transition {
         Some(end_of_input_transition) => match end_of_input_transition {
-            Trans::Accept(AcceptingState { value, right_ctx }) => generate_rhs_code(ctx, *value),
+            Trans::Accept(accepting_states) => {
+                // TODO: other accepting states
+                let AcceptingState { value, right_ctx } = accepting_states.iter().next().unwrap();
+                generate_rhs_code(ctx, *value)
+            }
             Trans::Trans(next_state) => {
                 let StateIdx(next_state) = ctx.renumber_state(*next_state);
                 quote!(self.0.__state = #next_state;)
@@ -339,7 +343,8 @@ fn generate_state_arm(
                 }
             }
         )
-    } else if let Some(AcceptingState { value, right_ctx }) = accepting {
+    } else if let Some(AcceptingState { value, right_ctx }) = accepting.iter().next() {
+        // TODO: other values
         // Accepting state
         let semantic_fn = ctx.semantic_action_fn_ident(*value);
 
@@ -387,7 +392,11 @@ fn generate_any_transition(
             }
         }
 
-        Trans::Accept(AcceptingState { value, right_ctx }) => generate_rhs_code(ctx, *value),
+        Trans::Accept(accepting_states) => {
+            // TODO: Other accepting states
+            let AcceptingState { value, right_ctx } = accepting_states.iter().next().unwrap();
+            generate_rhs_code(ctx, *value)
+        }
     };
 
     quote!(
@@ -412,7 +421,9 @@ fn generate_state_char_arms(
     let mut state_chars: Map<StateIdx, Vec<char>> = Default::default();
     for (char, next) in char_transitions {
         match next {
-            Trans::Accept(AcceptingState { value, right_ctx }) => {
+            Trans::Accept(accepting_states) => {
+                // TODO: Other accepting states
+                let AcceptingState { value, right_ctx } = accepting_states.iter().next().unwrap();
                 let action_code = generate_rhs_code(ctx, *value);
                 state_char_arms.push(quote!(
                     #char => {
@@ -451,7 +462,9 @@ fn generate_state_char_arms(
                 char::try_from(range.start).unwrap(),
                 char::try_from(range.end).unwrap(),
             )),
-            Trans::Accept(AcceptingState { value, right_ctx }) => {
+            Trans::Accept(accepting_states) => {
+                // TODO: other accepting states
+                let AcceptingState { value, right_ctx } = accepting_states.iter().next().unwrap();
                 let action_code = generate_rhs_code(ctx, *value);
                 let range_start = char::from_u32(range.start).unwrap();
                 let range_end = char::from_u32(range.end).unwrap();
