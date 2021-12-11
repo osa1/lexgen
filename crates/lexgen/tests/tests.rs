@@ -97,14 +97,13 @@ fn readme_2() {
 
         rule Count {
             '=' => |lexer| {
-                let n = *lexer.state();
-                *lexer.state() = n + 1;                     // line 16
-                lexer.continue_()                           // line 17
+                *lexer.state() += 1;                        // line 15
+                lexer.continue_()                           // line 16
             },
 
             '[' => |lexer| {
                 let n = *lexer.state();
-                lexer.switch_and_return(LexerRule::Init, n) // line 22
+                lexer.switch_and_return(LexerRule::Init, n) // line 21
             },
         }
     }
@@ -260,41 +259,6 @@ fn switch_user_state() {
         lexer.next(),
         Some(Ok((loc(0, 15, 15), Token::Comment, loc(0, 44, 44))))
     );
-    assert_eq!(lexer.next(), None);
-}
-
-#[test]
-fn counting() {
-    lexer! {
-        Lexer(usize) -> usize;
-
-        rule Init {
-            ' ',
-
-            '[' => |lexer| {
-                *lexer.state() = 0;
-                lexer.switch(LexerRule::Count)
-            },
-        }
-
-        rule Count {
-            '=' => |lexer| {
-                let n = *lexer.state();
-                *lexer.state() = n + 1;
-                lexer.continue_()
-            },
-
-            '[' => |lexer| {
-                let n = *lexer.state();
-                lexer.switch_and_return(LexerRule::Init, n)
-            },
-        }
-    }
-
-    let mut lexer = Lexer::new("[[ [=[ [==[");
-    assert_eq!(lexer.next(), Some(Ok((loc(0, 0, 0), 0, loc(0, 2, 2)))));
-    assert_eq!(lexer.next(), Some(Ok((loc(0, 3, 3), 1, loc(0, 6, 6)))));
-    assert_eq!(lexer.next(), Some(Ok((loc(0, 7, 7), 2, loc(0, 11, 11)))));
     assert_eq!(lexer.next(), None);
 }
 
