@@ -27,6 +27,3 @@ lexgen_util = { path = "../lexgen_util" }
 [[bench]]
 name = "benchmarks"
 harness = false
-
-[profile.release]
-debug = true
