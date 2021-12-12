@@ -289,14 +289,13 @@ lexer! {
 
     rule Count {
         '=' => |lexer| {
-            let n = *lexer.state();
-            *lexer.state() = n + 1;                     // line 16
-            lexer.continue_()                           // line 17
+            *lexer.state() += 1;                        // line 15
+            lexer.continue_()                           // line 16
         },
 
         '[' => |lexer| {
             let n = *lexer.state();
-            lexer.switch_and_return(LexerRule::Init, n) // line 22
+            lexer.switch_and_return(LexerRule::Init, n) // line 21
         },
     }
 }
@@ -331,9 +330,9 @@ assert_eq!(lexer.next(), None);
 
 Initially (the `Init` rule set) we skip spaces (line 5). When we see a `[` we
 initialize the user state (line 8) and switch to the `Count` state (line 9). In
-`Count`, each `=` increments the user state by one (line 16) and skips the
-match (line 17). A `[` in the `Count` state returns the current number and
-switches to the `Init` state (line 22).
+`Count`, each `=` increments the user state by one (line 15) and skips the
+match (line 16). A `[` in the `Count` state returns the current number and
+switches to the `Init` state (line 21).
 
 [1]: https://github.com/osa1/lexgen/blob/main/tests/tests.rs
 [2]: https://github.com/osa1/lexgen/blob/main/tests/lua_5_1.rs

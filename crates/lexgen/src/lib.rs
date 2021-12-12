@@ -17,7 +17,7 @@ mod semantic_action_table;
 #[cfg(test)]
 mod tests;
 
-use ast::{Lexer, Regex, Rule, SingleRule, Var};
+use ast::{Lexer, Regex, RegexCtx, Rule, SingleRule, Var};
 use collections::Map;
 use dfa::{StateIdx as DfaStateIdx, DFA};
 use nfa::NFA;
@@ -64,45 +64,25 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                     panic!("Variable {:?} is defined multiple times", entry.key().0);
                 }
                 Entry::Vacant(entry) => {
+                    // TODO: Check that regex doesn't have right context
                     entry.insert(re.re);
                 }
             },
             Rule::RuleSet { name, rules } => {
                 if name == "Init" {
-                    if dfa.is_some() {
-                        panic!("\"Init\" rule set can only be defined once");
-                    }
-                    let mut nfa: NFA<SemanticActionIdx> = NFA::new();
-                    for SingleRule { lhs, rhs } in rules {
-                        nfa.add_regex(&bindings, &lhs.re, lhs.right_ctx.as_ref(), rhs);
-                    }
+                    let dfa = dfa.insert(compile_rules(rules, &bindings));
+                    let initial_state = dfa.initial_state();
 
-                    // println!("NFA=\n{}", nfa);
-
-                    let dfa_ = nfa_to_dfa(&nfa);
-                    let initial_state = dfa_.initial_state();
-
-                    // println!("DFA=\n{}", dfa_);
-
-                    dfa = Some(dfa_);
                     if dfas.insert(name.to_string(), initial_state).is_some() {
                         panic!("Rule set {:?} is defined multiple times", name.to_string());
                     }
                 } else {
-                    let dfa = match dfa.as_mut() {
-                        None => panic!("First rule set should be named \"Init\""),
-                        Some(dfa) => dfa,
-                    };
-                    let mut nfa: NFA<SemanticActionIdx> = NFA::new();
+                    let dfa = dfa
+                        .as_mut()
+                        .expect("First rule set should be named \"Init\"");
 
-                    for SingleRule { lhs, rhs } in rules {
-                        nfa.add_regex(&bindings, &lhs.re, lhs.right_ctx.as_ref(), rhs);
-                    }
+                    let dfa_ = compile_rules(rules, &bindings);
 
-                    // println!("NFA=\n{}", nfa);
-
-                    let dfa_ = nfa_to_dfa(&nfa);
-                    // println!("DFA=\n{}", dfa_);
                     let dfa_idx = dfa.add_dfa(dfa_);
 
                     if dfas.insert(name.to_string(), dfa_idx).is_some() {
@@ -120,20 +100,8 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                     );
                 }
 
-                let mut nfa: NFA<SemanticActionIdx> = NFA::new();
-                for SingleRule { lhs, rhs } in rules {
-                    nfa.add_regex(&bindings, &lhs.re, lhs.right_ctx.as_ref(), rhs);
-                }
-
-                // println!("NFA=\n{}", nfa);
-
-                let dfa_ = nfa_to_dfa(&nfa);
-
-                // println!("DFA=\n{}", dfa_);
-
-                let initial_state = dfa_.initial_state();
-
-                dfa = Some(dfa_);
+                let dfa = dfa.insert(compile_rules(rules, &bindings));
+                let initial_state = dfa.initial_state();
                 dfas.insert("Init".to_owned(), initial_state);
             }
             Rule::ErrorType { ty } => match user_error_type {
@@ -144,8 +112,6 @@ pub fn lexer(input: TokenStream) -> TokenStream {
             },
         }
     }
-
-    // println!("Final DFA=\n{}", dfa.as_ref().unwrap());
 
     // There should be a rule with name "Init"
     if dfas.get("Init").is_none() {
@@ -168,4 +134,17 @@ pub fn lexer(input: TokenStream) -> TokenStream {
         public,
     )
     .into()
+}
+
+fn compile_rules(
+    rules: Vec<SingleRule>,
+    bindings: &Map<Var, Regex>,
+) -> DFA<DfaStateIdx, SemanticActionIdx> {
+    let mut nfa: NFA<SemanticActionIdx> = NFA::new();
+
+    for SingleRule { lhs, rhs } in rules {
+        nfa.add_regex(bindings, &lhs.re, lhs.right_ctx.as_ref(), rhs);
+    }
+
+    nfa_to_dfa(&nfa)
 }
