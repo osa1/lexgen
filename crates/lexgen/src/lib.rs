@@ -34,7 +34,7 @@ pub fn lexer(lexer: &str) -> TokenStream {
     let mut semantic_action_table = SemanticActionTable::new();
     let lexer_parser = make_lexer_parser(&mut semantic_action_table);
     let token_stream = TokenStream::from_str(&lexer).unwrap();
-    let lexer_ast = lexer_parser.parse(token_stream.into()).unwrap();
+    let lexer_ast = lexer_parser.parse2(token_stream).unwrap();
 
     let Lexer {
         public,
