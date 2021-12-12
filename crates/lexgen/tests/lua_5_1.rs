@@ -174,19 +174,19 @@ lexer! {
         "until" = Token::Keyword(Keyword::Until),
         "while" = Token::Keyword(Keyword::While),
 
-        '"' => |mut lexer| {
+        '"' => |lexer| {
             lexer.state().short_string_delim = Quote::Double;
             lexer.state().string_buf.clear();
             lexer.switch(LexerRule::String)
         },
 
-        '\'' => |mut lexer| {
+        '\'' => |lexer| {
             lexer.state().short_string_delim = Quote::Single;
             lexer.state().string_buf.clear();
             lexer.switch(LexerRule::String)
         },
 
-        "[" => |mut lexer| {
+        "[" => |lexer| {
             match lexer.peek() {
                 Some('[') | Some('=') => {
                     lexer.state().long_string_opening_eqs = 0;
@@ -206,11 +206,10 @@ lexer! {
             lexer.return_(Token::Var(match_))
         },
 
-        $digit+ ('.'? $digit+ (('e' | 'E') ('+'|'-')? $digit+)?)? =>
-            |lexer| {
-                let match_ = lexer.match_();
-                lexer.return_(Token::Number(match_))
-            },
+        $digit+ ('.'? $digit+ (('e' | 'E') ('+'|'-')? $digit+)?)? => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_(Token::Number(match_))
+        },
 
         "0x" $hex_digit+ => |lexer| {
             let match_ = lexer.match_();
@@ -219,62 +218,52 @@ lexer! {
     }
 
     rule LongStringBracketLeft {
-        '=' =>
-            |mut lexer| {
-                lexer.state().long_string_opening_eqs += 1;
-                lexer.continue_()
-            },
+        '=' => |lexer| {
+            lexer.state().long_string_opening_eqs += 1;
+            lexer.continue_()
+        },
 
-        '[' =>
-            |lexer|
-                lexer.switch(LexerRule::LongString),
+        '[' => |lexer| lexer.switch(LexerRule::LongString),
     }
 
     rule LongString {
-        ']' =>
-            |mut lexer| {
-                lexer.state().long_string_closing_eqs = 0;
-                lexer.switch(LexerRule::LongStringBracketRight)
-            },
+        ']' => |lexer| {
+            lexer.state().long_string_closing_eqs = 0;
+            lexer.switch(LexerRule::LongStringBracketRight)
+        },
 
-        _ =>
-            |lexer|
-                lexer.continue_(),
+        _ => |lexer| lexer.continue_(),
     }
 
     rule LongStringBracketRight {
-        '=' =>
-            |mut lexer| {
-                lexer.state().long_string_closing_eqs += 1;
-                lexer.continue_()
-            },
+        '=' => |lexer| {
+            lexer.state().long_string_closing_eqs += 1;
+            lexer.continue_()
+        },
 
-        ']' =>
-            |mut lexer| {
-                let state = lexer.state();
-                let in_comment = state.in_comment;
-                let left_eqs = state.long_string_opening_eqs;
-                let right_eqs = state.long_string_closing_eqs;
-                if left_eqs == right_eqs {
-                    if in_comment {
-                        lexer.switch(LexerRule::Init)
-                    } else {
-                        let match_ = &lexer.match_[left_eqs + 2..lexer.match_.len() - right_eqs - 2];
-                        lexer.switch_and_return(LexerRule::Init, Token::String(StringToken::Raw(match_)))
-                    }
+        ']' => |lexer| {
+            let state = lexer.state();
+            let in_comment = state.in_comment;
+            let left_eqs = state.long_string_opening_eqs;
+            let right_eqs = state.long_string_closing_eqs;
+            if left_eqs == right_eqs {
+                if in_comment {
+                    lexer.switch(LexerRule::Init)
                 } else {
-                    lexer.state().long_string_closing_eqs = 0;
-                    lexer.continue_()
+                    let match_ = &lexer.match_()[left_eqs + 2..lexer.match_().len() - right_eqs - 2];
+                    lexer.switch_and_return(LexerRule::Init, Token::String(StringToken::Raw(match_)))
                 }
-            },
+            } else {
+                lexer.state().long_string_closing_eqs = 0;
+                lexer.continue_()
+            }
+        },
 
-        _ =>
-            |lexer|
-                lexer.switch(LexerRule::LongString),
+        _ => |lexer| lexer.switch(LexerRule::LongString),
     }
 
     rule String {
-        '"' => |mut lexer| {
+        '"' => |lexer| {
             if lexer.state().short_string_delim == Quote::Double {
                 let str = lexer.state().string_buf.clone();
                 lexer.switch_and_return(LexerRule::Init, Token::String(StringToken::Interpreted(str)))
@@ -284,7 +273,7 @@ lexer! {
             }
         },
 
-        "'" => |mut lexer| {
+        "'" => |lexer| {
             if lexer.state().short_string_delim == Quote::Single {
                 let str = lexer.state().string_buf.clone();
                 lexer.switch_and_return(LexerRule::Init, Token::String(StringToken::Interpreted(str)))
@@ -294,62 +283,62 @@ lexer! {
             }
         },
 
-        "\\a" => |mut lexer| {
+        "\\a" => |lexer| {
             lexer.state().string_buf.push('\u{7}');
             lexer.continue_()
         },
 
-        "\\b" => |mut lexer| {
+        "\\b" => |lexer| {
             lexer.state().string_buf.push('\u{8}');
             lexer.continue_()
         },
 
-        "\\f" => |mut lexer| {
+        "\\f" => |lexer| {
             lexer.state().string_buf.push('\u{c}');
             lexer.continue_()
         },
 
-        "\\n" => |mut lexer| {
+        "\\n" => |lexer| {
             lexer.state().string_buf.push('\n');
             lexer.continue_()
         },
 
-        "\\r" => |mut lexer| {
+        "\\r" => |lexer| {
             lexer.state().string_buf.push('\r');
             lexer.continue_()
         },
 
-        "\\t" => |mut lexer| {
+        "\\t" => |lexer| {
             lexer.state().string_buf.push('\t');
             lexer.continue_()
         },
 
-        "\\v" => |mut lexer| {
+        "\\v" => |lexer| {
             lexer.state().string_buf.push('\u{b}');
             lexer.continue_()
         },
 
-        "\\\\" => |mut lexer| {
+        "\\\\" => |lexer| {
             lexer.state().string_buf.push('\\');
             lexer.continue_()
         },
 
-        "\\\"" => |mut lexer| {
+        "\\\"" => |lexer| {
             lexer.state().string_buf.push('"');
             lexer.continue_()
         },
 
-        "\\'" => |mut lexer| {
+        "\\'" => |lexer| {
             lexer.state().string_buf.push('\'');
             lexer.continue_()
         },
 
-        "\\\n" => |mut lexer| {
+        "\\\n" => |lexer| {
             lexer.state().string_buf.push('\n');
             lexer.continue_()
         },
 
-        _ => |mut lexer| {
+        _ => |lexer| {
             let char = lexer.match_().chars().next_back().unwrap();
             lexer.state().string_buf.push(char);
             lexer.continue_()
@@ -357,7 +346,7 @@ lexer! {
     }
 
     rule EnterComment {
-        '[' => |mut lexer| {
+        '[' => |lexer| {
             match lexer.peek() {
                 Some('[') | Some('=') => {
                     lexer.state().long_string_opening_eqs = 0;
@@ -369,20 +358,17 @@ lexer! {
             }
         },
 
-        _ => |lexer|
-            lexer.switch(LexerRule::Comment),
+        _ => |lexer| lexer.switch(LexerRule::Comment),
     }
 
     rule Comment {
-        '\n' => |lexer|
-            lexer.switch(LexerRule::Init),
+        '\n' => |lexer| lexer.switch(LexerRule::Init),
 
-        _ => |lexer|
-            lexer.continue_(),
+        _ => |lexer| lexer.continue_(),
     }
 }
 
-fn ignore_pos<A, E>(ret: Option<Result<(usize, A, usize), E>>) -> Option<Result<A, E>> {
+fn ignore_pos<A, E, L>(ret: Option<Result<(L, A, L), E>>) -> Option<Result<A, E>> {
     ret.map(|res| res.map(|(_, a, _)| a))
 }
 

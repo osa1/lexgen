@@ -1,6 +1,94 @@
 # Unreleased
 
+- New regex syntax `#` added for character set difference, e.g. `re1 # re2`
+  matches characters in `re1` that are not in `re2`. `re1` and `re2` need to be
+  "character sets", i.e. `*`, `+`, `?`, `"..."`, `$`, and concatenation are not
+  allowed.
+
+- **Breaking change:** `LexerError` type is refactored to add location
+  information to all errors, not just `InvalidToken`. Previously the type was:
+
+  ```rust
+  #[derive(Debug, Clone, PartialEq, Eq)]
+  pub enum LexerError<E> {
+      InvalidToken {
+          location: Loc,
+      },
+
+      /// Custom error, raised by a semantic action
+      Custom(E),
+  }
+  ```
+
+  with this change, it is now:
+
+  ```rust
+  #[derive(Debug, Clone, PartialEq, Eq)]
+  pub struct LexerError<E> {
+      pub location: Loc,
+      pub kind: LexerErrorKind<E>,
+  }
+
+  #[derive(Debug, Clone, PartialEq, Eq)]
+  pub enum LexerErrorKind<E> {
+      /// Lexer error, raised by lexgen-generated code
+      InvalidToken,
+
+      /// Custom error, raised by a semantic action
+      Custom(E),
+  }
+  ```
+
+# 2021/11/30: 0.8.1
+
+New version published to fix broken README pages for lexgen and lexgen_util in
+crates.io.
+
+# 2021/10/30: 0.8.0
+
+- **Breaking change:** Starting with this release, lexgen-generated lexers now
+  depend on `lexgen_util` package of the same version. If you are using lexgen
+  version 0.8 or newer, make sure to add `lexgen_util = "..."` to your
+  `Cargo.toml`, using the same version number as `lexgen`.
+
+- Common code in generated code is moved to a new crate `lexgen_util`.
+  lexgen-generated lexers now depend on `lexgen_util`.
+
+- **Breaking change:** Line and column tracking implemented. Iterator
+  implementation now yields `(Loc, Token, Loc)`, where `Loc` is defined in
+  `lexgen_util` as `struct Loc { line: u32, col: u32, byte_idx: usize }`.
+
+- Fixed a bug when initial state of a rule does not have any transitions (rule
+  is empty). (#27, 001ea51)
+
+- Fixed a bug in codegen that caused accidental backtracking in some cases.
+  (#27, 001ea51)
+
+- Fixed a bug that caused incorrect lexing when a lexer state has both range
+  and any (`_`) transitions. (#31)
+
+# 2021/10/21: 0.7.0
+
+- Regex syntax updated to include "any character" (`_`) and "end of input"
+  (`$`).
+
+  Previously "any character" (`_`) could be used as a rule left-hand side, but
+  was not allowed in regexes.
+
+- Semantic action functions that use user state (`state` method of the lexer
+  handle) no longer need `mut` modifier in the handle argument.
+
+  This will generate warnings in old code with semantic actions that take a
+  `mut` argument.
+
+- New lexer method `reset_match` implemented to reset the current match.
+
+# 2021/10/19: 0.6.0
+
 - Fixed precedences of concatenation (juxtaposition) and alternation (`|`).
+
+- Fixed lexing in lexers that require backtracking to implement longest match
+  rule. (#16)
 
 # 2021/10/07: 0.5.0
 

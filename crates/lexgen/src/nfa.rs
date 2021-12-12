@@ -1,19 +1,17 @@
-use crate::ast::{Regex, Var};
-use crate::display::HashSetDisplay;
-use crate::regex_to_nfa;
+#[cfg(test)]
+pub mod simulate;
 
-use fxhash::{FxHashMap, FxHashSet};
+use crate::ast::{Regex, Var};
+use crate::collections::{Map, Set};
+use crate::display::HashSetDisplay;
+use crate::range_map::{Range, RangeMap};
+use crate::regex_to_nfa;
 
 /// Non-deterministic finite automate, parameterized on values of accepting states.
 #[derive(Debug)]
 pub struct NFA<A> {
     // Indexed by `StateIdx`
     states: Vec<State<A>>,
-
-    // Action for the "failure" state. In principle we could have many failure states and actions,
-    // but we only need one per NFA for lexing, so we have one action for the entire NFA. (NB. This
-    // is different in DFA)
-    fail: Option<A>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -21,9 +19,11 @@ pub struct StateIdx(usize);
 
 #[derive(Debug)]
 struct State<A> {
-    char_transitions: FxHashMap<char, FxHashSet<StateIdx>>,
-    range_transitions: FxHashMap<(char, char), FxHashSet<StateIdx>>,
-    empty_transitions: FxHashSet<StateIdx>,
+    char_transitions: Map<char, Set<StateIdx>>,
+    range_transitions: RangeMap<Set<StateIdx>>,
+    empty_transitions: Set<StateIdx>,
+    any_transitions: Set<StateIdx>,
+    end_of_input_transitions: Set<StateIdx>,
     accepting: Option<A>,
 }
 
@@ -33,6 +33,8 @@ impl<A> State<A> {
             char_transitions: Default::default(),
             range_transitions: Default::default(),
             empty_transitions: Default::default(),
+            any_transitions: Default::default(),
+            end_of_input_transitions: Default::default(),
             accepting: None,
         }
     }
@@ -42,7 +44,6 @@ impl<A> NFA<A> {
     pub fn new() -> NFA<A> {
         NFA {
             states: vec![State::new()],
-            fail: None,
         }
     }
 
@@ -57,24 +58,26 @@ impl<A> NFA<A> {
     pub fn char_transitions(
         &self,
         state: StateIdx,
-    ) -> impl Iterator<Item = (&char, &FxHashSet<StateIdx>)> {
+    ) -> impl Iterator<Item = (&char, &Set<StateIdx>)> {
         self.states[state.0].char_transitions.iter()
     }
 
     pub fn range_transitions(
         &self,
         state: StateIdx,
-    ) -> impl Iterator<Item = (&(char, char), &FxHashSet<StateIdx>)> {
+    ) -> impl Iterator<Item = &Range<Set<StateIdx>>> {
         self.states[state.0].range_transitions.iter()
     }
 
-    pub fn get_fail_action(&self) -> Option<&A> {
-        self.fail.as_ref()
+    pub fn any_transitions(&self, state: StateIdx) -> impl Iterator<Item = StateIdx> + '_ {
+        self.states[state.0].any_transitions.iter().copied()
     }
 
-    pub fn set_fail_action(&mut self, value: A) {
-        assert!(self.fail.is_none());
-        self.fail = Some(value);
+    pub fn end_of_input_transitions(&self, state: StateIdx) -> impl Iterator<Item = StateIdx> + '_ {
+        self.states[state.0]
+            .end_of_input_transitions
+            .iter()
+            .copied()
     }
 
     pub fn new_state(&mut self) -> StateIdx {
@@ -83,7 +86,7 @@ impl<A> NFA<A> {
         new_state_idx
     }
 
-    pub fn add_regex(&mut self, bindings: &FxHashMap<Var, Regex>, re: &Regex, value: A) {
+    pub fn add_regex(&mut self, bindings: &Map<Var, Regex>, re: &Regex, value: A) {
         let re_accepting_state = self.new_state();
         self.make_state_accepting(re_accepting_state, value);
 
@@ -108,17 +111,31 @@ impl<A> NFA<A> {
     pub fn add_range_transition(
         &mut self,
         state: StateIdx,
-        range_begin: char,
+        range_start: char,
         range_end: char,
         next: StateIdx,
     ) {
-        let not_exists = self.states[state.0]
-            .range_transitions
-            .entry((range_begin, range_end))
-            .or_default()
-            .insert(next);
+        let mut set: Set<StateIdx> = Default::default();
+        set.insert(next);
+        self.states[state.0].range_transitions.insert(
+            range_start as u32,
+            range_end as u32,
+            set,
+            |values_1, values_2| values_1.extend(values_2.into_iter()),
+        );
+    }
 
-        assert!(not_exists, "add_range_transition");
+    pub fn add_range_transitions(&mut self, state: StateIdx, ranges: RangeMap<()>, next: StateIdx) {
+        let mut set: Set<StateIdx> = Default::default();
+        set.insert(next);
+
+        let ranges = ranges.map(|()| set.clone());
+
+        self.states[state.0]
+            .range_transitions
+            .insert_ranges(ranges.into_iter(), |values_1, values_2| {
+                values_1.extend(values_2.into_iter())
+            });
     }
 
     pub fn add_empty_transition(&mut self, state: StateIdx, next: StateIdx) {
@@ -127,14 +144,27 @@ impl<A> NFA<A> {
         assert!(not_exists, "add_empty_transition");
     }
 
-    fn make_state_accepting(&mut self, state: StateIdx, value: A) {
-        // TODO: Avoid overriding here?
-        self.states[state.0].accepting = Some(value);
+    pub fn add_any_transition(&mut self, state: StateIdx, next: StateIdx) {
+        let not_exists = self.states[state.0].any_transitions.insert(next);
+
+        assert!(not_exists, "add_any_transition");
     }
 
-    pub fn compute_state_closure(&self, states: &FxHashSet<StateIdx>) -> FxHashSet<StateIdx> {
+    pub fn add_end_of_input_transition(&mut self, state: StateIdx, next: StateIdx) {
+        let not_exists = self.states[state.0].end_of_input_transitions.insert(next);
+
+        assert!(not_exists, "add_end_of_input_transition");
+    }
+
+    fn make_state_accepting(&mut self, state: StateIdx, value: A) {
+        let old = self.states[state.0].accepting.replace(value);
+
+        debug_assert!(old.is_none(), "make_state_accepting");
+    }
+
+    pub fn compute_state_closure(&self, states: &Set<StateIdx>) -> Set<StateIdx> {
         let mut worklist: Vec<StateIdx> = states.iter().copied().collect();
-        let mut closure: FxHashSet<StateIdx> = states.clone();
+        let mut closure: Set<StateIdx> = states.clone();
 
         while let Some(work) = worklist.pop() {
             for next_state in self.next_empty_states(work) {
@@ -147,54 +177,9 @@ impl<A> NFA<A> {
         closure
     }
 
-    fn next_empty_states(&self, state: StateIdx) -> &FxHashSet<StateIdx> {
+    fn next_empty_states(&self, state: StateIdx) -> &Set<StateIdx> {
         let state = &self.states[state.0];
         &state.empty_transitions
-    }
-}
-
-impl<A: std::fmt::Debug> NFA<A> {
-    #[cfg(test)]
-    pub fn simulate(&self, chars: &mut dyn Iterator<Item = char>) -> Option<&A> {
-        let mut states: FxHashSet<StateIdx> = Default::default();
-        states.insert(StateIdx(0));
-        states = self.compute_state_closure(&states);
-
-        for char in chars {
-            println!("states before = {:?}", states);
-            println!("char = {}", char);
-
-            let mut next_states: FxHashSet<StateIdx> = Default::default();
-
-            for state in &states {
-                if let Some(char_nexts) = self.states[state.0].char_transitions.get(&char) {
-                    next_states.extend(char_nexts.into_iter());
-                    for (range, range_nexts) in &self.states[state.0].range_transitions {
-                        if char >= range.0 && char <= range.1 {
-                            next_states.extend(range_nexts.into_iter());
-                        }
-                    }
-                }
-                for ((range_begin, range_end), nexts) in &self.states[state.0].range_transitions {
-                    if char >= *range_begin && char <= *range_end {
-                        next_states.extend(nexts.into_iter());
-                    }
-                }
-            }
-
-            states = self.compute_state_closure(&mut next_states);
-            println!("states after = {:?}", states);
-        }
-
-        let mut states: Vec<StateIdx> = states.into_iter().collect();
-        states.sort();
-
-        let accept_value = states
-            .into_iter()
-            .filter_map(|s| self.states[s.0].accepting.as_ref())
-            .next();
-
-        accept_value.or(self.fail.as_ref())
     }
 }
 
@@ -213,6 +198,8 @@ impl<A> Display for NFA<A> {
                 char_transitions,
                 range_transitions,
                 empty_transitions,
+                any_transitions,
+                end_of_input_transitions,
                 accepting,
             } = state;
 
@@ -244,7 +231,7 @@ impl<A> Display for NFA<A> {
                 writeln!(f, "{:?} -> {}", char, HashSetDisplay(next))?;
             }
 
-            for ((range_begin, range_end), next) in range_transitions.iter() {
+            for range in range_transitions.iter() {
                 if !first {
                     write!(f, "     ")?;
                 } else {
@@ -254,22 +241,38 @@ impl<A> Display for NFA<A> {
                 writeln!(
                     f,
                     "{:?} - {:?} -> {}",
-                    range_begin,
-                    range_end,
-                    HashSetDisplay(next)
+                    range.start,
+                    range.end,
+                    HashSetDisplay(&range.value)
                 )?;
+            }
+
+            if !any_transitions.is_empty() {
+                if !first {
+                    write!(f, "     ")?;
+                } else {
+                    first = false;
+                }
+
+                writeln!(f, "_ -> {}", HashSetDisplay(any_transitions))?;
+            }
+
+            if !end_of_input_transitions.is_empty() {
+                if !first {
+                    write!(f, "     ")?;
+                }
+
+                writeln!(f, "$ -> {}", HashSetDisplay(end_of_input_transitions))?;
             }
 
             if empty_transitions.is_empty()
                 && char_transitions.is_empty()
                 && range_transitions.is_empty()
+                && any_transitions.is_empty()
+                && end_of_input_transitions.is_empty()
             {
                 writeln!(f)?;
             }
-        }
-
-        if let Some(_) = self.fail {
-            writeln!(f, "*FAIL")?;
         }
 
         Ok(())

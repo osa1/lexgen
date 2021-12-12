@@ -1,6 +1,8 @@
 //! Proc macro AST definition and parser implementations
 
-use syn::parse::{Parse, ParseStream};
+use crate::semantic_action_table::{SemanticActionIdx, SemanticActionTable};
+
+use syn::parse::ParseStream;
 
 use std::fmt;
 
@@ -10,7 +12,6 @@ pub struct Var(pub String);
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Builtin(pub String);
 
-#[derive(Clone)]
 pub struct Lexer {
     pub public: bool,
     pub type_name: syn::Ident,
@@ -19,15 +20,12 @@ pub struct Lexer {
     pub rules: Vec<Rule>,
 }
 
-#[derive(Clone)]
 pub enum Rule {
     /// `let <ident> = <regex>;`
     Binding { var: Var, re: Regex },
 
     /// `type Error = UserError;`
     ErrorType {
-        /// Lifetimes on the LHS of the declaration, e.g. `type Error<'input> = ...`;
-        lifetimes: Vec<syn::Lifetime>,
         /// Type on the RHS, e.g. `UserError<'input>`
         ty: syn::Type,
     },
@@ -42,22 +40,12 @@ pub enum Rule {
     UnnamedRules { rules: Vec<SingleRule> },
 }
 
-#[derive(Clone)]
 pub struct SingleRule {
-    pub lhs: RegexOrFail,
-    pub rhs: RuleRhs,
+    pub lhs: Regex,
+    pub rhs: SemanticActionIdx,
 }
 
 #[derive(Debug, Clone)]
-pub enum RegexOrFail {
-    Regex(Regex),
-
-    /// An `_` as the LHS of a rule. This rule only matches when none of the other rules in the
-    /// same rule set match.
-    Fail,
-}
-
-#[derive(Clone)]
 pub enum RuleRhs {
     None,
     Rhs { expr: syn::Expr, kind: RuleKind },
@@ -67,9 +55,11 @@ pub enum RuleRhs {
 pub enum RuleKind {
     /// Defined with `=`. RHS is not passed a `LexerHandle`, returns `Token`.
     Simple,
+
     /// Defined with `=?`. RHS is passed a `LexerHandle`, returns `LexerAction<Result<Token,
     /// Error>>`.
     Fallible,
+
     /// Defined with `=>`. RHS is passed a `LexerHandle`, returns `LexerAction<Token>`
     Infallible,
 }
@@ -102,11 +92,7 @@ impl fmt::Debug for Rule {
                 .debug_struct("Rule::UnnamedRules")
                 .field("rules", rules)
                 .finish(),
-            Rule::ErrorType { lifetimes, ty } => f
-                .debug_struct("Rule::ErrorType")
-                .field("lifetimes", lifetimes)
-                .field("ty", ty)
-                .finish(),
+            Rule::ErrorType { ty } => f.debug_struct("Rule::ErrorType").field("ty", ty).finish(),
         }
     }
 }
@@ -132,6 +118,12 @@ pub enum Regex {
     ZeroOrOne(Box<Regex>),
     Concat(Box<Regex>, Box<Regex>),
     Or(Box<Regex>, Box<Regex>),
+    Any, // any character
+    EndOfInput,
+
+    /// Difference, or exclusion: characters in the first regex, excluding characters in the second
+    /// regex.
+    Diff(Box<Regex>, Box<Regex>),
 }
 
 #[derive(Debug, Clone)]
@@ -145,10 +137,8 @@ pub enum CharOrRange {
 
 /// Parses a regex terminated with: `=>` (used in rules with RHSs), `,` (used in rules without
 /// RHSs), or `;` (used in let bindings)
-impl Parse for Regex {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        parse_regex_0(input)
-    }
+fn parse_regex(input: ParseStream) -> syn::Result<Regex> {
+    parse_regex_0(input)
 }
 
 // re_0 -> re_1 | re_1 `|` re_1 (alternation)
@@ -174,6 +164,7 @@ fn parse_regex_1(input: ParseStream) -> syn::Result<Regex> {
         || input.peek(syn::LitChar)
         || input.peek(syn::LitStr)
         || input.peek(syn::token::Bracket)
+        || input.peek(syn::token::Underscore)
     {
         let re2 = parse_regex_2(input)?;
         re = Regex::Concat(Box::new(re), Box::new(re2)); // left associative
@@ -204,20 +195,35 @@ fn parse_regex_2(input: ParseStream) -> syn::Result<Regex> {
     Ok(re)
 }
 
-// re_3 -> ( re_0 ) | $x | 'x' | "..." | [...]
+// re_3 -> re_4 | re_4 # re_4 (left associative)
 fn parse_regex_3(input: ParseStream) -> syn::Result<Regex> {
+    let mut re = parse_regex_4(input)?;
+
+    while input.peek(syn::token::Pound) {
+        let _ = input.parse::<syn::token::Pound>()?;
+        let re_2 = parse_regex_4(input)?;
+        re = Regex::Diff(Box::new(re), Box::new(re_2));
+    }
+
+    Ok(re)
+}
+
+// re_4 -> ( re_0 ) | $ | $x | $$x | _ | 'x' | "..." | [...]
+fn parse_regex_4(input: ParseStream) -> syn::Result<Regex> {
     if input.peek(syn::token::Paren) {
         let parenthesized;
         syn::parenthesized!(parenthesized in input);
-        Regex::parse(&parenthesized)
+        parse_regex(&parenthesized)
     } else if input.peek(syn::token::Dollar) {
         let _ = input.parse::<syn::token::Dollar>()?;
         if input.parse::<syn::token::Dollar>().is_ok() {
             let ident = input.parse::<syn::Ident>()?;
             Ok(Regex::Builtin(Builtin(ident.to_string())))
         } else {
-            let ident = input.parse::<syn::Ident>()?;
-            Ok(Regex::Var(Var(ident.to_string())))
+            match input.parse::<syn::Ident>() {
+                Ok(ident) => Ok(Regex::Var(Var(ident.to_string()))),
+                Err(_) => Ok(Regex::EndOfInput),
+            }
         }
     } else if input.peek(syn::LitChar) {
         let char = input.parse::<syn::LitChar>()?;
@@ -228,8 +234,10 @@ fn parse_regex_3(input: ParseStream) -> syn::Result<Regex> {
     } else if input.peek(syn::token::Bracket) {
         let bracketed;
         syn::bracketed!(bracketed in input);
-        let char_set = CharSet::parse(&bracketed)?;
+        let char_set = parse_charset(&bracketed)?;
         Ok(Regex::CharSet(char_set))
+    } else if input.parse::<syn::token::Underscore>().is_ok() {
+        Ok(Regex::Any)
     } else {
         Err(syn::Error::new(
             proc_macro2::Span::call_site(),
@@ -238,135 +246,120 @@ fn parse_regex_3(input: ParseStream) -> syn::Result<Regex> {
     }
 }
 
-impl Parse for CharSet {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut chars = vec![];
-        while !input.is_empty() {
-            chars.push(CharOrRange::parse(input)?);
-        }
-        Ok(CharSet(chars))
+fn parse_charset(input: ParseStream) -> syn::Result<CharSet> {
+    let mut chars = vec![];
+    while !input.is_empty() {
+        chars.push(parse_char_or_range(input)?);
+    }
+    Ok(CharSet(chars))
+}
+
+fn parse_char_or_range(input: ParseStream) -> syn::Result<CharOrRange> {
+    let char = input.parse::<syn::LitChar>()?.value();
+    if input.peek(syn::token::Sub) {
+        let _ = input.parse::<syn::token::Sub>()?;
+        let char2 = input.parse::<syn::LitChar>()?.value();
+        Ok(CharOrRange::Range(char, char2))
+    } else {
+        Ok(CharOrRange::Char(char))
     }
 }
 
-impl Parse for CharOrRange {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let char = input.parse::<syn::LitChar>()?.value();
-        if input.peek(syn::token::Sub) {
-            let _ = input.parse::<syn::token::Sub>()?;
-            let char2 = input.parse::<syn::LitChar>()?.value();
-            Ok(CharOrRange::Range(char, char2))
-        } else {
-            Ok(CharOrRange::Char(char))
+fn parse_single_rule(
+    input: ParseStream,
+    semantic_action_table: &mut SemanticActionTable,
+) -> syn::Result<SingleRule> {
+    let lhs = parse_regex(input)?;
+
+    let rhs = if input.parse::<syn::token::Comma>().is_ok() {
+        RuleRhs::None
+    } else if input.parse::<syn::token::FatArrow>().is_ok() {
+        let expr = input.parse::<syn::Expr>()?;
+        input.parse::<syn::token::Comma>()?;
+        RuleRhs::Rhs {
+            expr,
+            kind: RuleKind::Infallible,
         }
-    }
-}
-
-impl Parse for RegexOrFail {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        if input.parse::<syn::token::Underscore>().is_ok() {
-            Ok(RegexOrFail::Fail)
+    } else if input.parse::<syn::token::Eq>().is_ok() {
+        let kind = if input.peek(syn::token::Question) {
+            let _ = input.parse::<syn::token::Question>();
+            RuleKind::Fallible
         } else {
-            Ok(RegexOrFail::Regex(input.parse::<Regex>()?))
-        }
-    }
-}
-
-impl Parse for SingleRule {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let lhs = RegexOrFail::parse(input)?;
-
-        let rhs = if input.parse::<syn::token::Comma>().is_ok() {
-            RuleRhs::None
-        } else if input.parse::<syn::token::FatArrow>().is_ok() {
-            let expr = input.parse::<syn::Expr>()?;
-            input.parse::<syn::token::Comma>()?;
-            RuleRhs::Rhs {
-                expr,
-                kind: RuleKind::Infallible,
-            }
-        } else if input.parse::<syn::token::Eq>().is_ok() {
-            let kind = if input.peek(syn::token::Question) {
-                let _ = input.parse::<syn::token::Question>();
-                RuleKind::Fallible
-            } else {
-                RuleKind::Simple
-            };
-            let expr = input.parse::<syn::Expr>()?;
-            input.parse::<syn::token::Comma>()?;
-            RuleRhs::Rhs { expr, kind }
-        } else {
-            panic!("Expected one of `,`, `=>`, `=?`, or `=` after a regex");
+            RuleKind::Simple
         };
+        let expr = input.parse::<syn::Expr>()?;
+        input.parse::<syn::token::Comma>()?;
+        RuleRhs::Rhs { expr, kind }
+    } else {
+        panic!("Expected one of `,`, `=>`, `=?`, or `=` after a regex");
+    };
 
-        Ok(SingleRule { lhs, rhs })
-    }
+    let rhs = semantic_action_table.add(rhs);
+
+    Ok(SingleRule { lhs, rhs })
 }
 
-impl Parse for Rule {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        if input.peek(syn::token::Let) {
-            // Let binding
-            input.parse::<syn::token::Let>()?;
-            let var = input.parse::<syn::Ident>()?;
-            input.parse::<syn::token::Eq>()?;
-            let re = Regex::parse(input)?;
-            input.parse::<syn::token::Semi>()?;
-            Ok(Rule::Binding {
-                var: Var(var.to_string()),
-                re,
-            })
-        } else if input.peek(syn::Ident) {
-            // Name rules
-            let ident = input.parse::<syn::Ident>()?;
-            if ident != "rule" {
-                return Err(syn::Error::new(
-                    ident.span(),
-                    "Unknown identifier, expected \"rule\", \"let\", or a regex",
-                ));
-            }
-            let rule_name = input.parse::<syn::Ident>()?;
-            let braced;
-            syn::braced!(braced in input);
-            let mut single_rules = vec![];
-            while !braced.is_empty() {
-                single_rules.push(SingleRule::parse(&braced)?);
-            }
-            // Consume optional trailing comma
-            let _ = input.parse::<syn::token::Comma>();
-            Ok(Rule::RuleSet {
-                name: rule_name,
-                rules: single_rules,
-            })
-        } else if input.parse::<syn::token::Type>().is_ok() {
-            let ident = input.parse::<syn::Ident>()?;
-            if ident != "Error" {
-                panic!("Error type syntax is: `type Error = ...;`");
-            }
-            let mut lifetimes: Vec<syn::Lifetime> = vec![];
-            if input.parse::<syn::token::Lt>().is_ok() {
-                while !input.peek(syn::token::Gt) {
-                    lifetimes.push(input.parse()?);
-                }
-                input.parse::<syn::token::Gt>()?;
-            }
-            input.parse::<syn::token::Eq>()?;
-            let ty = input.parse::<syn::Type>()?;
-            input.parse::<syn::token::Semi>()?;
-            Ok(Rule::ErrorType { ty, lifetimes })
-        } else {
-            let mut single_rules = vec![];
-            while !input.is_empty() {
-                single_rules.push(SingleRule::parse(input)?);
-            }
-            Ok(Rule::UnnamedRules {
-                rules: single_rules,
-            })
+fn parse_rule(
+    input: ParseStream,
+    semantic_action_table: &mut SemanticActionTable,
+) -> syn::Result<Rule> {
+    if input.peek(syn::token::Let) {
+        // Let binding
+        input.parse::<syn::token::Let>()?;
+        let var = input.parse::<syn::Ident>()?;
+        input.parse::<syn::token::Eq>()?;
+        let re = parse_regex(input)?;
+        input.parse::<syn::token::Semi>()?;
+        Ok(Rule::Binding {
+            var: Var(var.to_string()),
+            re,
+        })
+    } else if input.peek(syn::Ident) {
+        // Name rules
+        let ident = input.parse::<syn::Ident>()?;
+        if ident != "rule" {
+            return Err(syn::Error::new(
+                ident.span(),
+                "Unknown identifier, expected \"rule\", \"let\", or a regex",
+            ));
         }
+        let rule_name = input.parse::<syn::Ident>()?;
+        let braced;
+        syn::braced!(braced in input);
+        let mut single_rules = vec![];
+        while !braced.is_empty() {
+            single_rules.push(parse_single_rule(&braced, semantic_action_table)?);
+        }
+        // Consume optional trailing comma
+        let _ = input.parse::<syn::token::Comma>();
+        Ok(Rule::RuleSet {
+            name: rule_name,
+            rules: single_rules,
+        })
+    } else if input.parse::<syn::token::Type>().is_ok() {
+        let ident = input.parse::<syn::Ident>()?;
+        if ident != "Error" {
+            panic!("Error type syntax is: `type Error = ...;`");
+        }
+        input.parse::<syn::token::Eq>()?;
+        let ty = input.parse::<syn::Type>()?;
+        input.parse::<syn::token::Semi>()?;
+        Ok(Rule::ErrorType { ty })
+    } else {
+        let mut single_rules = vec![];
+        while !input.is_empty() {
+            single_rules.push(parse_single_rule(input, semantic_action_table)?);
+        }
+        Ok(Rule::UnnamedRules {
+            rules: single_rules,
+        })
     }
 }
 
-impl Parse for Lexer {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
+pub fn make_lexer_parser<'a>(
+    semantic_action_table: &'a mut SemanticActionTable,
+) -> impl FnOnce(ParseStream) -> Result<Lexer, syn::Error> + 'a {
+    |input: ParseStream| {
         let public = input.parse::<syn::token::Pub>().is_ok();
         let type_name = input.parse::<syn::Ident>()?;
 
@@ -384,7 +377,7 @@ impl Parse for Lexer {
 
         let mut rules = vec![];
         while !input.is_empty() {
-            rules.push(Rule::parse(input)?);
+            rules.push(parse_rule(input, semantic_action_table)?);
         }
 
         Ok(Lexer {

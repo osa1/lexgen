@@ -2,12 +2,15 @@ use super::search_table::SearchTableSet;
 use super::StateIdx;
 use super::DFA;
 use crate::ast::RuleRhs;
+use crate::collections::Map;
 use crate::dfa::simplify::Trans;
-
-use fxhash::FxHashMap;
+use crate::semantic_action_table::{SemanticActionIdx, SemanticActionTable};
 
 /// Code generation state
 pub struct CgCtx {
+    /// Maps semantic action indices to expressions. Used to generate semantic action functions.
+    semantic_action_table: SemanticActionTable,
+
     /// Name of the lexer: `MyLexer` in `lexer! { MyLexer -> MyToken; }`
     lexer_name: syn::Ident,
 
@@ -17,17 +20,9 @@ pub struct CgCtx {
     /// Type of the user error, when available. `<type>` in `type Error = ...`.
     user_error_type: Option<syn::Type>,
 
-    /// Name of the `enum` type for user actions: `enum LexerAction { ... }`. The name is derived
-    /// from `lexer_name`.
-    action_type_name: syn::Ident,
-
-    /// Name of the `struct` type for the lexer handle passed to user actions: `struct LexerHandle
-    /// { ... }`. The name is derived from `lexer_name`.
-    handle_type_name: syn::Ident,
-
     /// Maps user-written rule names (e.g. `rule MyRule { ... }`) to their initial states in the
     /// final DFA.
-    rule_states: FxHashMap<String, StateIdx>,
+    rule_states: Map<String, StateIdx>,
 
     /// Sorted vector of states with only one predecessor. These states will be inlined in the
     /// predecessor states and won't appear in the final code. Inlining these states significantly
@@ -49,18 +44,13 @@ struct CgState {
 
 impl CgCtx {
     pub fn new(
-        dfa: &DFA<Trans<RuleRhs>, RuleRhs>,
+        dfa: &DFA<Trans, SemanticActionIdx>,
+        semantic_action_table: SemanticActionTable,
         lexer_name: syn::Ident,
         token_type: syn::Type,
         user_error_type: Option<syn::Type>,
-        rule_states: FxHashMap<String, StateIdx>,
+        rule_states: Map<String, StateIdx>,
     ) -> CgCtx {
-        let action_type_name =
-            syn::Ident::new(&(lexer_name.to_string() + "Action"), lexer_name.span());
-
-        let handle_type_name =
-            syn::Ident::new(&(lexer_name.to_string() + "Handle"), lexer_name.span());
-
         let inlined_states: Vec<StateIdx> = dfa
             .states
             .iter()
@@ -75,11 +65,10 @@ impl CgCtx {
             .collect();
 
         CgCtx {
+            semantic_action_table,
             lexer_name,
             token_type,
             user_error_type,
-            action_type_name,
-            handle_type_name,
             rule_states,
             inlined_states,
             codegen_state: CgState {
@@ -111,14 +100,6 @@ impl CgCtx {
         self.user_error_type.as_ref()
     }
 
-    pub fn handle_type_name(&self) -> &syn::Ident {
-        &self.handle_type_name
-    }
-
-    pub fn action_type_name(&self) -> &syn::Ident {
-        &self.action_type_name
-    }
-
     pub fn add_search_table(&mut self, ranges: Vec<(char, char)>) -> syn::Ident {
         self.codegen_state.search_tables.add_table(ranges)
     }
@@ -127,7 +108,18 @@ impl CgCtx {
         std::mem::replace(&mut self.codegen_state.search_tables, SearchTableSet::new())
     }
 
-    pub fn rule_states(&self) -> &FxHashMap<String, StateIdx> {
+    pub fn rule_states(&self) -> &Map<String, StateIdx> {
         &self.rule_states
+    }
+
+    pub fn iter_semantic_actions(&self) -> impl Iterator<Item = (SemanticActionIdx, &RuleRhs)> {
+        self.semantic_action_table.iter()
+    }
+
+    pub fn semantic_action_fn_ident(&self, action: SemanticActionIdx) -> syn::Ident {
+        syn::Ident::new(
+            &format!("{}_ACTION_{}", self.lexer_name, action.as_usize()),
+            self.lexer_name.span(),
+        )
     }
 }
