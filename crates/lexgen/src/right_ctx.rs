@@ -8,13 +8,14 @@
 
 use crate::ast::{Regex, Var};
 use crate::collections::Map;
+use crate::dfa::simplify::{simplify, Trans};
 use crate::dfa::{StateIdx, DFA};
 use crate::nfa::NFA;
 use crate::nfa_to_dfa::nfa_to_dfa;
 
-#[derive(Debug, Default)]
-pub struct RightCtxDFAs {
-    dfas: Vec<DFA<StateIdx, ()>>,
+#[derive(Debug)]
+pub struct RightCtxDFAs<S> {
+    dfas: Vec<DFA<S, ()>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -26,11 +27,20 @@ impl RightCtxIdx {
     }
 }
 
-impl RightCtxDFAs {
+impl<A> RightCtxDFAs<A> {
     pub fn new() -> Self {
-        Default::default()
+        RightCtxDFAs { dfas: vec![] }
     }
 
+    pub fn iter(&self) -> impl Iterator<Item = (RightCtxIdx, &DFA<A, ()>)> {
+        self.dfas
+            .iter()
+            .enumerate()
+            .map(|(i, dfa)| (RightCtxIdx(i), dfa))
+    }
+}
+
+impl RightCtxDFAs<StateIdx> {
     pub fn new_right_ctx(&mut self, bindings: &Map<Var, Regex>, right_ctx: &Regex) -> RightCtxIdx {
         let idx = self.dfas.len();
 
@@ -47,10 +57,13 @@ impl RightCtxDFAs {
         &self.dfas[right_ctx.as_usize()]
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (RightCtxIdx, &DFA<StateIdx, ()>)> {
-        self.dfas
-            .iter()
-            .enumerate()
-            .map(|(i, dfa)| (RightCtxIdx(i), dfa))
+    pub fn simplify(self) -> RightCtxDFAs<Trans<()>> {
+        RightCtxDFAs {
+            dfas: self
+                .dfas
+                .into_iter()
+                .map(|dfa| simplify::<(), ()>(dfa, &mut Default::default()))
+                .collect(),
+        }
     }
 }

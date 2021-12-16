@@ -32,8 +32,8 @@ use quote::{quote, ToTokens};
 const MAX_GUARD_SIZE: usize = 9;
 
 pub fn reify(
-    dfa: DFA<Trans, SemanticActionIdx>,
-    right_ctx_dfas: &RightCtxDFAs,
+    dfa: DFA<Trans<SemanticActionIdx>, SemanticActionIdx>,
+    right_ctx_dfas: &RightCtxDFAs<Trans<()>>,
     semantic_actions: SemanticActionTable,
     user_state_type: Option<syn::Type>,
     user_error_type: Option<syn::Type>,
@@ -235,7 +235,10 @@ fn generate_switch(ctx: &CgCtx, enum_name: &syn::Ident) -> TokenStream {
 }
 
 /// Generate arms of `match self.__state { ... }` of a DFA.
-fn generate_state_arms(ctx: &mut CgCtx, dfa: DFA<Trans, SemanticActionIdx>) -> Vec<TokenStream> {
+fn generate_state_arms(
+    ctx: &mut CgCtx,
+    dfa: DFA<Trans<SemanticActionIdx>, SemanticActionIdx>,
+) -> Vec<TokenStream> {
     let DFA { states } = dfa;
 
     let mut match_arms: Vec<TokenStream> = vec![];
@@ -268,8 +271,8 @@ fn generate_state_arms(ctx: &mut CgCtx, dfa: DFA<Trans, SemanticActionIdx>) -> V
 fn generate_state_arm(
     ctx: &mut CgCtx,
     state_idx: usize,
-    state: &State<Trans, SemanticActionIdx>,
-    states: &[State<Trans, SemanticActionIdx>],
+    state: &State<Trans<SemanticActionIdx>, SemanticActionIdx>,
+    states: &[State<Trans<SemanticActionIdx>, SemanticActionIdx>],
 ) -> TokenStream {
     let State {
         initial,
@@ -386,8 +389,8 @@ fn generate_state_arm(
 
 fn generate_any_transition(
     ctx: &mut CgCtx,
-    states: &[State<Trans, SemanticActionIdx>],
-    trans: &Trans,
+    states: &[State<Trans<SemanticActionIdx>, SemanticActionIdx>],
+    trans: &Trans<SemanticActionIdx>,
 ) -> TokenStream {
     let action = match trans {
         Trans::Trans(StateIdx(next_state)) => {
@@ -414,9 +417,9 @@ fn generate_any_transition(
 /// Generate arms for `match char { ... }`
 fn generate_state_char_arms(
     ctx: &mut CgCtx,
-    states: &[State<Trans, SemanticActionIdx>],
-    char_transitions: &Map<char, Trans>,
-    range_transitions: &RangeMap<Trans>,
+    states: &[State<Trans<SemanticActionIdx>, SemanticActionIdx>],
+    char_transitions: &Map<char, Trans<SemanticActionIdx>>,
+    range_transitions: &RangeMap<Trans<SemanticActionIdx>>,
     // RHS of the default alternative for this `match` (_ => <default_rhs>)
     default_rhs: &TokenStream,
 ) -> Vec<TokenStream> {
@@ -600,7 +603,10 @@ fn generate_semantic_action_fns(
     quote!(#(#fns)*)
 }
 
-fn generate_right_ctx_fns(ctx: &mut CgCtx, right_ctx_dfas: &RightCtxDFAs) -> Vec<TokenStream> {
+fn generate_right_ctx_fns(
+    ctx: &mut CgCtx,
+    right_ctx_dfas: &RightCtxDFAs<Trans<()>>,
+) -> Vec<TokenStream> {
     let mut fns = vec![];
 
     let lexer_name = ctx.lexer_name();

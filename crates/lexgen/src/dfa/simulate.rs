@@ -9,7 +9,7 @@ impl<A: Copy> DFA<StateIdx, A> {
     pub fn simulate<'input>(
         &self,
         input: &'input str,
-        right_ctx_dfas: &RightCtxDFAs,
+        right_ctx_dfas: &RightCtxDFAs<StateIdx>,
     ) -> (Matches<'input, A>, Option<ErrorLoc>) {
         let mut values: Matches<'input, A> = vec![];
 

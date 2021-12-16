@@ -1,5 +1,6 @@
 use crate::ast::{CharOrRange, CharSet, Regex, Var};
 use crate::collections::Map;
+use crate::dfa::StateIdx as DfaStateIdx;
 use crate::nfa::simulate::{ErrorLoc, Matches};
 use crate::nfa::NFA;
 use crate::nfa_to_dfa::nfa_to_dfa;
@@ -9,12 +10,12 @@ fn test_simulate<'input, A: Copy + std::fmt::Debug + Eq>(
     nfa: &NFA<A>,
     test_cases: Vec<(&'input str, Matches<'input, A>, Option<ErrorLoc>)>,
 ) {
-    test_simulate_right_ctx(nfa, &Default::default(), test_cases)
+    test_simulate_right_ctx(nfa, &RightCtxDFAs::new(), test_cases)
 }
 
 fn test_simulate_right_ctx<'input, A: Copy + std::fmt::Debug + Eq>(
     nfa: &NFA<A>,
-    right_ctx_dfas: &RightCtxDFAs,
+    right_ctx_dfas: &RightCtxDFAs<DfaStateIdx>,
     test_cases: Vec<(&'input str, Matches<'input, A>, Option<ErrorLoc>)>,
 ) {
     println!("NFA=\n{}", nfa);

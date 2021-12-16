@@ -1,22 +1,21 @@
 use super::{State, StateIdx, DFA};
 use crate::collections::Map;
 use crate::nfa::AcceptingState;
-use crate::semantic_action_table::SemanticActionIdx;
 
 #[derive(Debug)]
-pub enum Trans {
-    Accept(Vec<AcceptingState<SemanticActionIdx>>),
+pub enum Trans<A> {
+    Accept(Vec<AcceptingState<A>>),
     Trans(StateIdx),
 }
 
 /// Removes accepting states with no transitions, makes the transitions to those states accepting.
-pub fn simplify<K>(
-    dfa: DFA<StateIdx, SemanticActionIdx>,
+pub fn simplify<K, A: Clone>(
+    dfa: DFA<StateIdx, A>,
     dfa_state_indices: &mut Map<K, StateIdx>,
-) -> DFA<Trans, SemanticActionIdx> {
-    let mut empty_states: Vec<(StateIdx, Vec<AcceptingState<SemanticActionIdx>>)> = vec![];
+) -> DFA<Trans<A>, A> {
+    let mut empty_states: Vec<(StateIdx, Vec<AcceptingState<A>>)> = vec![];
 
-    let mut non_empty_states: Vec<(StateIdx, State<StateIdx, SemanticActionIdx>)> = vec![];
+    let mut non_empty_states: Vec<(StateIdx, State<StateIdx, A>)> = vec![];
 
     for (state_idx, state) in dfa.into_state_indices() {
         if state.has_no_transitions() && !state.initial {
@@ -33,14 +32,14 @@ pub fn simplify<K>(
         *t = t.map(|i| i - idx);
     }
 
-    let map_transition = |t: StateIdx| -> Trans {
+    let map_transition = |t: StateIdx| -> Trans<A> {
         match empty_states.binary_search_by(|(state_idx, _action)| state_idx.cmp(&t)) {
             Ok(idx) => Trans::Accept(empty_states[idx].1.clone()),
             Err(idx) => Trans::Trans(t.map(|i| i - idx)),
         }
     };
 
-    let new_states: Vec<State<Trans, SemanticActionIdx>> = non_empty_states
+    let new_states: Vec<State<Trans<A>, A>> = non_empty_states
         .into_iter()
         .map(|(_state_idx, state)| {
             let State {

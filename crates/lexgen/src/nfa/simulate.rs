@@ -1,6 +1,7 @@
 use super::{AcceptingState, StateIdx, NFA};
 use crate::collections::Set;
 use crate::dfa::simulate::simulate_right_ctx;
+use crate::dfa::StateIdx as DfaStateIdx;
 use crate::right_ctx::RightCtxDFAs;
 
 pub type Matches<'input, A> = Vec<(&'input str, A)>;
@@ -11,7 +12,7 @@ impl<A: std::fmt::Debug + Copy> NFA<A> {
     pub fn simulate<'input>(
         &self,
         input: &'input str,
-        right_ctx_dfas: &RightCtxDFAs,
+        right_ctx_dfas: &RightCtxDFAs<DfaStateIdx>,
     ) -> (Matches<'input, A>, Option<ErrorLoc>) {
         let mut values: Matches<'input, A> = vec![];
 
