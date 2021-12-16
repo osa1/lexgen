@@ -617,66 +617,57 @@ fn overlapping_ranges() {
     );
 }
 
-/*
 #[test]
 fn right_context_1() {
     let mut nfa: NFA<usize> = NFA::new();
+    let mut right_ctxs = RightCtxDFAs::new();
 
-    nfa.add_regex(
-        &Default::default(),
-        &Regex::Char('a'),
-        Some(&Regex::Char('a')),
-        1,
-    );
+    let right_ctx = right_ctxs.new_right_ctx(&Default::default(), &Regex::Char('a'));
+    nfa.add_regex(&Default::default(), &Regex::Char('a'), Some(right_ctx), 1);
 
-    test_simulate(&nfa, vec![("aa", vec![("a", 1)], Some(1))]);
-    test_simulate(&nfa, vec![("ab", vec![], Some(0))]);
+    test_simulate_right_ctx(&nfa, &right_ctxs, vec![("aa", vec![("a", 1)], Some(1))]);
+    test_simulate_right_ctx(&nfa, &right_ctxs, vec![("ab", vec![], Some(0))]);
 }
 
 #[test]
 fn right_context_2() {
     let mut nfa: NFA<usize> = NFA::new();
+    let mut right_ctxs = RightCtxDFAs::new();
 
-    nfa.add_regex(&Default::default(), &Regex::Char('a'), Some(&Regex::Any), 1);
+    let right_ctx = right_ctxs.new_right_ctx(&Default::default(), &Regex::Any);
+    nfa.add_regex(&Default::default(), &Regex::Char('a'), Some(right_ctx), 1);
 
-    test_simulate(&nfa, vec![("aa", vec![("a", 1)], Some(1))]);
-    test_simulate(&nfa, vec![("ab", vec![("a", 1)], Some(1))]);
-    test_simulate(&nfa, vec![("a", vec![], Some(0))]);
+    test_simulate_right_ctx(&nfa, &right_ctxs, vec![("aa", vec![("a", 1)], Some(1))]);
+    test_simulate_right_ctx(&nfa, &right_ctxs, vec![("ab", vec![("a", 1)], Some(1))]);
+    test_simulate_right_ctx(&nfa, &right_ctxs, vec![("a", vec![], Some(0))]);
 }
 
 #[test]
 fn right_context_3() {
     let mut nfa: NFA<usize> = NFA::new();
+    let mut right_ctxs = RightCtxDFAs::new();
 
-    nfa.add_regex(
-        &Default::default(),
-        &Regex::Char('a'),
-        Some(&Regex::EndOfInput),
-        1,
-    );
+    let right_ctx = right_ctxs.new_right_ctx(&Default::default(), &Regex::EndOfInput);
+    nfa.add_regex(&Default::default(), &Regex::Char('a'), Some(right_ctx), 1);
 
-    test_simulate(&nfa, vec![("a", vec![("a", 1)], None)]);
-    test_simulate(&nfa, vec![("ab", vec![], Some(0))]);
+    test_simulate_right_ctx(&nfa, &right_ctxs, vec![("a", vec![("a", 1)], None)]);
+    test_simulate_right_ctx(&nfa, &right_ctxs, vec![("ab", vec![], Some(0))]);
 }
 
 #[test]
 fn right_context_4() {
     let mut nfa: NFA<usize> = NFA::new();
+    let mut right_ctxs = RightCtxDFAs::new();
 
-    nfa.add_regex(
-        &Default::default(),
-        &Regex::Char('a'),
-        Some(&Regex::Char('a')),
-        1,
+    let right_ctx = right_ctxs.new_right_ctx(&Default::default(), &Regex::Char('a'));
+    nfa.add_regex(&Default::default(), &Regex::Char('a'), Some(right_ctx), 1);
+
+    let right_ctx = right_ctxs.new_right_ctx(&Default::default(), &Regex::EndOfInput);
+    nfa.add_regex(&Default::default(), &Regex::Char('a'), Some(right_ctx), 2);
+
+    test_simulate_right_ctx(
+        &nfa,
+        &right_ctxs,
+        vec![("aa", vec![("a", 1), ("a", 2)], None)],
     );
-
-    nfa.add_regex(
-        &Default::default(),
-        &Regex::Char('a'),
-        Some(&Regex::EndOfInput),
-        2,
-    );
-
-    test_simulate(&nfa, vec![("aa", vec![("a", 1), ("a", 2)], None)]);
 }
-*/
