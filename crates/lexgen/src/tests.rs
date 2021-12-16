@@ -3,9 +3,18 @@ use crate::collections::Map;
 use crate::nfa::simulate::{ErrorLoc, Matches};
 use crate::nfa::NFA;
 use crate::nfa_to_dfa::nfa_to_dfa;
+use crate::right_ctx::RightCtxDFAs;
 
 fn test_simulate<'input, A: Copy + std::fmt::Debug + Eq>(
     nfa: &NFA<A>,
+    test_cases: Vec<(&'input str, Matches<'input, A>, Option<ErrorLoc>)>,
+) {
+    test_simulate_right_ctx(nfa, &Default::default(), test_cases)
+}
+
+fn test_simulate_right_ctx<'input, A: Copy + std::fmt::Debug + Eq>(
+    nfa: &NFA<A>,
+    right_ctx_dfas: &RightCtxDFAs,
     test_cases: Vec<(&'input str, Matches<'input, A>, Option<ErrorLoc>)>,
 ) {
     println!("NFA=\n{}", nfa);
@@ -18,14 +27,14 @@ fn test_simulate<'input, A: Copy + std::fmt::Debug + Eq>(
         let expected = (expected_matches, expected_error);
 
         assert_eq!(
-            &nfa.simulate(str),
+            &nfa.simulate(str, right_ctx_dfas),
             &expected,
             "NFA simulation failed for string: {:?}",
             str
         );
 
         assert_eq!(
-            dfa.simulate(str),
+            dfa.simulate(str, right_ctx_dfas),
             expected,
             "DFA simulation failed for string: {:?}",
             str
@@ -608,6 +617,7 @@ fn overlapping_ranges() {
     );
 }
 
+/*
 #[test]
 fn right_context_1() {
     let mut nfa: NFA<usize> = NFA::new();
@@ -669,3 +679,4 @@ fn right_context_4() {
 
     test_simulate(&nfa, vec![("aa", vec![("a", 1), ("a", 2)], None)]);
 }
+*/

@@ -5,7 +5,7 @@ pub mod simplify;
 pub mod simulate;
 
 use crate::collections::{Map, Set};
-use crate::nfa::{AcceptingState, RightCtx};
+use crate::nfa::AcceptingState;
 use crate::range_map::{Range, RangeMap};
 
 use std::convert::TryFrom;
@@ -39,7 +39,7 @@ pub struct State<T, A> {
     range_transitions: RangeMap<T>,
     any_transition: Option<T>,
     end_of_input_transition: Option<T>,
-    accepting: Vec<AcceptingState<A, StateIdx>>,
+    accepting: Vec<AcceptingState<A>>,
     // Predecessors of the state, used to inline code for a state with one predecessor in the
     // predecessor's code
     predecessors: Set<StateIdx>,
@@ -82,7 +82,7 @@ impl<A> DFA<StateIdx, A> {
         StateIdx(0)
     }
 
-    pub fn make_state_accepting(&mut self, state: StateIdx, accept: AcceptingState<A, StateIdx>) {
+    pub fn make_state_accepting(&mut self, state: StateIdx, accept: AcceptingState<A>) {
         self.states[state.0].accepting.push(accept);
     }
 
@@ -90,6 +90,11 @@ impl<A> DFA<StateIdx, A> {
         let new_state_idx = StateIdx(self.states.len());
         self.states.push(State::new());
         new_state_idx
+    }
+
+    #[cfg(test)]
+    pub fn is_accepting_state(&self, state: StateIdx) -> bool {
+        !self.states[state.0].accepting.is_empty()
     }
 
     pub fn add_char_transition(&mut self, state: StateIdx, char: char, next: StateIdx) {

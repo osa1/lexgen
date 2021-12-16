@@ -52,19 +52,8 @@ pub fn nfa_to_dfa<A: Clone>(nfa: &NFA<A>) -> DFA<DfaStateIdx, A> {
         let mut end_of_input_transitions: Set<NfaStateIdx> = Default::default();
 
         for nfa_state in current_nfa_states.iter().copied() {
-            if let Some(accepting_state) = nfa.get_accepting_state(nfa_state) {
-                let accepting_state = accepting_state.map_states(|state| {
-                    let mut work: BTreeSet<NfaStateIdx> = Default::default();
-                    work.insert(state);
-
-                    let dfa_state = dfa.new_state();
-                    state_map.insert(work.clone(), dfa_state);
-
-                    work_list.push(work);
-
-                    dfa_state
-                });
-                dfa.make_state_accepting(current_dfa_state, accepting_state);
+            if let Some(value) = nfa.get_accepting_state(nfa_state) {
+                dfa.make_state_accepting(current_dfa_state, value.clone());
             }
 
             // Collect char transitions

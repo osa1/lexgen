@@ -8,7 +8,7 @@ use super::{State, StateIdx, DFA};
 
 use crate::ast::{RuleKind, RuleRhs};
 use crate::collections::Map;
-use crate::nfa::{AcceptingState, RightCtx};
+use crate::nfa::AcceptingState;
 use crate::range_map::RangeMap;
 use crate::semantic_action_table::{SemanticActionIdx, SemanticActionTable};
 

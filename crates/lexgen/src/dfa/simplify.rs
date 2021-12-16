@@ -5,7 +5,7 @@ use crate::semantic_action_table::SemanticActionIdx;
 
 #[derive(Debug)]
 pub enum Trans {
-    Accept(Vec<AcceptingState<SemanticActionIdx, StateIdx>>),
+    Accept(Vec<AcceptingState<SemanticActionIdx>>),
     Trans(StateIdx),
 }
 
@@ -14,8 +14,7 @@ pub fn simplify<K>(
     dfa: DFA<StateIdx, SemanticActionIdx>,
     dfa_state_indices: &mut Map<K, StateIdx>,
 ) -> DFA<Trans, SemanticActionIdx> {
-    let mut empty_states: Vec<(StateIdx, Vec<AcceptingState<SemanticActionIdx, StateIdx>>)> =
-        vec![];
+    let mut empty_states: Vec<(StateIdx, Vec<AcceptingState<SemanticActionIdx>>)> = vec![];
 
     let mut non_empty_states: Vec<(StateIdx, State<StateIdx, SemanticActionIdx>)> = vec![];
 

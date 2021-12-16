@@ -6,6 +6,7 @@ use crate::collections::{Map, Set};
 use crate::display::HashSetDisplay;
 use crate::range_map::{Range, RangeMap};
 use crate::regex_to_nfa;
+use crate::right_ctx::RightCtxIdx;
 
 /// Non-deterministic finite automate, parameterized on values of accepting states.
 #[derive(Debug)]
@@ -24,39 +25,13 @@ struct State<A> {
     empty_transitions: Set<StateIdx>,
     any_transitions: Set<StateIdx>,
     end_of_input_transitions: Set<StateIdx>,
-    accepting: Option<AcceptingState<A, StateIdx>>,
+    accepting: Option<AcceptingState<A>>,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct AcceptingState<A, I> {
+pub struct AcceptingState<A> {
     pub value: A,
-    pub right_ctx: Option<RightCtx<I>>,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct RightCtx<I> {
-    pub init: I,
-    pub accept: I,
-}
-
-impl<A, I> AcceptingState<A, I> {
-    pub fn map_states<I2, F>(&self, mut f: F) -> AcceptingState<A, I2>
-    where
-        F: FnMut(I) -> I2,
-        A: Clone,
-        I: Clone,
-    {
-        AcceptingState {
-            value: self.value.clone(),
-            right_ctx: self
-                .right_ctx
-                .clone()
-                .map(|RightCtx { init, accept }| RightCtx {
-                    init: f(init),
-                    accept: f(accept),
-                }),
-        }
-    }
+    pub right_ctx: Option<RightCtxIdx>,
 }
 
 impl<A> State<A> {
@@ -83,7 +58,7 @@ impl<A> NFA<A> {
         StateIdx(0)
     }
 
-    pub fn get_accepting_state(&self, state: StateIdx) -> Option<&AcceptingState<A, StateIdx>> {
+    pub fn get_accepting_state(&self, state: StateIdx) -> Option<&AcceptingState<A>> {
         self.states[state.0].accepting.as_ref()
     }
 
@@ -122,17 +97,10 @@ impl<A> NFA<A> {
         &mut self,
         bindings: &Map<Var, Regex>,
         re: &Regex,
-        right_ctx: Option<&Regex>,
+        right_ctx: Option<RightCtxIdx>,
         value: A,
     ) {
         let re_accepting_state = self.new_state();
-
-        let right_ctx = right_ctx.map(|right_ctx_re| {
-            let init = self.new_state();
-            let accept = self.new_state();
-            regex_to_nfa::add_re(self, bindings, right_ctx_re, init, accept);
-            RightCtx { init, accept }
-        });
 
         self.make_state_accepting(re_accepting_state, value, right_ctx);
 
@@ -202,12 +170,7 @@ impl<A> NFA<A> {
         assert!(not_exists, "add_end_of_input_transition");
     }
 
-    fn make_state_accepting(
-        &mut self,
-        state: StateIdx,
-        value: A,
-        right_ctx: Option<RightCtx<StateIdx>>,
-    ) {
+    fn make_state_accepting(&mut self, state: StateIdx, value: A, right_ctx: Option<RightCtxIdx>) {
         let old = self.states[state.0]
             .accepting
             .replace(AcceptingState { value, right_ctx });
@@ -261,9 +224,9 @@ impl<A> Display for NFA<A> {
                     value: _,
                     right_ctx,
                 }) => match right_ctx {
-                    Some(RightCtx { init, accept }) => {
+                    Some(right_ctx_idx) => {
                         write!(f, "{:>4}", format!("*{}", state_idx),)?;
-                        write!(f, " (ctx init={}, accept={})", init.0, accept.0)?;
+                        write!(f, " (ctx {})", right_ctx_idx.as_usize())?;
                     }
                     None => {
                         write!(f, "{:>4}", format!("*{}", state_idx))?;
