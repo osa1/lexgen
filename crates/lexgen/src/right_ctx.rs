@@ -46,4 +46,11 @@ impl RightCtxDFAs {
     pub fn get(&self, right_ctx: &RightCtxIdx) -> &DFA<StateIdx, ()> {
         &self.dfas[right_ctx.as_usize()]
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = (RightCtxIdx, &DFA<StateIdx, ()>)> {
+        self.dfas
+            .iter()
+            .enumerate()
+            .map(|(i, dfa)| (RightCtxIdx(i), dfa))
+    }
 }

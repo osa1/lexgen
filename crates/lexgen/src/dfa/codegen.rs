@@ -10,6 +10,7 @@ use crate::ast::{RuleKind, RuleRhs};
 use crate::collections::Map;
 use crate::nfa::AcceptingState;
 use crate::range_map::RangeMap;
+use crate::right_ctx::RightCtxDFAs;
 use crate::semantic_action_table::{SemanticActionIdx, SemanticActionTable};
 
 use std::convert::TryFrom;
@@ -32,6 +33,7 @@ const MAX_GUARD_SIZE: usize = 9;
 
 pub fn reify(
     dfa: DFA<Trans, SemanticActionIdx>,
+    right_ctx_dfas: &RightCtxDFAs,
     semantic_actions: SemanticActionTable,
     user_state_type: Option<syn::Type>,
     user_error_type: Option<syn::Type>,
@@ -107,7 +109,6 @@ pub fn reify(
         })
         .collect();
 
-    let lexer_name = ctx.lexer_name();
     let token_type = ctx.token_type();
 
     let error_type = match ctx.user_error_type() {
@@ -125,6 +126,11 @@ pub fn reify(
     };
 
     let semantic_action_fns = generate_semantic_action_fns(&ctx, &semantic_action_fn_ret_ty);
+
+    let right_ctx_fns = generate_right_ctx_fns(&mut ctx, right_ctx_dfas);
+
+    let token_type = ctx.token_type();
+    let lexer_name = ctx.lexer_name();
 
     quote!(
         // An enum for the rule sets in the DFA. `Init` is the initial, unnamed rule set.
@@ -184,6 +190,7 @@ pub fn reify(
         #(#search_tables)*
         #binary_search_fn
         #semantic_action_fns
+        #(#right_ctx_fns)*
 
         impl<'input> Iterator for #lexer_name<'input> {
             type Item = Result<(::lexgen_util::Loc, #token_type, ::lexgen_util::Loc), ::lexgen_util::LexerError<#error_type>>;
@@ -591,4 +598,31 @@ fn generate_semantic_action_fns(
         .collect();
 
     quote!(#(#fns)*)
+}
+
+fn generate_right_ctx_fns(ctx: &mut CgCtx, right_ctx_dfas: &RightCtxDFAs) -> Vec<TokenStream> {
+    let mut fns = vec![];
+
+    let lexer_name = ctx.lexer_name();
+
+    for (idx, dfa) in right_ctx_dfas.iter() {
+        let fn_name = syn::Ident::new(
+            &format!("{}_RIGHT_CTX_{}", lexer_name, idx.as_usize()),
+            Span::call_site(),
+        );
+
+        // let match_arms = generate_state_arms(ctx, dfa);
+
+        fns.push(
+            quote!(fn #fn_name(input: std::iter::Peekable<std::str::CharIndices>) {
+                let mut state: usize = 0;
+
+                match state {
+                    // #(#match_arms,)*
+                }
+            }),
+        );
+    }
+
+    fns
 }

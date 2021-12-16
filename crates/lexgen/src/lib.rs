@@ -130,6 +130,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
 
     dfa::codegen::reify(
         dfa,
+        &right_ctx_dfas,
         semantic_action_table,
         user_state_type,
         user_error_type,
