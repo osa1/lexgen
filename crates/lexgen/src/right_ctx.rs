@@ -8,7 +8,7 @@
 
 use crate::ast::{Regex, Var};
 use crate::collections::Map;
-use crate::dfa::simplify::{simplify, Trans};
+// use crate::dfa::simplify::{simplify, Trans};
 use crate::dfa::{StateIdx, DFA};
 use crate::nfa::NFA;
 use crate::nfa_to_dfa::nfa_to_dfa;
@@ -38,6 +38,13 @@ impl<A> RightCtxDFAs<A> {
             .enumerate()
             .map(|(i, dfa)| (RightCtxIdx(i), dfa))
     }
+
+    pub fn into_iter(self) -> impl Iterator<Item = (RightCtxIdx, DFA<A, ()>)> {
+        self.dfas
+            .into_iter()
+            .enumerate()
+            .map(|(i, dfa)| (RightCtxIdx(i), dfa))
+    }
 }
 
 impl RightCtxDFAs<StateIdx> {
@@ -57,6 +64,7 @@ impl RightCtxDFAs<StateIdx> {
         &self.dfas[right_ctx.as_usize()]
     }
 
+    /*
     pub fn simplify(self) -> RightCtxDFAs<Trans<()>> {
         RightCtxDFAs {
             dfas: self
@@ -66,4 +74,5 @@ impl RightCtxDFAs<StateIdx> {
                 .collect(),
         }
     }
+    */
 }
