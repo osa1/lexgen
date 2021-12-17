@@ -10,7 +10,7 @@ use crate::ast::{RuleKind, RuleRhs};
 use crate::collections::{Map, Set};
 use crate::nfa::AcceptingState;
 use crate::range_map::{Range, RangeMap};
-use crate::right_ctx::RightCtxDFAs;
+use crate::right_ctx::{RightCtxDFAs, RightCtxIdx};
 use crate::semantic_action_table::{SemanticActionIdx, SemanticActionTable};
 
 use std::convert::TryFrom;
@@ -606,6 +606,13 @@ fn generate_semantic_action_fns(
     quote!(#(#fns)*)
 }
 
+fn right_ctx_fn_name(lexer_name: &syn::Ident, idx: &RightCtxIdx) -> syn::Ident {
+    syn::Ident::new(
+        &format!("{}_RIGHT_CTX_{}", lexer_name, idx.as_usize()),
+        Span::call_site(),
+    )
+}
+
 fn generate_right_ctx_fns(
     ctx: &mut CgCtx,
     right_ctx_dfas: &RightCtxDFAs<StateIdx>,
@@ -615,19 +622,18 @@ fn generate_right_ctx_fns(
     let lexer_name = ctx.lexer_name().clone();
 
     for (idx, dfa) in right_ctx_dfas.iter() {
-        let fn_name = syn::Ident::new(
-            &format!("{}_RIGHT_CTX_{}", lexer_name, idx.as_usize()),
-            Span::call_site(),
-        );
+        let fn_name = right_ctx_fn_name(&lexer_name, &idx);
 
         let match_arms = generate_right_ctx_state_arms(ctx, dfa);
 
         fns.push(
-            quote!(fn #fn_name(mut input: std::iter::Peekable<std::str::CharIndices>) {
+            quote!(fn #fn_name(mut input: std::iter::Peekable<std::str::CharIndices>) -> bool {
                 let mut state: usize = 0;
 
-                match state {
-                    #(#match_arms,)*
+                loop {
+                    match state {
+                        #(#match_arms)*
+                    }
                 }
             }),
         );
@@ -644,7 +650,7 @@ fn generate_right_ctx_state_arms(ctx: &mut CgCtx, dfa: &DFA<StateIdx, ()>) -> Ve
     let n_states = states.len();
 
     for (state_idx, state) in states.iter().enumerate() {
-        let state_code: TokenStream = generate_right_ctx_state_arm(ctx, state_idx, state, &states);
+        let state_code: TokenStream = generate_right_ctx_state_arm(ctx, state, &states);
 
         let state_idx_pat = if state_idx == n_states - 1 {
             quote!(_)
@@ -662,12 +668,11 @@ fn generate_right_ctx_state_arms(ctx: &mut CgCtx, dfa: &DFA<StateIdx, ()>) -> Ve
 
 fn generate_right_ctx_state_arm(
     ctx: &mut CgCtx,
-    state_idx: usize,
     state: &State<StateIdx, ()>,
     states: &[State<StateIdx, ()>],
 ) -> TokenStream {
     let State {
-        initial,
+        initial: _,
         char_transitions,
         range_transitions,
         any_transition,
@@ -679,18 +684,36 @@ fn generate_right_ctx_state_arm(
     let state_char_arms =
         generate_right_ctx_state_char_arms(ctx, states, char_transitions, range_transitions);
 
+    // Make sure right contexts don't have right contexts. We don't allow this in the syntax
+    // currently.
+    for accepting_state in accepting {
+        assert_eq!(accepting_state.right_ctx, None);
+    }
+
+    let eof = match end_of_input_transition {
+        Some(StateIdx(eof_next)) => quote!(state = #eof_next),
+        None => quote!(return false),
+    };
+
+    let def = match any_transition {
+        Some(StateIdx(any_next)) => quote!(state = #any_next),
+        None => quote!(return false),
+    };
+
     quote!(
         match input.next() {
-            None => return false,
+            None => #eof,
             Some((_, char)) => {
                 match char {
                     #(#state_char_arms,)*
+                    _ => #def,
                 }
             }
         }
     )
 }
 
+// NB. Does not add default case
 fn generate_right_ctx_state_char_arms(
     ctx: &mut CgCtx,
     states: &[State<StateIdx, ()>],
@@ -721,8 +744,10 @@ fn generate_right_ctx_state_char_arms(
         state_char_arms.push(quote!(#pat => self.state = #next_state,));
     }
 
-    let accept_chars: Vec<char> = accept_chars.into_iter().collect();
-    state_char_arms.push(quote!(#(#accept_chars)|* => return true,));
+    if !accept_chars.is_empty() {
+        let accept_chars: Vec<char> = accept_chars.into_iter().collect();
+        state_char_arms.push(quote!(#(#accept_chars)|* => return true,));
+    }
 
     // Same as above for range transitions. Use chain of "or"s for ranges with same transition.
     let mut state_ranges: Map<StateIdx, Vec<(char, char)>> = Default::default();
@@ -762,7 +787,7 @@ fn generate_right_ctx_state_char_arms(
         state_char_arms.push(quote!(x if #guard => state = #next_state,));
     }
 
-    {
+    if !accept_ranges.is_empty() {
         let guard = if accept_ranges.len() > MAX_GUARD_SIZE {
             let binary_search_table_id = ctx.add_search_table(accept_ranges.into_iter().collect());
 
@@ -778,8 +803,6 @@ fn generate_right_ctx_state_char_arms(
 
         state_char_arms.push(quote!(x if #guard => return true,));
     }
-
-    state_char_arms.push(quote!(_ => return false,));
 
     state_char_arms
 }
