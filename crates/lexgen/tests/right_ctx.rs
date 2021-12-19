@@ -98,11 +98,11 @@ fn right_ctx_4() {
         Lexer -> u32;
 
         'a' > 'a' = 1,
-        'a' > $ = 1,
+        'a' > $ = 2,
     }
 
     let mut lexer = Lexer::new("a");
-    assert_eq!(next(&mut lexer), Some(Ok(1)));
+    assert_eq!(next(&mut lexer), Some(Ok(2)));
     assert_eq!(next(&mut lexer), None);
 
     let mut lexer = Lexer::new("aa");

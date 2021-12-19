@@ -776,16 +776,18 @@ fn generate_right_ctx_state_arm(
         assert_eq!(accepting_state.right_ctx, None);
     }
 
-    let accepting = !accepting.is_empty();
+    if !accepting.is_empty() {
+        return quote!(return true);
+    }
 
     let eof = match end_of_input_transition {
         Some(StateIdx(eof_next)) => quote!(state = #eof_next),
-        None => quote!(return #accepting),
+        None => quote!(return false),
     };
 
     let def = match any_transition {
         Some(StateIdx(any_next)) => quote!(state = #any_next),
-        None => quote!(return #accepting),
+        None => quote!(return false),
     };
 
     quote!(
