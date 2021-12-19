@@ -76,7 +76,7 @@ pub struct Lexer<'input, Token, State, Error, Wrapper> {
     // Character iterator. `Peekable` is used in the handler's `peek` method. Note that we can't
     // use byte index returned by this directly, as we re-initialize this field when backtracking.
     // Add `iter_byte_idx` to the byte index before using. When resetting, update `iter_byte_idx`.
-    iter: std::iter::Peekable<std::str::CharIndices<'input>>,
+    pub __iter: std::iter::Peekable<std::str::CharIndices<'input>>,
 
     // Start of the current match
     current_match_start: Loc,
@@ -111,7 +111,7 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
             user_state: state,
             input,
             iter_loc: Loc::ZERO,
-            iter: input.char_indices().peekable(),
+            __iter: input.char_indices().peekable(),
             current_match_start: Loc::ZERO,
             current_match_end: Loc::ZERO,
             last_match: None,
@@ -120,7 +120,7 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
 
     // Read the next chracter
     pub fn next(&mut self) -> Option<(usize, char)> {
-        match self.iter.next() {
+        match self.__iter.next() {
             None => None,
             Some((char_idx, char)) => {
                 let char_idx = self.iter_loc.byte_idx + char_idx;
@@ -139,7 +139,7 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
     }
 
     pub fn peek(&mut self) -> Option<(usize, char)> {
-        self.iter.peek().copied()
+        self.__iter.peek().copied()
     }
 
     // On success returns semantic action function for the last match
@@ -156,7 +156,7 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
                 self.__done = false;
                 self.current_match_start = match_start;
                 self.current_match_end = match_end;
-                self.iter = self.input[match_end.byte_idx..].char_indices().peekable();
+                self.__iter = self.input[match_end.byte_idx..].char_indices().peekable();
                 self.iter_loc = match_end;
                 Ok(semantic_action)
             }
