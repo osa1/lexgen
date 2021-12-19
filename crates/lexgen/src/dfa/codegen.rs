@@ -353,13 +353,40 @@ fn generate_state_arm(
                 }
             }
         )
-    } else if let Some(AcceptingState { value, right_ctx }) = accepting.iter().next() {
-        // TODO: other values
+    } else if !accepting.is_empty() {
         // Accepting state
-        let semantic_fn = ctx.semantic_action_fn_ident(*value);
+        let mut rhss: Vec<(TokenStream, TokenStream)> = Vec::with_capacity(accepting.len());
+
+        for AcceptingState { value, right_ctx } in accepting.iter() {
+            match right_ctx {
+                Some(right_ctx) => {
+                    let right_ctx_fn = right_ctx_fn_name(ctx.lexer_name(), right_ctx);
+                    let semantic_fn = ctx.semantic_action_fn_ident(*value);
+                    rhss.push((
+                        quote!(#right_ctx_fn(self.0.__iter.clone())),
+                        quote!(self.0.set_accepting_state(#semantic_fn)),
+                    ));
+                }
+                None => {
+                    let semantic_fn = ctx.semantic_action_fn_ident(*value);
+                    rhss.push((
+                        quote!(true),
+                        quote!(self.0.set_accepting_state(#semantic_fn)),
+                    ));
+                    break;
+                }
+            }
+        }
+
+        let (last_cond, last_rhs) = rhss.pop().unwrap();
+        let mut set_accepting_state = quote!(if #last_cond { #last_rhs });
+
+        for (cond, rhs) in rhss.into_iter().rev() {
+            set_accepting_state = quote!(if #cond { #rhs } else { #set_accepting_state });
+        }
 
         quote!(
-            self.0.set_accepting_state(#semantic_fn);
+            #set_accepting_state
 
             match self.0.next() {
                 None => {
@@ -431,10 +458,38 @@ fn generate_state_char_arms(
     let mut state_chars: Map<StateIdx, Vec<char>> = Default::default();
     for (char, next) in char_transitions {
         match next {
-            Trans::Accept(accepting_states) => {
-                // TODO: Other accepting states
-                let AcceptingState { value, right_ctx } = accepting_states.iter().next().unwrap();
-                let action_code = generate_rhs_code(ctx, *value);
+            Trans::Accept(accepting) => {
+                let mut rhss: Vec<(TokenStream, TokenStream)> = Vec::with_capacity(accepting.len());
+
+                let mut has_default = false;
+
+                for AcceptingState { value, right_ctx } in accepting.iter() {
+                    match right_ctx {
+                        Some(right_ctx) => {
+                            let right_ctx_fn = right_ctx_fn_name(ctx.lexer_name(), right_ctx);
+                            let action_code = generate_rhs_code(ctx, *value);
+                            rhss.push((quote!(#right_ctx_fn(self.0.__iter.clone())), action_code));
+                        }
+                        None => {
+                            let action_code = generate_rhs_code(ctx, *value);
+                            rhss.push((quote!(true), action_code));
+                            has_default = true;
+                            break;
+                        }
+                    }
+                }
+
+                if !has_default {
+                    rhss.push((quote!(true), default_rhs.clone()));
+                }
+
+                let (last_cond, last_rhs) = rhss.pop().unwrap();
+                let mut action_code = quote!(if #last_cond { #last_rhs });
+
+                for (cond, rhs) in rhss.into_iter().rev() {
+                    action_code = quote!(if #cond { #rhs } else { #action_code });
+                }
+
                 state_char_arms.push(quote!(
                     #char => {
                         #action_code
@@ -474,12 +529,43 @@ fn generate_state_char_arms(
                 char::try_from(range.start).unwrap(),
                 char::try_from(range.end).unwrap(),
             )),
-            Trans::Accept(accepting_states) => {
-                // TODO: other accepting states
-                let AcceptingState { value, right_ctx } = accepting_states.iter().next().unwrap();
-                let action_code = generate_rhs_code(ctx, *value);
+            Trans::Accept(accepting) => {
+                let mut rhss: Vec<(TokenStream, TokenStream)> = Vec::with_capacity(accepting.len());
+
+                // Whether we have a default case (else branch) in the conditional for right
+                // contexts
+                let mut has_default = false;
+
+                for AcceptingState { value, right_ctx } in accepting.iter() {
+                    match right_ctx {
+                        Some(right_ctx) => {
+                            let right_ctx_fn = right_ctx_fn_name(ctx.lexer_name(), right_ctx);
+                            let action_code = generate_rhs_code(ctx, *value);
+                            rhss.push((quote!(#right_ctx_fn(self.0.__iter.clone())), action_code));
+                        }
+                        None => {
+                            let action_code = generate_rhs_code(ctx, *value);
+                            rhss.push((quote!(true), action_code));
+                            has_default = true;
+                            break;
+                        }
+                    }
+                }
+
+                if !has_default {
+                    rhss.push((quote!(true), default_rhs.clone()));
+                }
+
+                let (last_cond, last_rhs) = rhss.pop().unwrap();
+                let mut action_code = quote!(if #last_cond { #last_rhs });
+
+                for (cond, rhs) in rhss.into_iter().rev() {
+                    action_code = quote!(if #cond { #rhs } else { #action_code });
+                }
+
                 let range_start = char::from_u32(range.start).unwrap();
                 let range_end = char::from_u32(range.end).unwrap();
+
                 state_char_arms.push(quote!(
                     x if x >= #range_start && x <= #range_end => {
                         #action_code
@@ -690,14 +776,16 @@ fn generate_right_ctx_state_arm(
         assert_eq!(accepting_state.right_ctx, None);
     }
 
+    let accepting = !accepting.is_empty();
+
     let eof = match end_of_input_transition {
         Some(StateIdx(eof_next)) => quote!(state = #eof_next),
-        None => quote!(return false),
+        None => quote!(return #accepting),
     };
 
     let def = match any_transition {
         Some(StateIdx(any_next)) => quote!(state = #any_next),
-        None => quote!(return false),
+        None => quote!(return #accepting),
     };
 
     quote!(
@@ -741,12 +829,12 @@ fn generate_right_ctx_state_char_arms(
     // Add char transitions
     for (StateIdx(next_state), chars) in state_chars.iter() {
         let pat = quote!(#(#chars)|*);
-        state_char_arms.push(quote!(#pat => self.state = #next_state,));
+        state_char_arms.push(quote!(#pat => self.state = #next_state));
     }
 
     if !accept_chars.is_empty() {
         let accept_chars: Vec<char> = accept_chars.into_iter().collect();
-        state_char_arms.push(quote!(#(#accept_chars)|* => return true,));
+        state_char_arms.push(quote!(#(#accept_chars)|* => return true));
     }
 
     // Same as above for range transitions. Use chain of "or"s for ranges with same transition.
@@ -784,7 +872,7 @@ fn generate_right_ctx_state_char_arms(
             quote!(#(#range_checks)||*)
         };
 
-        state_char_arms.push(quote!(x if #guard => state = #next_state,));
+        state_char_arms.push(quote!(x if #guard => state = #next_state));
     }
 
     if !accept_ranges.is_empty() {
@@ -801,7 +889,7 @@ fn generate_right_ctx_state_char_arms(
             quote!(#(#range_checks)||*)
         };
 
-        state_char_arms.push(quote!(x if #guard => return true,));
+        state_char_arms.push(quote!(x if #guard => return true));
     }
 
     state_char_arms
