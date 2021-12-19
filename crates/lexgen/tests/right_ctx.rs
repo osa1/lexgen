@@ -110,3 +110,25 @@ fn right_ctx_4() {
     assert_eq!(next(&mut lexer), Some(Ok(2)));
     assert_eq!(next(&mut lexer), None);
 }
+
+// TODO: Implement this test in simulation
+#[test]
+fn right_ctx_5() {
+    lexer! {
+        Lexer -> u32;
+
+        // Per longest match we "a" should return 2, not 1
+        'a' = 1,
+        'a' > $ = 2,
+        'a' > 'a' = 3,
+    }
+
+    let mut lexer = Lexer::new("a");
+    assert_eq!(next(&mut lexer), Some(Ok(2)));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("aa");
+    assert_eq!(next(&mut lexer), Some(Ok(3)));
+    assert_eq!(next(&mut lexer), Some(Ok(2)));
+    assert_eq!(next(&mut lexer), None);
+}
