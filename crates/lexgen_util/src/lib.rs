@@ -76,7 +76,7 @@ pub struct Lexer<'input, Token, State, Error, Wrapper> {
     // Character iterator. `Peekable` is used in the handler's `peek` method. Note that we can't
     // use byte index returned by this directly, as we re-initialize this field when backtracking.
     // Add `iter_byte_idx` to the byte index before using. When resetting, update `iter_byte_idx`.
-    iter: std::iter::Peekable<std::str::CharIndices<'input>>,
+    iter: std::iter::Peekable<std::str::Chars<'input>>,
 
     // Start of the current match
     current_match_start: Loc,
@@ -111,7 +111,7 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
             user_state: state,
             input,
             iter_loc: Loc::ZERO,
-            iter: input.char_indices().peekable(),
+            iter: input.chars().peekable(),
             current_match_start: Loc::ZERO,
             current_match_end: Loc::ZERO,
             last_match: None,
@@ -119,11 +119,10 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
     }
 
     // Read the next chracter
-    pub fn next(&mut self) -> Option<(usize, char)> {
+    pub fn next(&mut self) -> Option<char> {
         match self.iter.next() {
             None => None,
-            Some((char_idx, char)) => {
-                let char_idx = self.iter_loc.byte_idx + char_idx;
+            Some(char) => {
                 self.current_match_end.byte_idx += char.len_utf8();
                 if char == '\n' {
                     self.current_match_end.line += 1;
@@ -133,12 +132,12 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
                 } else {
                     self.current_match_end.col += UnicodeWidthChar::width(char).unwrap_or(1) as u32;
                 }
-                Some((char_idx, char))
+                Some(char)
             }
         }
     }
 
-    pub fn peek(&mut self) -> Option<(usize, char)> {
+    pub fn peek(&mut self) -> Option<char> {
         self.iter.peek().copied()
     }
 
@@ -156,7 +155,7 @@ impl<'input, T, S, E, W> Lexer<'input, T, S, E, W> {
                 self.__done = false;
                 self.current_match_start = match_start;
                 self.current_match_end = match_end;
-                self.iter = self.input[match_end.byte_idx..].char_indices().peekable();
+                self.iter = self.input[match_end.byte_idx..].chars().peekable();
                 self.iter_loc = match_end;
                 Ok(semantic_action)
             }

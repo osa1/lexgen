@@ -166,7 +166,7 @@ pub fn reify(
             }
 
             fn peek(&mut self) -> Option<char> {
-                self.0.peek().map(|(_, char)| char)
+                self.0.peek()
             }
         }
 
@@ -331,7 +331,7 @@ fn generate_state_arm(
                 None => {
                     #end_of_input_action
                 }
-                Some((char_idx, char)) => {
+                Some(char) => {
                     match char {
                         #(#state_char_arms,)*
                     }
@@ -349,7 +349,7 @@ fn generate_state_arm(
                 None => {
                     #end_of_input_action
                 }
-                Some((_, char)) => {
+                Some(char) => {
                     match char {
                         #(#state_char_arms,)*
                     }
@@ -362,7 +362,7 @@ fn generate_state_arm(
             None => {
                 #end_of_input_action
             }
-            Some((_, char)) => {
+            Some(char) => {
                 match char {
                     #(#state_char_arms,)*
                 }
