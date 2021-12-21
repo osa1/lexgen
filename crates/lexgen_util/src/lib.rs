@@ -91,7 +91,7 @@ pub struct Lexer<'input, Token, State, Error, Wrapper> {
     // - Skipped match end (exclusive, byte index in `input`)
     last_match: Option<(
         Loc,
-        for<'lexer, 'input_> fn(&'lexer mut Wrapper) -> SemanticActionResult<Result<Token, Error>>,
+        for<'lexer> fn(&'lexer mut Wrapper) -> SemanticActionResult<Result<Token, Error>>,
         Loc,
     )>,
 }
