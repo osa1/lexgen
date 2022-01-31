@@ -296,7 +296,7 @@ fn generate_state_arm(
     // fail (backtrack or raise error)
     let default_action = any_transition
         .as_ref()
-        .map(|any_transition| generate_any_transition(ctx, states, any_transition))
+        .map(|any_transition| generate_any_transition(ctx, states, any_transition, fail()))
         .unwrap_or_else(fail);
 
     let state_char_arms = generate_state_char_arms(
@@ -318,9 +318,7 @@ fn generate_state_arm(
     let end_of_input_action = match end_of_input_transition {
         Some(end_of_input_transition) => match end_of_input_transition {
             Trans::Accept(accepting_states) => {
-                // TODO: other accepting states
-                let AcceptingState { value, right_ctx } = accepting_states.iter().next().unwrap();
-                generate_rhs_code(ctx, *value)
+                test_right_ctxs(ctx, accepting_states, end_of_input_default_action)
             }
             Trans::Trans(next_state) => {
                 let StateIdx(next_state) = ctx.renumber_state(*next_state);
@@ -418,6 +416,7 @@ fn generate_any_transition(
     ctx: &mut CgCtx,
     states: &[State<Trans<SemanticActionIdx>, SemanticActionIdx>],
     trans: &Trans<SemanticActionIdx>,
+    fail: TokenStream,
 ) -> TokenStream {
     let action = match trans {
         Trans::Trans(StateIdx(next_state)) => {
@@ -429,11 +428,7 @@ fn generate_any_transition(
             }
         }
 
-        Trans::Accept(accepting_states) => {
-            // TODO: Other accepting states
-            let AcceptingState { value, right_ctx } = accepting_states.iter().next().unwrap();
-            generate_rhs_code(ctx, *value)
-        }
+        Trans::Accept(accepting_states) => test_right_ctxs(ctx, accepting_states, fail),
     };
 
     quote!(
@@ -895,6 +890,37 @@ fn generate_right_ctx_state_char_arms(
 fn make_if(mut alts: Vec<(TokenStream, TokenStream)>) -> TokenStream {
     let (last_cond, last_rhs) = alts.pop().unwrap();
     let mut action_code = quote!(if #last_cond { #last_rhs });
+
+    for (cond, rhs) in alts.into_iter().rev() {
+        action_code = quote!(if #cond { #rhs } else { #action_code });
+    }
+
+    action_code
+}
+
+fn test_right_ctxs(
+    ctx: &mut CgCtx,
+    accepting_states: &[AcceptingState<SemanticActionIdx>],
+    default_rhs: TokenStream,
+) -> TokenStream {
+    let mut alts: Vec<(TokenStream, TokenStream)> = Vec::with_capacity(accepting_states.len());
+    let mut default = default_rhs;
+
+    for AcceptingState { value, right_ctx } in accepting_states {
+        let action_code = generate_rhs_code(ctx, *value);
+        match right_ctx {
+            Some(right_ctx) => {
+                let right_ctx_fn = right_ctx_fn_name(ctx.lexer_name(), right_ctx);
+                alts.push((quote!(#right_ctx_fn(self.0.__iter.clone())), action_code));
+            }
+            None => {
+                default = action_code;
+                break;
+            }
+        }
+    }
+
+    let mut action_code = default;
 
     for (cond, rhs) in alts.into_iter().rev() {
         action_code = quote!(if #cond { #rhs } else { #action_code });
