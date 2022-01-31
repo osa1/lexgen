@@ -454,37 +454,7 @@ fn generate_state_char_arms(
     for (char, next) in char_transitions {
         match next {
             Trans::Accept(accepting) => {
-                let mut rhss: Vec<(TokenStream, TokenStream)> = Vec::with_capacity(accepting.len());
-
-                let mut has_default = false;
-
-                for AcceptingState { value, right_ctx } in accepting.iter() {
-                    match right_ctx {
-                        Some(right_ctx) => {
-                            let right_ctx_fn = right_ctx_fn_name(ctx.lexer_name(), right_ctx);
-                            let action_code = generate_rhs_code(ctx, *value);
-                            rhss.push((quote!(#right_ctx_fn(self.0.__iter.clone())), action_code));
-                        }
-                        None => {
-                            let action_code = generate_rhs_code(ctx, *value);
-                            rhss.push((quote!(true), action_code));
-                            has_default = true;
-                            break;
-                        }
-                    }
-                }
-
-                if !has_default {
-                    rhss.push((quote!(true), default_rhs.clone()));
-                }
-
-                let (last_cond, last_rhs) = rhss.pop().unwrap();
-                let mut action_code = quote!(if #last_cond { #last_rhs });
-
-                for (cond, rhs) in rhss.into_iter().rev() {
-                    action_code = quote!(if #cond { #rhs } else { #action_code });
-                }
-
+                let action_code = test_right_ctxs(ctx, accepting, default_rhs.clone());
                 state_char_arms.push(quote!(
                     #char => {
                         #action_code
