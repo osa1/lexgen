@@ -173,7 +173,7 @@ pub fn reify(
             }
 
             fn peek(&mut self) -> Option<char> {
-                self.0.peek().map(|(_, char)| char)
+                self.0.peek()
             }
         }
 
@@ -346,7 +346,7 @@ fn generate_state_arm(
                 None => {
                     #end_of_input_action
                 }
-                Some((char_idx, char)) => {
+                Some(char) => {
                     match char {
                         #(#state_char_arms,)*
                     }
@@ -392,7 +392,7 @@ fn generate_state_arm(
                 None => {
                     #end_of_input_action
                 }
-                Some((_, char)) => {
+                Some(char) => {
                     match char {
                         #(#state_char_arms,)*
                     }
@@ -405,7 +405,7 @@ fn generate_state_arm(
             None => {
                 #end_of_input_action
             }
-            Some((_, char)) => {
+            Some(char) => {
                 match char {
                     #(#state_char_arms,)*
                 }
@@ -713,7 +713,7 @@ fn generate_right_ctx_fns(
         let match_arms = generate_right_ctx_state_arms(ctx, dfa);
 
         fns.push(
-            quote!(fn #fn_name(mut input: std::iter::Peekable<std::str::CharIndices>) -> bool {
+            quote!(fn #fn_name(mut input: std::iter::Peekable<std::str::Chars>) -> bool {
                 let mut state: usize = 0;
 
                 loop {
@@ -793,7 +793,7 @@ fn generate_right_ctx_state_arm(
     quote!(
         match input.next() {
             None => #eof,
-            Some((_, char)) => {
+            Some(char) => {
                 match char {
                     #(#state_char_arms,)*
                     _ => #def,
