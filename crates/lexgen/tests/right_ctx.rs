@@ -1,7 +1,7 @@
 mod test_utils;
 
 use lexgen::lexer;
-use lexgen_util::{LexerError, LexerErrorKind, Loc};
+use lexgen_util::{LexerError, LexerErrorKind};
 use test_utils::{loc, next};
 
 #[test]
