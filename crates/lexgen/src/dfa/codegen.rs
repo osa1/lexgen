@@ -354,6 +354,7 @@ fn generate_state_arm(
     } else if !accepting.is_empty() {
         // Accepting state
         let mut rhss: Vec<(TokenStream, TokenStream)> = Vec::with_capacity(accepting.len());
+        let mut default = quote!();
 
         for AcceptingState { value, right_ctx } in accepting.iter() {
             match right_ctx {
@@ -367,17 +368,13 @@ fn generate_state_arm(
                 }
                 None => {
                     let semantic_fn = ctx.semantic_action_fn_ident(*value);
-                    rhss.push((
-                        quote!(true),
-                        quote!(self.0.set_accepting_state(#semantic_fn)),
-                    ));
+                    default = quote!(self.0.set_accepting_state(#semantic_fn););
                     break;
                 }
             }
         }
 
-        let (last_cond, last_rhs) = rhss.pop().unwrap();
-        let mut set_accepting_state = quote!(if #last_cond { #last_rhs });
+        let mut set_accepting_state = default;
 
         for (cond, rhs) in rhss.into_iter().rev() {
             set_accepting_state = quote!(if #cond { #rhs } else { #set_accepting_state });
