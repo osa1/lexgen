@@ -670,7 +670,7 @@ fn generate_right_ctx_state_arms(ctx: &mut CgCtx, dfa: &DFA<StateIdx, ()>) -> Ve
     let n_states = states.len();
 
     for (state_idx, state) in states.iter().enumerate() {
-        let state_code: TokenStream = generate_right_ctx_state_arm(ctx, state, &states);
+        let state_code: TokenStream = generate_right_ctx_state_arm(ctx, state, states);
 
         let state_idx_pat = if state_idx == n_states - 1 {
             quote!(_)
