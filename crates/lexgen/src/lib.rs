@@ -19,16 +19,18 @@ mod nfa;
 mod nfa_to_dfa;
 mod range_map;
 mod regex_to_nfa;
+mod right_ctx;
 mod semantic_action_table;
 
 #[cfg(test)]
 mod tests;
 
-use ast::{Lexer, Regex, Rule, SingleRule, Var};
+use ast::{Lexer, Regex, RegexCtx, Rule, SingleRule, Var};
 use collections::Map;
 use dfa::{StateIdx as DfaStateIdx, DFA};
 use nfa::NFA;
 use nfa_to_dfa::nfa_to_dfa;
+use right_ctx::RightCtxDFAs;
 use semantic_action_table::{SemanticActionIdx, SemanticActionTable};
 
 use std::collections::hash_map::Entry;
@@ -54,6 +56,9 @@ pub fn lexer(input: TokenStream) -> TokenStream {
     // Maps DFA names to their initial states in the final DFA
     let mut dfas: Map<String, dfa::StateIdx> = Default::default();
 
+    // DFAs generated for right contexts
+    let mut right_ctx_dfas = RightCtxDFAs::new();
+
     let mut bindings: Map<Var, Regex> = Default::default();
 
     let mut dfa: Option<DFA<DfaStateIdx, SemanticActionIdx>> = None;
@@ -71,12 +76,13 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                     panic!("Variable {:?} is defined multiple times", entry.key().0);
                 }
                 Entry::Vacant(entry) => {
-                    entry.insert(re);
+                    // TODO: Check that regex doesn't have right context
+                    entry.insert(re.re);
                 }
             },
             Rule::RuleSet { name, rules } => {
                 if name == "Init" {
-                    let dfa = dfa.insert(compile_rules(rules, &bindings));
+                    let dfa = dfa.insert(compile_rules(rules, &bindings, &mut right_ctx_dfas));
                     let initial_state = dfa.initial_state();
 
                     if dfas.insert(name.to_string(), initial_state).is_some() {
@@ -87,7 +93,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                         .as_mut()
                         .expect("First rule set should be named \"Init\"");
 
-                    let dfa_ = compile_rules(rules, &bindings);
+                    let dfa_ = compile_rules(rules, &bindings, &mut right_ctx_dfas);
 
                     let dfa_idx = dfa.add_dfa(dfa_);
 
@@ -106,7 +112,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
                     );
                 }
 
-                let dfa = dfa.insert(compile_rules(rules, &bindings));
+                let dfa = dfa.insert(compile_rules(rules, &bindings, &mut right_ctx_dfas));
                 let initial_state = dfa.initial_state();
                 dfas.insert("Init".to_owned(), initial_state);
             }
@@ -131,6 +137,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
 
     dfa::codegen::reify(
         dfa,
+        &right_ctx_dfas,
         semantic_action_table,
         user_state_type,
         user_error_type,
@@ -145,11 +152,18 @@ pub fn lexer(input: TokenStream) -> TokenStream {
 fn compile_rules(
     rules: Vec<SingleRule>,
     bindings: &Map<Var, Regex>,
+    right_ctx_dfas: &mut RightCtxDFAs<DfaStateIdx>,
 ) -> DFA<DfaStateIdx, SemanticActionIdx> {
     let mut nfa: NFA<SemanticActionIdx> = NFA::new();
 
     for SingleRule { lhs, rhs } in rules {
-        nfa.add_regex(bindings, &lhs, rhs);
+        let RegexCtx { re, right_ctx } = lhs;
+
+        let right_ctx = right_ctx
+            .as_ref()
+            .map(|right_ctx| right_ctx_dfas.new_right_ctx(bindings, right_ctx));
+
+        nfa.add_regex(bindings, &re, right_ctx, rhs);
     }
 
     nfa_to_dfa(&nfa)

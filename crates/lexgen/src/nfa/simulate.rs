@@ -1,12 +1,19 @@
-use super::{StateIdx, NFA};
+use super::{AcceptingState, StateIdx, NFA};
 use crate::collections::Set;
+use crate::dfa::simulate::simulate_right_ctx;
+use crate::dfa::StateIdx as DfaStateIdx;
+use crate::right_ctx::RightCtxDFAs;
 
 pub type Matches<'input, A> = Vec<(&'input str, A)>;
 
 pub type ErrorLoc = usize;
 
 impl<A: std::fmt::Debug + Copy> NFA<A> {
-    pub fn simulate<'input>(&self, input: &'input str) -> (Matches<'input, A>, Option<ErrorLoc>) {
+    pub fn simulate<'input>(
+        &self,
+        input: &'input str,
+        right_ctx_dfas: &RightCtxDFAs<DfaStateIdx>,
+    ) -> (Matches<'input, A>, Option<ErrorLoc>) {
         let mut values: Matches<'input, A> = vec![];
 
         // If we skipped an accepting state because we were able to make progress with the next
@@ -65,9 +72,24 @@ impl<A: std::fmt::Debug + Copy> NFA<A> {
                     let mut states_sorted: Vec<StateIdx> = states.iter().copied().collect();
                     states_sorted.sort();
                     for state in states_sorted {
-                        if let Some(value) = self.states[state.0].accepting {
-                            last_match = Some((match_start, value, char_idx + char.len_utf8()));
-                            break;
+                        if let Some(AcceptingState { value, right_ctx }) =
+                            &self.states[state.0].accepting
+                        {
+                            match right_ctx {
+                                None => {
+                                    last_match =
+                                        Some((match_start, *value, char_idx + char.len_utf8()));
+                                    break;
+                                }
+                                Some(right_ctx_idx) => {
+                                    let right_ctx_dfa = right_ctx_dfas.get(right_ctx_idx);
+                                    if simulate_right_ctx(right_ctx_dfa, char_indices.clone()) {
+                                        last_match =
+                                            Some((match_start, *value, char_idx + char.len_utf8()));
+                                        break;
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -81,9 +103,22 @@ impl<A: std::fmt::Debug + Copy> NFA<A> {
                 states_sorted.sort();
 
                 for state in states_sorted {
-                    if let Some(value) = self.states[state.0].accepting {
-                        values.push((&input[match_start..], value));
-                        break 'outer;
+                    if let Some(AcceptingState { value, right_ctx }) =
+                        &self.states[state.0].accepting
+                    {
+                        match right_ctx {
+                            None => {
+                                values.push((&input[match_start..], *value));
+                                break 'outer;
+                            }
+                            Some(right_ctx_idx) => {
+                                let right_ctx_dfa = right_ctx_dfas.get(right_ctx_idx);
+                                if simulate_right_ctx(right_ctx_dfa, char_indices.clone()) {
+                                    values.push((&input[match_start..], *value));
+                                    break 'outer;
+                                }
+                            }
+                        }
                     }
                 }
             }

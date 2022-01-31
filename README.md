@@ -175,6 +175,20 @@ You can use parenthesis for grouping, e.g. `('a' | 'b')*`.
 
 Example: `'a' 'b' | 'c'+` is the same as `(('a' 'b') | ('c'+))`.
 
+## Right context (lookahead)
+
+A rule in a rule set can be followed by another regex using `> <regex>` syntax,
+for right context. Right context is basically a limited form of lookahead: they
+can only appear after a top-level regex for a rule. They cannot be used nested
+in a regex.
+
+For example, the rule left-hand side `'a' > (_ # 'b')` matches `'a'` as long as
+it's not followed by `'b'`.
+
+See also [right context tests] for more examples.
+
+[right context tests]: https://github.com/osa1/lexgen/blob/main/tests/right_ctx.rs
+
 ## Built-in regular expressions
 
 lexgen comes with a set of built-in regular expressions. Regular
