@@ -40,8 +40,8 @@
   ```
 
 - A new syntax added for right contexts. A right context is basically
-  lookahead, but can only be used at in rules and cannot be nested inside
-  regexes. See README for details. (#29)
+  lookahead, but can only be used in rules and cannot be nested inside regexes.
+  See README for details. (#29)
 
 # 2021/11/30: 0.8.1
 
