@@ -2,6 +2,13 @@
 //!
 //! [1]: https://github.com/osa1/lexgen
 
+#![allow(
+    clippy::collapsible_else_if,
+    clippy::enum_variant_names,
+    clippy::too_many_arguments,
+    clippy::upper_case_acronyms
+)]
+
 mod ast;
 mod builtin;
 mod char_ranges;

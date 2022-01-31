@@ -1,3 +1,5 @@
+#![allow(clippy::should_implement_trait, clippy::type_complexity)]
+
 use unicode_width::UnicodeWidthChar;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
