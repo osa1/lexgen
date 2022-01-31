@@ -495,33 +495,7 @@ fn generate_state_char_arms(
                 char::try_from(range.end).unwrap(),
             )),
             Trans::Accept(accepting) => {
-                let mut rhss: Vec<(TokenStream, TokenStream)> = Vec::with_capacity(accepting.len());
-
-                // Whether we have a default case (else branch) in the conditional for right
-                // contexts
-                let mut has_default = false;
-
-                for AcceptingState { value, right_ctx } in accepting.iter() {
-                    match right_ctx {
-                        Some(right_ctx) => {
-                            let right_ctx_fn = right_ctx_fn_name(ctx.lexer_name(), right_ctx);
-                            let action_code = generate_rhs_code(ctx, *value);
-                            rhss.push((quote!(#right_ctx_fn(self.0.__iter.clone())), action_code));
-                        }
-                        None => {
-                            let action_code = generate_rhs_code(ctx, *value);
-                            rhss.push((quote!(true), action_code));
-                            has_default = true;
-                            break;
-                        }
-                    }
-                }
-
-                if !has_default {
-                    rhss.push((quote!(true), default_rhs.clone()));
-                }
-
-                let action_code = make_if(rhss);
+                let action_code = test_right_ctxs(ctx, accepting, default_rhs.clone());
 
                 let range_start = char::from_u32(range.start).unwrap();
                 let range_end = char::from_u32(range.end).unwrap();
@@ -855,17 +829,6 @@ fn generate_right_ctx_state_char_arms(
     }
 
     state_char_arms
-}
-
-fn make_if(mut alts: Vec<(TokenStream, TokenStream)>) -> TokenStream {
-    let (last_cond, last_rhs) = alts.pop().unwrap();
-    let mut action_code = quote!(if #last_cond { #last_rhs });
-
-    for (cond, rhs) in alts.into_iter().rev() {
-        action_code = quote!(if #cond { #rhs } else { #action_code });
-    }
-
-    action_code
 }
 
 fn test_right_ctxs(
