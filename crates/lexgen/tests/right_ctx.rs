@@ -157,6 +157,7 @@ fn rust_single_line_comment() {
 
 #[test]
 fn rust_float() {
+    #[derive(Debug, PartialEq, Eq)]
     enum Token<'input> {
         Float(&'input str),
         Int(&'input str),
@@ -178,4 +179,13 @@ fn rust_float() {
 
         ".." = Token::Range,
     }
+
+    let mut lexer = Lexer::new("1.");
+    assert_eq!(next(&mut lexer), Some(Ok(Token::Float("1."))));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("1..");
+    assert_eq!(next(&mut lexer), Some(Ok(Token::Int("1"))));
+    assert_eq!(next(&mut lexer), Some(Ok(Token::Range)));
+    assert_eq!(next(&mut lexer), None);
 }
