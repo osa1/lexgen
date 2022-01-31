@@ -69,6 +69,26 @@ pub fn reify(
 
     let switch_method = generate_switch(&ctx, &rule_name_enum_name);
 
+    let token_type = ctx.token_type();
+
+    let error_type = match ctx.user_error_type() {
+        None => quote!(::std::convert::Infallible),
+        Some(error_type) => error_type.into_token_stream(),
+    };
+
+    let semantic_action_fn_ret_ty = match ctx.user_error_type() {
+        None => {
+            quote!(::lexgen_util::SemanticActionResult<Result<#token_type, ::std::convert::Infallible>>)
+        }
+        Some(user_error_type) => {
+            quote!(::lexgen_util::SemanticActionResult<Result<#token_type, #user_error_type>>)
+        }
+    };
+
+    let semantic_action_fns = generate_semantic_action_fns(&ctx, &semantic_action_fn_ret_ty);
+
+    let right_ctx_fns = generate_right_ctx_fns(&mut ctx, right_ctx_dfas);
+
     let search_tables = ctx.take_search_tables();
 
     let binary_search_fn = if search_tables.is_empty() {
@@ -108,26 +128,6 @@ pub fn reify(
             )
         })
         .collect();
-
-    let token_type = ctx.token_type();
-
-    let error_type = match ctx.user_error_type() {
-        None => quote!(::std::convert::Infallible),
-        Some(error_type) => error_type.into_token_stream(),
-    };
-
-    let semantic_action_fn_ret_ty = match ctx.user_error_type() {
-        None => {
-            quote!(::lexgen_util::SemanticActionResult<Result<#token_type, ::std::convert::Infallible>>)
-        }
-        Some(user_error_type) => {
-            quote!(::lexgen_util::SemanticActionResult<Result<#token_type, #user_error_type>>)
-        }
-    };
-
-    let semantic_action_fns = generate_semantic_action_fns(&ctx, &semantic_action_fn_ret_ty);
-
-    let right_ctx_fns = generate_right_ctx_fns(&mut ctx, right_ctx_dfas);
 
     let token_type = ctx.token_type();
     let lexer_name = ctx.lexer_name();
