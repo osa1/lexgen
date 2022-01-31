@@ -110,3 +110,72 @@ fn right_ctx_4() {
     assert_eq!(next(&mut lexer), Some(Ok(2)));
     assert_eq!(next(&mut lexer), None);
 }
+
+#[test]
+fn rust_single_line_comment() {
+    lexer! {
+        Lexer -> &'input str;
+
+        rule Init {
+            $$ascii_whitespace,
+
+            "//" => |lexer| lexer.switch(LexerRule::SinglelineComment),
+        }
+
+        rule SinglelineComment {
+            (_ # '\n')* > ('\n' | $) => |lexer| {
+                let comment = lexer.match_();
+                lexer.switch_and_return(LexerRule::Init, comment)
+            },
+        }
+    }
+
+    // Terminated at the end of input (no newline)
+    let input = "//  /  ";
+    let mut lexer = Lexer::new(input);
+    assert_eq!(next(&mut lexer), Some(Ok(input)));
+    assert_eq!(next(&mut lexer), None);
+
+    // Terminated with newlines
+    let input = "//  /  \n";
+    let mut lexer = Lexer::new(input);
+    assert_eq!(next(&mut lexer), Some(Ok("//  /  ")));
+    assert_eq!(next(&mut lexer), None);
+
+    // Empty comment, terminated with eof
+    let input = "//";
+    let mut lexer = Lexer::new(input);
+    assert_eq!(next(&mut lexer), Some(Ok("//")));
+    assert_eq!(next(&mut lexer), None);
+
+    // Empty comment, terminated with eol
+    let input = "//\n";
+    let mut lexer = Lexer::new(input);
+    assert_eq!(next(&mut lexer), Some(Ok("//")));
+    assert_eq!(next(&mut lexer), None);
+}
+
+#[test]
+fn rust_float() {
+    enum Token<'input> {
+        Float(&'input str),
+        Int(&'input str),
+        Range,
+    }
+
+    lexer! {
+        Lexer -> Token<'input>;
+
+        ['0'-'9']+ '.' > (_ # ('.' | '_' | $$XID_Start) | $) => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_(Token::Float(match_))
+        },
+
+        ['0'-'9']+ => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_(Token::Int(match_))
+        },
+
+        ".." = Token::Range,
+    }
+}
