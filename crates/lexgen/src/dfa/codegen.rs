@@ -556,12 +556,7 @@ fn generate_state_char_arms(
                     rhss.push((quote!(true), default_rhs.clone()));
                 }
 
-                let (last_cond, last_rhs) = rhss.pop().unwrap();
-                let mut action_code = quote!(if #last_cond { #last_rhs });
-
-                for (cond, rhs) in rhss.into_iter().rev() {
-                    action_code = quote!(if #cond { #rhs } else { #action_code });
-                }
+                let action_code = make_if(rhss);
 
                 let range_start = char::from_u32(range.start).unwrap();
                 let range_end = char::from_u32(range.end).unwrap();
@@ -895,4 +890,15 @@ fn generate_right_ctx_state_char_arms(
     }
 
     state_char_arms
+}
+
+fn make_if(mut alts: Vec<(TokenStream, TokenStream)>) -> TokenStream {
+    let (last_cond, last_rhs) = alts.pop().unwrap();
+    let mut action_code = quote!(if #last_cond { #last_rhs });
+
+    for (cond, rhs) in alts.into_iter().rev() {
+        action_code = quote!(if #cond { #rhs } else { #action_code });
+    }
+
+    action_code
 }
