@@ -189,3 +189,38 @@ fn rust_float() {
     assert_eq!(next(&mut lexer), Some(Ok(Token::Range)));
     assert_eq!(next(&mut lexer), None);
 }
+
+#[test]
+fn ligature_shaping() {
+    #[derive(Debug, PartialEq, Eq)]
+    enum Token<'input> {
+        Lig(&'input str),
+        NotLig(&'input str),
+    }
+
+    lexer! {
+        Lexer -> Token<'input>;
+
+        "---" > ((_ # '-') | $) => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_(Token::Lig(match_))
+        },
+
+        _+ => |lexer| {
+            let match_ = lexer.match_();
+            lexer.return_(Token::NotLig(match_))
+        },
+    }
+
+    let mut lexer = Lexer::new("--");
+    assert_eq!(next(&mut lexer), Some(Ok(Token::NotLig("--"))));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("---");
+    assert_eq!(next(&mut lexer), Some(Ok(Token::Lig("---"))));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("----");
+    assert_eq!(next(&mut lexer), Some(Ok(Token::NotLig("----"))));
+    assert_eq!(next(&mut lexer), None);
+}
