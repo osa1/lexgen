@@ -380,9 +380,9 @@ fn parse_rule(
     }
 }
 
-pub fn make_lexer_parser<'a>(
-    semantic_action_table: &'a mut SemanticActionTable,
-) -> impl FnOnce(ParseStream) -> Result<Lexer, syn::Error> + 'a {
+pub fn make_lexer_parser(
+    semantic_action_table: &mut SemanticActionTable,
+) -> impl FnOnce(ParseStream) -> Result<Lexer, syn::Error> + '_ {
     |input: ParseStream| {
         let public = input.parse::<syn::token::Pub>().is_ok();
         let type_name = input.parse::<syn::Ident>()?;

@@ -1,5 +1,5 @@
 use std::cmp::{max, min, Ordering};
-use std::mem::replace;
+use std::mem::take;
 
 /// A map of inclusive ranges, with insertion and iteration operations. Insertion allows
 /// overlapping ranges. When two ranges overlap, value of the overlapping parts is the union of
@@ -93,7 +93,7 @@ impl<A: Clone> RangeMap<A> {
         I: Iterator<Item = Range<A>>,
     {
         let mut new_ranges: Vec<Range<A>> = vec![];
-        let old_ranges = replace(&mut self.ranges, vec![]);
+        let old_ranges = take(&mut self.ranges);
 
         let mut ranges1_iter = old_ranges.into_iter();
 
@@ -196,7 +196,7 @@ impl<A: Clone> RangeMap<A> {
     where
         F: Fn(&mut A, A),
     {
-        let old_ranges = replace(&mut self.ranges, vec![]);
+        let old_ranges = take(&mut self.ranges);
         let mut new_ranges = Vec::with_capacity(old_ranges.len() + 2);
 
         let mut range_iter = old_ranges.into_iter();
@@ -291,7 +291,7 @@ impl<A: Clone> RangeMap<A> {
 
     /// O(N+M) where N is the number of current ranges and M is the number of removed ranges
     pub fn remove_ranges<B>(&mut self, other: &RangeMap<B>) {
-        let old_ranges = replace(&mut self.ranges, vec![]);
+        let old_ranges = take(&mut self.ranges);
         let mut new_ranges: Vec<Range<A>> = Vec::with_capacity(old_ranges.len());
 
         let mut removed_ranges_iter = other.ranges.iter();
