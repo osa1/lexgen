@@ -596,13 +596,13 @@ fn generate_semantic_action_fns(
                 RuleRhs::Rhs { expr, kind } => {
                     match kind {
                         RuleKind::Simple => {
-                            quote!(|__lexer: &mut #lexer_name| __lexer.return_(#expr).map_token(Ok))
+                            quote!(|__lexer: &'lexer mut #lexer_name<'input>| __lexer.return_(#expr).map_token(Ok))
                         }
                         RuleKind::Fallible => quote!(#expr),
                         RuleKind::Infallible => {
-                            quote!(|__lexer: &mut #lexer_name| {
+                            quote!(|__lexer: &'lexer mut #lexer_name<'input>| {
                                 let semantic_action:
-                                    for<'lexer, 'input> fn(&'lexer mut #lexer_name<'input>) -> ::lexgen_util::SemanticActionResult<#token_type> =
+                                    fn(&'lexer mut #lexer_name<'input>) -> ::lexgen_util::SemanticActionResult<#token_type> =
                                         #expr;
 
                                 semantic_action(__lexer).map_token(Ok)
@@ -613,9 +613,11 @@ fn generate_semantic_action_fns(
             };
 
             quote!(
-                #[allow(non_upper_case_globals)]
-                static #ident: for<'lexer, 'input> fn(&'lexer mut #lexer_name<'input>) -> #semantic_action_fn_ret_ty =
-                    #rhs;
+                #[allow(non_snake_case)]
+                fn #ident<'lexer, 'input>(lexer: &'lexer mut #lexer_name<'input>) -> #semantic_action_fn_ret_ty {
+                    let action: fn(&'lexer mut #lexer_name<'input>) -> #semantic_action_fn_ret_ty = #rhs;
+                    action(lexer)
+                }
             )
         })
         .collect();
