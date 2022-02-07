@@ -263,7 +263,7 @@ implementation of a semantic action, you should use one of the methods below
 drive the lexer and return tokens:
 
 - `fn match_(&self) -> &str`: returns the current match. Note that when the
-  lexer is constructed with `new_from_iter` or `new_from_iter_with_state` this
+  lexer is constructed with `new_from_iter` or `new_from_iter_with_state`, this
   method panics. It should only be called when the lexer is initialized with
   `new` or `new_with_state`.
 - `fn match_loc(&self) -> (lexgen_util::Loc, lexgen_util::Loc)`: returns the
@@ -291,20 +291,20 @@ from one of the methods listed above.
 
 ## Initializing lexers
 
-lexgen-generated lexers have 4 constructors:
+lexgen generates 4 constructors:
 
 - `fn new(input: &str) -> Self`: Used when the lexer does not have user state,
   or user state implements `Default`.
 
 - `fn new_with_state(input: &str, user_state: S) -> Self`: Used when the lexer
-  has user state. `S` is the user state type specified in lexer definition. See
-  the stateful lexer example below.
+  has user state that does not implement `Default`, or you want to initialize
+  the state with something other than the default. `S` is the user state type
+  specified in lexer definition. See stateful lexer example below.
 
 - `fn new_from_iter<I: Iterator<Item = char> + Clone>(iter: I) -> Self`: Used
-  when the input isn't a flat string, but something like a rope or zipper, or
-  when you have the input as a stream. Note that the `match_` method panics
-  when this constructor is used. Instead use `match_loc` to get the location of
-  the current match.
+  when the input isn't a flat string, but something like a rope or zipper. Note
+  that the `match_` method panics when this constructor is used. Instead use
+  `match_loc` to get the location of the current match.
 
 - `fn new_from_iter_with_state<I: Iterator<Item = char> + Clone, S>(iter: I,
   user_state: S) -> Self`: Same as above, but doesn't require user state to

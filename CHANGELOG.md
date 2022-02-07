@@ -9,8 +9,8 @@
   string slice. Generated lexers work exactly the same way, except the `match_`
   method panics when called.
 
-  Locations of matches can be obtained with `match_loc(&self) -> (Loc, Loc)`
-  method.
+  Locations of matches can be obtained with the `match_loc(&self) -> (Loc,
+  Loc)` method.
 
   These constructors are useful when the input is not a flat unicode string,
   but something like a rope, gap array, zipper, etc. (#41)
