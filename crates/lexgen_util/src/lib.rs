@@ -104,11 +104,17 @@ pub struct Lexer<'input, Iter: Iterator<Item = char> + Clone, Token, State, Erro
 
 impl<I: Iterator<Item = char> + Clone, T, S: Default, E, W> Lexer<'static, I, T, S, E, W> {
     pub fn new_from_iter(iter: I) -> Self {
+        Self::new_from_iter_with_state(iter, Default::default())
+    }
+}
+
+impl<I: Iterator<Item = char> + Clone, T, S, E, W> Lexer<'static, I, T, S, E, W> {
+    pub fn new_from_iter_with_state(iter: I, state: S) -> Self {
         Self {
             __state: 0,
             __done: false,
             __initial_state: 0,
-            user_state: Default::default(),
+            user_state: state,
             input: "",
             iter_loc: Loc::ZERO,
             __iter: iter.peekable(),

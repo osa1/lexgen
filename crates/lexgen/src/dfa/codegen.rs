@@ -179,6 +179,10 @@ pub fn reify(
                 self.0.match_()
             }
 
+            fn match_loc(&self) -> (::lexgen_util::Loc, ::lexgen_util::Loc) {
+                self.0.match_loc()
+            }
+
             fn peek(&mut self) -> Option<char> {
                 self.0.peek()
             }
@@ -197,6 +201,10 @@ pub fn reify(
         impl<I: Iterator<Item = char> + Clone> #lexer_name<'static, I> {
             #visibility fn new_from_iter(iter: I) -> Self {
                 #lexer_name(::lexgen_util::Lexer::new_from_iter(iter))
+            }
+
+            #visibility fn new_from_iter_with_state(iter: I, user_state: #user_state_type) -> Self {
+                #lexer_name(::lexgen_util::Lexer::new_from_iter_with_state(iter, user_state))
             }
         }
 
@@ -571,7 +579,7 @@ fn generate_semantic_action_call(action_fn: &TokenStream) -> TokenStream {
     let map_res = quote!(match res {
         Ok(tok) => Ok((match_start, tok, match_end)),
         Err(err) => Err(::lexgen_util::LexerError {
-            location: self.0.match_loc().0,
+            location: self.match_loc().0,
             kind: ::lexgen_util::LexerErrorKind::Custom(err),
         }),
     });
@@ -582,7 +590,7 @@ fn generate_semantic_action_call(action_fn: &TokenStream) -> TokenStream {
         }
         ::lexgen_util::SemanticActionResult::Return(res) => {
             self.0.__state = self.0.__initial_state;
-            let (match_start, match_end) = self.0.match_loc();
+            let (match_start, match_end) = self.match_loc();
             self.0.reset_match();
             return Some(#map_res);
         }
