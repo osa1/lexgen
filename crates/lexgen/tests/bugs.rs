@@ -256,8 +256,8 @@ fn issue_16_backtracking_1() {
 
 #[test]
 fn issue_16_backtracking_2() {
-    fn return_match<'input>(
-        lexer: &mut Lexer<'input>,
+    fn return_match<'input, I: Iterator<Item = char> + Clone>(
+        lexer: &mut Lexer<'input, I>,
     ) -> lexgen_util::SemanticActionResult<&'input str> {
         let match_ = lexer.match_();
         lexer.return_(match_)

@@ -1,3 +1,20 @@
+# Unreleased
+
+- Generated lexers now have two new constructors:
+
+  - `new_from_iter<I: Iterator<Item = char> + Clone>(iter: I) -> Self`
+  - `new_from_iter_with_state<I: Iterator<Item = char> + Clone, S>(iter: I, user_state: S) -> Self`
+
+  These constructors allow running a lexer on a character iterator instead of a
+  string slice. Generated lexers work exactly the same way, except the `match_`
+  method panics when called.
+
+  Locations of matches can be obtained with the `match_loc(&self) -> (Loc,
+  Loc)` method.
+
+  These constructors are useful when the input is not a flat unicode string,
+  but something like a rope, gap array, zipper, etc. (#41)
+
 # 2022/01/31: 0.9.0
 
 - New regex syntax `#` added for character set difference, e.g. `re1 # re2`
