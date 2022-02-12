@@ -21,7 +21,7 @@ pub enum LexerErrorKind<E> {
 }
 
 /// A location, used in errors
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Loc {
     pub line: u32,
     pub col: u32,
