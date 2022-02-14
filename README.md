@@ -58,7 +58,11 @@ assert_eq!(
 assert_eq!(lexer.next(), None);
 ```
 
-You can see more examples [here][1], and a full Lua 5.1 lexer [here][2].
+See also:
+
+- [Simple lexer definitions in tests][1]
+- [A full Lua 5.1 lexer][2]
+- [An example that uses lexgen with LALRPOP][3]
 
 ## Motivation
 
@@ -374,5 +378,6 @@ initialize the user state (line 8) and switch to the `Count` state (line 9). In
 match (line 16). A `[` in the `Count` state returns the current number and
 switches to the `Init` state (line 21).
 
-[1]: https://github.com/osa1/lexgen/blob/main/tests/tests.rs
-[2]: https://github.com/osa1/lexgen/blob/main/tests/lua_5_1.rs
+[1]: https://github.com/osa1/lexgen/blob/main/crates/lexgen/tests/tests.rs
+[2]: https://github.com/osa1/lexgen/blob/main/crates/lexgen/tests/lua_5_1.rs
+[3]: https://github.com/osa1/lexgen/tree/main/crates/lexgen_lalrpop_example

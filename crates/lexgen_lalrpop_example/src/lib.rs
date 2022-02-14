@@ -17,6 +17,7 @@ pub mod ast {
         /// Represents an interpolated expression in a string literal.
         Expression(Expression<'input>),
     }
+
     #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
     pub enum Expression<'input> {
         /// Represents a string literal.
@@ -34,6 +35,7 @@ pub mod ast {
             }
         }
     }
+
     impl Expression<'_> {
         fn eval_to(&self, w: &mut impl std::fmt::Write) -> std::fmt::Result {
             match self {
@@ -87,6 +89,7 @@ pub mod lexer {
         /// balance.
         paren_nest: Vec<usize>,
     }
+
     impl Default for LexerState {
         fn default() -> Self {
             Self {
@@ -136,6 +139,7 @@ pub mod lexer {
                 }
             },
         }
+
         rule InString {
             "\\\"" = Token::StringFragment("\""),
             "\\n" = Token::StringFragment("\n"),
@@ -161,6 +165,7 @@ mod test {
         lexer::{Lexer, LexerError, Loc, Token},
         parser::ExpressionParser,
     };
+
     type Result<'input, T> =
         std::result::Result<T, lalrpop_util::ParseError<Loc, Token<'input>, LexerError>>;
 

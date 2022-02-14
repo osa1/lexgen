@@ -1,5 +1,5 @@
 [package]
-name = "lexgen_example"
+name = "lexgen_lalrpop_example"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,4 +10,3 @@ lexgen_util = { path = "../lexgen_util" }
 
 [build-dependencies]
 lalrpop = "0.19.7"
-
