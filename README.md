@@ -63,6 +63,7 @@ See also:
 - [Simple lexer definitions in tests][1]
 - [A full Lua 5.1 lexer][2]
 - [An example that uses lexgen with LALRPOP][3]
+- [A lexer for a simpler version of OCaml][4]
 
 ## Motivation
 
@@ -381,3 +382,4 @@ switches to the `Init` state (line 21).
 [1]: https://github.com/osa1/lexgen/blob/main/crates/lexgen/tests/tests.rs
 [2]: https://github.com/osa1/lexgen/blob/main/crates/lexgen/tests/lua_5_1.rs
 [3]: https://github.com/osa1/lexgen/tree/main/crates/lexgen_lalrpop_example
+[4]: https://github.com/osa1/mincaml/blob/master/src/lexer.rs
