@@ -1,0 +1,39 @@
+use super::{
+    ast::{Expression, StringFragment},
+    lexer::{LexerError, Loc, Token},
+};
+
+grammar<'input>;
+
+pub Expression: Expression<'input> = {
+    Term,
+    <lhs: Expression> "+" <rhs: Term> => Expression::Concat(Box::new(lhs), Box::new(rhs)),
+}
+
+Term: Expression<'input> = {
+    "(" <Expression> ")",
+    StringStart <StringInner*> StringEnd => Expression::String(<>),
+}
+
+StringInner: StringFragment<'input> = {
+    StringFragment => StringFragment::String(<>),
+    InterpolationStart <Expression> InterpolationEnd => StringFragment::Expression(<>),
+}
+
+
+extern {
+    type Location = Loc;
+    type Error = LexerError;
+
+    enum Token<'input> {
+        "+" => Token::Plus,
+        "(" => Token::LParen,
+        ")" => Token::RParen,
+        StringStart => Token::StringStart,
+        StringFragment => Token::StringFragment(<&'input str>),
+        StringEnd => Token::StringEnd,
+        InterpolationStart => Token::InterpolationStart,
+        InterpolationEnd => Token::InterpolationEnd,
+    }
+}
+
