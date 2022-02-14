@@ -3,7 +3,7 @@
 ```rust
 lexer! {
     // First line specifies name of the lexer and the token type returned by
-    // user actions
+    // semantic actions
     Lexer -> Token;
 
     // Regular expressions can be named with `let` syntax
@@ -11,7 +11,7 @@ lexer! {
     let subseq = $init | ['A'-'Z' '0'-'9' '-' '_'];
 
     // Rule sets have names. Each rule set is compiled to a separate DFA.
-    // Switching between rule sets is done explicitly in user actions.
+    // Switching between rule sets is done explicitly in semantic actions.
     rule Init {
         // Rules without a right-hand side for skipping whitespace,
         // comments, etc.
@@ -82,8 +82,9 @@ lexgen doesn't require a build step. Add same versions of `lexgen` and
 
 ## Lexer syntax
 
-lexgen lexers start with type of the generated lexer struct, optional user state
-part, and the token type (type of values returned by user actions). Example:
+lexgen lexers start with type of the generated lexer struct, optional user
+state part, and the token type (type of values returned by semantic actions).
+Example:
 
 ```rust
 lexer! {
@@ -120,10 +121,10 @@ The first rule set will be defining the initial state of the lexer and needs to
 be named `Init`.
 
 In the body of a `rule` block we define the rules for that lexer state. The
-syntax for a rule is `<regex> => <user action>,`. Regex syntax is described
-below. User action is any Rust code with type `fn(LexerHandle) -> LexerAction`
-where `LexerHandle` and `LexerAction` are generated names derived from the lexer
-name (`Lexer`). More on these types below.
+syntax for a rule is `<regex> => <semantic action>,`. Regex syntax is described
+below. Semantic action is any Rust code with type `fn(LexerHandle) ->
+LexerAction` where `LexerHandle` and `LexerAction` are generated names derived
+from the lexer name (`Lexer`). More on these types below.
 
 You can omit the `rule Init { ... }` part and have all of your rules at the top
 level if you don't need rule sets.
@@ -236,13 +237,13 @@ XID_Continue]:
 
 ## Rule syntax
 
-- `<regex> => <user action>,`: `<regex>` syntax is as described above. `<user
-  action>` is any Rust code with type `fn(&mut Lexer) ->
+- `<regex> => <semantic action>,`: `<regex>` syntax is as described above.
+  `<semantic action>` is any Rust code with type `fn(&mut Lexer) ->
   SemanticActionResult<Token>`. More on `SemanticActionResult` type in the next
   section.
 
-- `<regex> =? <user action>,`: fallible actions. This syntax is similar to the
-  syntax above, except `<user action>` has type `fn(&mut Lexer) ->
+- `<regex> =? <semantic action>,`: fallible actions. This syntax is similar to
+  the syntax above, except `<semantic action>` has type `fn(&mut Lexer) ->
   LexerAction<Result<Token, UserError>>`. When using rules of this kind, the
   error type needs to be declared at the beginning of the lexer with the `type
   Error = UserError;` syntax.

@@ -10,7 +10,7 @@ use std::convert::TryFrom;
 fn readme_1() {
     lexer! {
         // First line specifies name of the lexer and the token type returned by
-        // user actions
+        // semantic actions
         Lexer -> Token;
 
         // Regular expressions can be named with `let` syntax
@@ -18,7 +18,7 @@ fn readme_1() {
         let subseq = $init | ['A'-'Z' '0'-'9' '-' '_'];
 
         // Rule sets have names. Each rule set is compiled to a separate DFA.
-        // Switching between rule sets is done explicitly in user actions.
+        // Switching between rule sets is done explicitly in semantic actions.
         rule Init {
             // Rules without a right-hand side for skipping whitespace,
             // comments, etc.

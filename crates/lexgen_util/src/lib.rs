@@ -37,11 +37,11 @@ impl Loc {
 }
 
 /// **Do not use**
-// Possible outcomes of user action
+// Possible outcomes of a semantic action
 pub enum SemanticActionResult<T> {
-    // User action did not return a token, continue with lexing
+    // Semantic action did not return a token, continue with lexing
     Continue,
-    // User action returned a token, return it
+    // Semantic action returned a token, return it
     Return(T),
 }
 
