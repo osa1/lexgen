@@ -1,4 +1,4 @@
-# Unreleased
+# 2022/02/20: 0.10.0
 
 - Generated lexers now have two new constructors:
 
@@ -14,6 +14,11 @@
 
   These constructors are useful when the input is not a flat unicode string,
   but something like a rope, gap array, zipper, etc. (#41)
+
+- `lexgen_util::Loc` now implements `Default`. This makes it easier to use
+  lexgen with [LALRPOP]. (#44)
+
+[LALRPOP]: https://github.com/lalrpop/lalrpop
 
 # 2022/01/31: 0.9.0
 
