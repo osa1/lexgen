@@ -193,7 +193,7 @@ it's not followed by `'b'`.
 
 See also [right context tests] for more examples.
 
-[right context tests]: https://github.com/osa1/lexgen/blob/main/tests/right_ctx.rs
+[right context tests]: https://github.com/osa1/lexgen/blob/main/crates/lexgen/tests/right_ctx.rs
 
 ## Built-in regular expressions
 
