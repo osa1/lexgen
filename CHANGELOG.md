@@ -1,3 +1,7 @@
+# Unreleased
+
+- Reset lexer state on failure (#48)
+
 # 2022/02/20: 0.10.0
 
 - Generated lexers now have two new constructors:
