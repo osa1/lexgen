@@ -363,3 +363,38 @@ fn range_any_overlap_issue_31() {
     assert_eq!(lexer.next(), Some(Ok((loc(0, 0, 0), 1, loc(0, 3, 3)))));
     assert_eq!(lexer.next(), None);
 }
+
+#[test]
+fn failure_should_reset_state_issue_48() {
+    lexer! {
+        Lexer -> &'input str;
+
+        rule Init {
+            's' => |lexer| lexer.switch_and_return(LexerRule::InString, "s"),
+        }
+
+        rule InString {
+            'a' => |lexer| lexer.return_(lexer.match_()),
+        }
+    }
+
+    let input = "sxa";
+    let mut lexer = Lexer::new(input);
+
+    assert_eq!(lexer.next(), Some(Ok((loc(0, 0, 0), "s", loc(0, 1, 1,)))));
+    assert_eq!(
+        lexer.next(),
+        Some(Err(LexerError {
+            location: loc(0, 1, 1),
+            kind: LexerErrorKind::InvalidToken
+        }))
+    );
+    assert_eq!(
+        lexer.next(),
+        Some(Err(LexerError {
+            location: loc(0, 2, 2),
+            kind: LexerErrorKind::InvalidToken
+        }))
+    );
+    assert_eq!(lexer.next(), None);
+}

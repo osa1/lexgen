@@ -178,10 +178,13 @@ impl<'input, I: Iterator<Item = char> + Clone, T, S, E, W> Lexer<'input, I, T, S
     ) -> Result<for<'lexer> fn(&'lexer mut W) -> SemanticActionResult<Result<T, E>>, LexerError<E>>
     {
         match self.last_match.take() {
-            None => Err(LexerError {
-                location: self.current_match_start,
-                kind: LexerErrorKind::InvalidToken,
-            }),
+            None => {
+                self.__state = 0;
+                Err(LexerError {
+                    location: self.current_match_start,
+                    kind: LexerErrorKind::InvalidToken,
+                })
+            }
             Some((match_start, iter, semantic_action, match_end)) => {
                 self.__done = false;
                 self.current_match_start = match_start;
