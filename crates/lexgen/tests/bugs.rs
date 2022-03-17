@@ -370,18 +370,20 @@ fn failure_should_reset_state_issue_48() {
         Lexer -> &'input str;
 
         rule Init {
-            's' => |lexer| lexer.switch_and_return(LexerRule::InString, "s"),
+            's' => |lexer|
+                lexer.switch_and_return(LexerRule::InString, lexer.match_()),
         }
 
         rule InString {
-            'a' => |lexer| lexer.return_(lexer.match_()),
+            'a' => |lexer|
+                lexer.switch_and_return(LexerRule::Init, lexer.match_()),
         }
     }
 
-    let input = "sxa";
+    let input = "sxasa";
     let mut lexer = Lexer::new(input);
 
-    assert_eq!(lexer.next(), Some(Ok((loc(0, 0, 0), "s", loc(0, 1, 1,)))));
+    assert_eq!(lexer.next(), Some(Ok((loc(0, 0, 0), "s", loc(0, 1, 1)))));
     assert_eq!(
         lexer.next(),
         Some(Err(LexerError {
@@ -396,5 +398,7 @@ fn failure_should_reset_state_issue_48() {
             kind: LexerErrorKind::InvalidToken
         }))
     );
+    assert_eq!(lexer.next(), Some(Ok((loc(0, 3, 3), "s", loc(0, 4, 4)))));
+    assert_eq!(lexer.next(), Some(Ok((loc(0, 4, 4), "a", loc(0, 5, 5)))));
     assert_eq!(lexer.next(), None);
 }
