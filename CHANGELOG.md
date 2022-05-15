@@ -1,4 +1,4 @@
-# Unreleased
+# 2022/05/15: 0.11.0
 
 - Reset lexer state on failure (#48)
 
