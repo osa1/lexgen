@@ -1,4 +1,30 @@
-# Unreleased
+# 2022/05/15: 0.11.0
+
+- Reset lexer state on failure (#48)
+
+# 2022/02/20: 0.10.0
+
+- Generated lexers now have two new constructors:
+
+  - `new_from_iter<I: Iterator<Item = char> + Clone>(iter: I) -> Self`
+  - `new_from_iter_with_state<I: Iterator<Item = char> + Clone, S>(iter: I, user_state: S) -> Self`
+
+  These constructors allow running a lexer on a character iterator instead of a
+  string slice. Generated lexers work exactly the same way, except the `match_`
+  method panics when called.
+
+  Locations of matches can be obtained with the `match_loc(&self) -> (Loc,
+  Loc)` method.
+
+  These constructors are useful when the input is not a flat unicode string,
+  but something like a rope, gap array, zipper, etc. (#41)
+
+- `lexgen_util::Loc` now implements `Default`. This makes it easier to use
+  lexgen with [LALRPOP]. (#44)
+
+[LALRPOP]: https://github.com/lalrpop/lalrpop
+
+# 2022/01/31: 0.9.0
 
 - New regex syntax `#` added for character set difference, e.g. `re1 # re2`
   matches characters in `re1` that are not in `re2`. `re1` and `re2` need to be
@@ -38,6 +64,10 @@
       Custom(E),
   }
   ```
+
+- A new syntax added for right contexts. A right context is basically
+  lookahead, but can only be used in rules and cannot be nested inside regexes.
+  See README for details. (#29)
 
 # 2021/11/30: 0.8.1
 

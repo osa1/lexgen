@@ -44,7 +44,7 @@ struct CgState {
 
 impl CgCtx {
     pub fn new(
-        dfa: &DFA<Trans, SemanticActionIdx>,
+        dfa: &DFA<Trans<SemanticActionIdx>, SemanticActionIdx>,
         semantic_action_table: SemanticActionTable,
         lexer_name: syn::Ident,
         token_type: syn::Type,

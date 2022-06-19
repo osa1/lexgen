@@ -7,8 +7,10 @@ use super::simplify::Trans;
 use super::{State, StateIdx, DFA};
 
 use crate::ast::{RuleKind, RuleRhs};
-use crate::collections::Map;
-use crate::range_map::RangeMap;
+use crate::collections::{Map, Set};
+use crate::nfa::AcceptingState;
+use crate::range_map::{Range, RangeMap};
+use crate::right_ctx::{RightCtxDFAs, RightCtxIdx};
 use crate::semantic_action_table::{SemanticActionIdx, SemanticActionTable};
 
 use std::convert::TryFrom;
@@ -30,7 +32,8 @@ use quote::{quote, ToTokens};
 const MAX_GUARD_SIZE: usize = 9;
 
 pub fn reify(
-    dfa: DFA<Trans, SemanticActionIdx>,
+    dfa: DFA<Trans<SemanticActionIdx>, SemanticActionIdx>,
+    right_ctx_dfas: &RightCtxDFAs<StateIdx>,
     semantic_actions: SemanticActionTable,
     user_state_type: Option<syn::Type>,
     user_error_type: Option<syn::Type>,
@@ -65,6 +68,26 @@ pub fn reify(
     let match_arms = generate_state_arms(&mut ctx, dfa);
 
     let switch_method = generate_switch(&ctx, &rule_name_enum_name);
+
+    let token_type = ctx.token_type();
+
+    let error_type = match ctx.user_error_type() {
+        None => quote!(::std::convert::Infallible),
+        Some(error_type) => error_type.into_token_stream(),
+    };
+
+    let semantic_action_fn_ret_ty = match ctx.user_error_type() {
+        None => {
+            quote!(::lexgen_util::SemanticActionResult<Result<#token_type, ::std::convert::Infallible>>)
+        }
+        Some(user_error_type) => {
+            quote!(::lexgen_util::SemanticActionResult<Result<#token_type, #user_error_type>>)
+        }
+    };
+
+    let semantic_action_fns = generate_semantic_action_fns(&ctx, &semantic_action_fn_ret_ty);
+
+    let right_ctx_fns = generate_right_ctx_fns(&mut ctx, right_ctx_dfas);
 
     let search_tables = ctx.take_search_tables();
 
@@ -106,24 +129,8 @@ pub fn reify(
         })
         .collect();
 
-    let lexer_name = ctx.lexer_name();
     let token_type = ctx.token_type();
-
-    let error_type = match ctx.user_error_type() {
-        None => quote!(::std::convert::Infallible),
-        Some(error_type) => error_type.into_token_stream(),
-    };
-
-    let semantic_action_fn_ret_ty = match ctx.user_error_type() {
-        None => {
-            quote!(::lexgen_util::SemanticActionResult<Result<#token_type, ::std::convert::Infallible>>)
-        }
-        Some(user_error_type) => {
-            quote!(::lexgen_util::SemanticActionResult<Result<#token_type, #user_error_type>>)
-        }
-    };
-
-    let semantic_action_fns = generate_semantic_action_fns(&ctx, &semantic_action_fn_ret_ty);
+    let lexer_name = ctx.lexer_name();
 
     quote!(
         // An enum for the rule sets in the DFA. `Init` is the initial, unnamed rule set.
@@ -132,12 +139,19 @@ pub fn reify(
             #(#rule_name_idents,)*
         }
 
-        #visibility struct #lexer_name<'input>(
-            ::lexgen_util::Lexer<'input, #token_type, #user_state_type, #error_type, #lexer_name<'input>>
+        #visibility struct #lexer_name<'input, I: Iterator<Item = char> + Clone>(
+            ::lexgen_util::Lexer<
+                'input,
+                I,
+                #token_type,
+                #user_state_type,
+                #error_type,
+                #lexer_name<'input, I>
+            >
         );
 
         // Methods below for using in semantic actions
-        impl<'input> #lexer_name<'input> {
+        impl<'input, I: Iterator<Item = char> + Clone> #lexer_name<'input, I> {
             fn switch_and_return<T>(&mut self, rule: #rule_name_enum_name, token: T) -> ::lexgen_util::SemanticActionResult<T> {
                 self.switch::<T>(rule);
                 ::lexgen_util::SemanticActionResult::Return(token)
@@ -165,12 +179,16 @@ pub fn reify(
                 self.0.match_()
             }
 
+            fn match_loc(&self) -> (::lexgen_util::Loc, ::lexgen_util::Loc) {
+                self.0.match_loc()
+            }
+
             fn peek(&mut self) -> Option<char> {
-                self.0.peek().map(|(_, char)| char)
+                self.0.peek()
             }
         }
 
-        impl<'input> #lexer_name<'input> {
+        impl<'input> #lexer_name<'input, ::std::str::Chars<'input>> {
             #visibility fn new(input: &'input str) -> Self {
                 #lexer_name(::lexgen_util::Lexer::new(input))
             }
@@ -180,11 +198,22 @@ pub fn reify(
             }
         }
 
+        impl<I: Iterator<Item = char> + Clone> #lexer_name<'static, I> {
+            #visibility fn new_from_iter(iter: I) -> Self {
+                #lexer_name(::lexgen_util::Lexer::new_from_iter(iter))
+            }
+
+            #visibility fn new_from_iter_with_state(iter: I, user_state: #user_state_type) -> Self {
+                #lexer_name(::lexgen_util::Lexer::new_from_iter_with_state(iter, user_state))
+            }
+        }
+
         #(#search_tables)*
         #binary_search_fn
         #semantic_action_fns
+        #(#right_ctx_fns)*
 
-        impl<'input> Iterator for #lexer_name<'input> {
+        impl<'input, I: Iterator<Item = char> + Clone> Iterator for #lexer_name<'input, I> {
             type Item = Result<(::lexgen_util::Loc, #token_type, ::lexgen_util::Loc), ::lexgen_util::LexerError<#error_type>>;
 
             fn next(&mut self) -> Option<Self::Item> {
@@ -227,7 +256,10 @@ fn generate_switch(ctx: &CgCtx, enum_name: &syn::Ident) -> TokenStream {
 }
 
 /// Generate arms of `match self.__state { ... }` of a DFA.
-fn generate_state_arms(ctx: &mut CgCtx, dfa: DFA<Trans, SemanticActionIdx>) -> Vec<TokenStream> {
+fn generate_state_arms(
+    ctx: &mut CgCtx,
+    dfa: DFA<Trans<SemanticActionIdx>, SemanticActionIdx>,
+) -> Vec<TokenStream> {
     let DFA { states } = dfa;
 
     let mut match_arms: Vec<TokenStream> = vec![];
@@ -260,8 +292,8 @@ fn generate_state_arms(ctx: &mut CgCtx, dfa: DFA<Trans, SemanticActionIdx>) -> V
 fn generate_state_arm(
     ctx: &mut CgCtx,
     state_idx: usize,
-    state: &State<Trans, SemanticActionIdx>,
-    states: &[State<Trans, SemanticActionIdx>],
+    state: &State<Trans<SemanticActionIdx>, SemanticActionIdx>,
+    states: &[State<Trans<SemanticActionIdx>, SemanticActionIdx>],
 ) -> TokenStream {
     let State {
         initial,
@@ -285,7 +317,7 @@ fn generate_state_arm(
     // fail (backtrack or raise error)
     let default_action = any_transition
         .as_ref()
-        .map(|any_transition| generate_any_transition(ctx, states, any_transition))
+        .map(|any_transition| generate_any_transition(ctx, states, any_transition, fail()))
         .unwrap_or_else(fail);
 
     let state_char_arms = generate_state_char_arms(
@@ -306,7 +338,9 @@ fn generate_state_arm(
 
     let end_of_input_action = match end_of_input_transition {
         Some(end_of_input_transition) => match end_of_input_transition {
-            Trans::Accept(action) => generate_rhs_code(ctx, *action),
+            Trans::Accept(accepting_states) => {
+                test_right_ctxs(ctx, accepting_states, end_of_input_default_action)
+            }
             Trans::Trans(next_state) => {
                 let StateIdx(next_state) = ctx.renumber_state(*next_state);
                 quote!(self.0.__state = #next_state;)
@@ -331,25 +365,50 @@ fn generate_state_arm(
                 None => {
                     #end_of_input_action
                 }
-                Some((char_idx, char)) => {
+                Some(char) => {
                     match char {
                         #(#state_char_arms,)*
                     }
                 }
             }
         )
-    } else if let Some(rhs) = accepting {
+    } else if !accepting.is_empty() {
         // Accepting state
-        let semantic_fn = ctx.semantic_action_fn_ident(*rhs);
+        let mut rhss: Vec<(TokenStream, TokenStream)> = Vec::with_capacity(accepting.len());
+        let mut default = quote!();
+
+        for AcceptingState { value, right_ctx } in accepting.iter() {
+            match right_ctx {
+                Some(right_ctx) => {
+                    let right_ctx_fn = right_ctx_fn_name(ctx.lexer_name(), right_ctx);
+                    let semantic_fn = ctx.semantic_action_fn_ident(*value);
+                    rhss.push((
+                        quote!(#right_ctx_fn(self.0.__iter.clone())),
+                        quote!(self.0.set_accepting_state(#semantic_fn)),
+                    ));
+                }
+                None => {
+                    let semantic_fn = ctx.semantic_action_fn_ident(*value);
+                    default = quote!(self.0.set_accepting_state(#semantic_fn););
+                    break;
+                }
+            }
+        }
+
+        let mut set_accepting_state = default;
+
+        for (cond, rhs) in rhss.into_iter().rev() {
+            set_accepting_state = quote!(if #cond { #rhs } else { #set_accepting_state });
+        }
 
         quote!(
-            self.0.set_accepting_state(#semantic_fn);
+            #set_accepting_state
 
             match self.0.next() {
                 None => {
                     #end_of_input_action
                 }
-                Some((_, char)) => {
+                Some(char) => {
                     match char {
                         #(#state_char_arms,)*
                     }
@@ -362,7 +421,7 @@ fn generate_state_arm(
             None => {
                 #end_of_input_action
             }
-            Some((_, char)) => {
+            Some(char) => {
                 match char {
                     #(#state_char_arms,)*
                 }
@@ -373,8 +432,9 @@ fn generate_state_arm(
 
 fn generate_any_transition(
     ctx: &mut CgCtx,
-    states: &[State<Trans, SemanticActionIdx>],
-    trans: &Trans,
+    states: &[State<Trans<SemanticActionIdx>, SemanticActionIdx>],
+    trans: &Trans<SemanticActionIdx>,
+    fail: TokenStream,
 ) -> TokenStream {
     let action = match trans {
         Trans::Trans(StateIdx(next_state)) => {
@@ -386,7 +446,7 @@ fn generate_any_transition(
             }
         }
 
-        Trans::Accept(action) => generate_rhs_code(ctx, *action),
+        Trans::Accept(accepting_states) => test_right_ctxs(ctx, accepting_states, fail),
     };
 
     quote!(
@@ -397,22 +457,22 @@ fn generate_any_transition(
 /// Generate arms for `match char { ... }`
 fn generate_state_char_arms(
     ctx: &mut CgCtx,
-    states: &[State<Trans, SemanticActionIdx>],
-    char_transitions: &Map<char, Trans>,
-    range_transitions: &RangeMap<Trans>,
+    states: &[State<Trans<SemanticActionIdx>, SemanticActionIdx>],
+    char_transitions: &Map<char, Trans<SemanticActionIdx>>,
+    range_transitions: &RangeMap<Trans<SemanticActionIdx>>,
     // RHS of the default alternative for this `match` (_ => <default_rhs>)
     default_rhs: &TokenStream,
 ) -> Vec<TokenStream> {
     // Arms of the `match` for the current character
     let mut state_char_arms: Vec<TokenStream> = vec![];
 
-    // Add char transitions. Collect characters for next states, to be able to use or
-    // patterns in arms and reduce code size
+    // Collect characters for next states, to be able to use or patterns in arms and reduce code
+    // size
     let mut state_chars: Map<StateIdx, Vec<char>> = Default::default();
     for (char, next) in char_transitions {
         match next {
-            Trans::Accept(action) => {
-                let action_code = generate_rhs_code(ctx, *action);
+            Trans::Accept(accepting) => {
+                let action_code = test_right_ctxs(ctx, accepting, default_rhs.clone());
                 state_char_arms.push(quote!(
                     #char => {
                         #action_code
@@ -423,6 +483,7 @@ fn generate_state_char_arms(
         }
     }
 
+    // Add char transitions
     for (StateIdx(next_state), chars) in state_chars.iter() {
         let pat = quote!(#(#chars)|*);
 
@@ -442,18 +503,21 @@ fn generate_state_char_arms(
         ));
     }
 
-    // Add range transitions. Same as above, use chain of "or"s for ranges with same transition.
+    // Same as above for range transitions. Use chain of "or"s for ranges with same transition.
     let mut state_ranges: Map<StateIdx, Vec<(char, char)>> = Default::default();
+
     for range in range_transitions.iter() {
-        match range.value {
-            Trans::Trans(state_idx) => state_ranges.entry(state_idx).or_default().push((
+        match &range.value {
+            Trans::Trans(state_idx) => state_ranges.entry(*state_idx).or_default().push((
                 char::try_from(range.start).unwrap(),
                 char::try_from(range.end).unwrap(),
             )),
-            Trans::Accept(action) => {
-                let action_code = generate_rhs_code(ctx, action);
+            Trans::Accept(accepting) => {
+                let action_code = test_right_ctxs(ctx, accepting, default_rhs.clone());
+
                 let range_start = char::from_u32(range.start).unwrap();
                 let range_end = char::from_u32(range.end).unwrap();
+
                 state_char_arms.push(quote!(
                     x if x >= #range_start && x <= #range_end => {
                         #action_code
@@ -463,6 +527,7 @@ fn generate_state_char_arms(
         }
     }
 
+    // Add range transitions
     for (StateIdx(next_state), ranges) in state_ranges.into_iter() {
         let guard = if ranges.len() > MAX_GUARD_SIZE {
             let binary_search_table_id = ctx.add_search_table(ranges);
@@ -514,7 +579,7 @@ fn generate_semantic_action_call(action_fn: &TokenStream) -> TokenStream {
     let map_res = quote!(match res {
         Ok(tok) => Ok((match_start, tok, match_end)),
         Err(err) => Err(::lexgen_util::LexerError {
-            location: self.0.match_loc().0,
+            location: self.match_loc().0,
             kind: ::lexgen_util::LexerErrorKind::Custom(err),
         }),
     });
@@ -525,7 +590,7 @@ fn generate_semantic_action_call(action_fn: &TokenStream) -> TokenStream {
         }
         ::lexgen_util::SemanticActionResult::Return(res) => {
             self.0.__state = self.0.__initial_state;
-            let (match_start, match_end) = self.0.match_loc();
+            let (match_start, match_end) = self.match_loc();
             self.0.reset_match();
             return Some(#map_res);
         }
@@ -546,19 +611,19 @@ fn generate_semantic_action_fns(
 
             let rhs = match action {
                 RuleRhs::None => {
-                    quote!(|__lexer: &mut #lexer_name| __lexer.continue_().map_token(Ok))
+                    quote!(|__lexer: &mut #lexer_name<'input, I>| __lexer.continue_().map_token(Ok))
                 }
 
                 RuleRhs::Rhs { expr, kind } => {
                     match kind {
                         RuleKind::Simple => {
-                            quote!(|__lexer: &mut #lexer_name| __lexer.return_(#expr).map_token(Ok))
+                            quote!(|__lexer: &'lexer mut #lexer_name<'input, I>| __lexer.return_(#expr).map_token(Ok))
                         }
                         RuleKind::Fallible => quote!(#expr),
                         RuleKind::Infallible => {
-                            quote!(|__lexer: &mut #lexer_name| {
+                            quote!(|__lexer: &'lexer mut #lexer_name<'input, I>| {
                                 let semantic_action:
-                                    for<'lexer, 'input> fn(&'lexer mut #lexer_name<'input>) -> ::lexgen_util::SemanticActionResult<#token_type> =
+                                    fn(&'lexer mut #lexer_name<'input, I>) -> ::lexgen_util::SemanticActionResult<#token_type> =
                                         #expr;
 
                                 semantic_action(__lexer).map_token(Ok)
@@ -569,12 +634,250 @@ fn generate_semantic_action_fns(
             };
 
             quote!(
-                #[allow(non_upper_case_globals)]
-                static #ident: for<'lexer, 'input> fn(&'lexer mut #lexer_name<'input>) -> #semantic_action_fn_ret_ty =
-                    #rhs;
+                #[allow(non_snake_case)]
+                fn #ident<'lexer, 'input, I: Iterator<Item = char> + Clone>(lexer: &'lexer mut #lexer_name<'input, I>) -> #semantic_action_fn_ret_ty {
+                    let action: fn(&'lexer mut #lexer_name<'input, I>) -> #semantic_action_fn_ret_ty = #rhs;
+                    action(lexer)
+                }
             )
         })
         .collect();
 
     quote!(#(#fns)*)
+}
+
+fn right_ctx_fn_name(lexer_name: &syn::Ident, idx: &RightCtxIdx) -> syn::Ident {
+    syn::Ident::new(
+        &format!("{}_RIGHT_CTX_{}", lexer_name, idx.as_usize()),
+        Span::call_site(),
+    )
+}
+
+fn generate_right_ctx_fns(
+    ctx: &mut CgCtx,
+    right_ctx_dfas: &RightCtxDFAs<StateIdx>,
+) -> Vec<TokenStream> {
+    let mut fns = vec![];
+
+    let lexer_name = ctx.lexer_name().clone();
+
+    for (idx, dfa) in right_ctx_dfas.iter() {
+        let fn_name = right_ctx_fn_name(&lexer_name, &idx);
+
+        let match_arms = generate_right_ctx_state_arms(ctx, dfa);
+
+        fns.push(
+            quote!(fn #fn_name<I: Iterator<Item = char> + Clone>(mut input: I) -> bool {
+                let mut state: usize = 0;
+
+                loop {
+                    match state {
+                        #(#match_arms)*
+                    }
+                }
+            }),
+        );
+    }
+
+    fns
+}
+
+fn generate_right_ctx_state_arms(ctx: &mut CgCtx, dfa: &DFA<StateIdx, ()>) -> Vec<TokenStream> {
+    let DFA { states } = dfa;
+
+    let mut match_arms: Vec<TokenStream> = vec![];
+
+    let n_states = states.len();
+
+    for (state_idx, state) in states.iter().enumerate() {
+        let state_code: TokenStream = generate_right_ctx_state_arm(ctx, state, states);
+
+        let state_idx_pat = if state_idx == n_states - 1 {
+            quote!(_)
+        } else {
+            quote!(#state_idx)
+        };
+
+        match_arms.push(quote!(
+            #state_idx_pat => { #state_code }
+        ));
+    }
+
+    match_arms
+}
+
+fn generate_right_ctx_state_arm(
+    ctx: &mut CgCtx,
+    state: &State<StateIdx, ()>,
+    states: &[State<StateIdx, ()>],
+) -> TokenStream {
+    let State {
+        initial: _,
+        char_transitions,
+        range_transitions,
+        any_transition,
+        end_of_input_transition,
+        accepting,
+        predecessors: _,
+    } = state;
+
+    let state_char_arms =
+        generate_right_ctx_state_char_arms(ctx, states, char_transitions, range_transitions);
+
+    // Make sure right contexts don't have right contexts. We don't allow this in the syntax
+    // currently.
+    for accepting_state in accepting {
+        assert_eq!(accepting_state.right_ctx, None);
+    }
+
+    if !accepting.is_empty() {
+        return quote!(return true);
+    }
+
+    let eof = match end_of_input_transition {
+        Some(StateIdx(eof_next)) => quote!(state = #eof_next),
+        None => quote!(return false),
+    };
+
+    let def = match any_transition {
+        Some(StateIdx(any_next)) => quote!(state = #any_next),
+        None => quote!(return false),
+    };
+
+    quote!(
+        match input.next() {
+            None => #eof,
+            Some(char) => {
+                match char {
+                    #(#state_char_arms,)*
+                    _ => #def,
+                }
+            }
+        }
+    )
+}
+
+// NB. Does not add default case
+fn generate_right_ctx_state_char_arms(
+    ctx: &mut CgCtx,
+    states: &[State<StateIdx, ()>],
+    char_transitions: &Map<char, StateIdx>,
+    range_transitions: &RangeMap<StateIdx>,
+) -> Vec<TokenStream> {
+    // Arms of the `match` for the current character
+    let mut state_char_arms: Vec<TokenStream> = vec![];
+
+    // Collect characters for next states, to be able to use or patterns in arms and reduce code
+    // size
+    let mut state_chars: Map<StateIdx, Vec<char>> = Default::default();
+
+    // Set of chars that transition to an accepting state
+    let mut accept_chars: Set<char> = Default::default();
+
+    for (char, next) in char_transitions {
+        if states[next.0].accepting.is_empty() {
+            state_chars.entry(*next).or_default().push(*char);
+        } else {
+            accept_chars.insert(*char);
+        }
+    }
+
+    // Add char transitions
+    for (StateIdx(next_state), chars) in state_chars.iter() {
+        let pat = quote!(#(#chars)|*);
+        state_char_arms.push(quote!(#pat => self.state = #next_state));
+    }
+
+    if !accept_chars.is_empty() {
+        let accept_chars: Vec<char> = accept_chars.into_iter().collect();
+        state_char_arms.push(quote!(#(#accept_chars)|* => return true));
+    }
+
+    // Same as above for range transitions. Use chain of "or"s for ranges with same transition.
+    let mut state_ranges: Map<StateIdx, Vec<(char, char)>> = Default::default();
+    let mut accept_ranges: Set<(char, char)> = Default::default();
+
+    for Range {
+        start,
+        end,
+        value: next,
+    } in range_transitions.iter()
+    {
+        let start = char::try_from(*start).unwrap();
+        let end = char::try_from(*end).unwrap();
+
+        if states[next.0].accepting.is_empty() {
+            state_ranges.entry(*next).or_default().push((start, end));
+        } else {
+            accept_ranges.insert((start, end));
+        }
+    }
+
+    // Add range transitions
+    for (StateIdx(next_state), ranges) in state_ranges.into_iter() {
+        let guard = if ranges.len() > MAX_GUARD_SIZE {
+            let binary_search_table_id = ctx.add_search_table(ranges);
+
+            quote!(binary_search(x, &#binary_search_table_id))
+        } else {
+            let range_checks: Vec<TokenStream> = ranges
+                .into_iter()
+                .map(|(range_begin, range_end)| quote!((x >= #range_begin && x <= #range_end)))
+                .collect();
+
+            quote!(#(#range_checks)||*)
+        };
+
+        state_char_arms.push(quote!(x if #guard => state = #next_state));
+    }
+
+    if !accept_ranges.is_empty() {
+        let guard = if accept_ranges.len() > MAX_GUARD_SIZE {
+            let binary_search_table_id = ctx.add_search_table(accept_ranges.into_iter().collect());
+
+            quote!(binary_search(x, &#binary_search_table_id))
+        } else {
+            let range_checks: Vec<TokenStream> = accept_ranges
+                .into_iter()
+                .map(|(range_begin, range_end)| quote!((x >= #range_begin && x <= #range_end)))
+                .collect();
+
+            quote!(#(#range_checks)||*)
+        };
+
+        state_char_arms.push(quote!(x if #guard => return true));
+    }
+
+    state_char_arms
+}
+
+fn test_right_ctxs(
+    ctx: &mut CgCtx,
+    accepting_states: &[AcceptingState<SemanticActionIdx>],
+    default_rhs: TokenStream,
+) -> TokenStream {
+    let mut alts: Vec<(TokenStream, TokenStream)> = Vec::with_capacity(accepting_states.len());
+    let mut default = default_rhs;
+
+    for AcceptingState { value, right_ctx } in accepting_states {
+        let action_code = generate_rhs_code(ctx, *value);
+        match right_ctx {
+            Some(right_ctx) => {
+                let right_ctx_fn = right_ctx_fn_name(ctx.lexer_name(), right_ctx);
+                alts.push((quote!(#right_ctx_fn(self.0.__iter.clone())), action_code));
+            }
+            None => {
+                default = action_code;
+                break;
+            }
+        }
+    }
+
+    let mut action_code = default;
+
+    for (cond, rhs) in alts.into_iter().rev() {
+        action_code = quote!(if #cond { #rhs } else { #action_code });
+    }
+
+    action_code
 }

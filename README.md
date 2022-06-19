@@ -3,7 +3,7 @@
 ```rust
 lexer! {
     // First line specifies name of the lexer and the token type returned by
-    // user actions
+    // semantic actions
     Lexer -> Token;
 
     // Regular expressions can be named with `let` syntax
@@ -11,7 +11,7 @@ lexer! {
     let subseq = $init | ['A'-'Z' '0'-'9' '-' '_'];
 
     // Rule sets have names. Each rule set is compiled to a separate DFA.
-    // Switching between rule sets is done explicitly in user actions.
+    // Switching between rule sets is done explicitly in semantic actions.
     rule Init {
         // Rules without a right-hand side for skipping whitespace,
         // comments, etc.
@@ -58,7 +58,12 @@ assert_eq!(
 assert_eq!(lexer.next(), None);
 ```
 
-You can see more examples [here][1], and a full Lua 5.1 lexer [here][2].
+See also:
+
+- [Simple lexer definitions in tests][1]
+- [A full Lua 5.1 lexer][2]
+- [An example that uses lexgen with LALRPOP][3]
+- [A lexer for a simpler version of OCaml][4]
 
 ## Motivation
 
@@ -77,8 +82,9 @@ lexgen doesn't require a build step. Add same versions of `lexgen` and
 
 ## Lexer syntax
 
-lexgen lexers start with type of the generated lexer struct, optional user state
-part, and the token type (type of values returned by user actions). Example:
+lexgen lexers start with type of the generated lexer struct, optional user
+state part, and the token type (type of values returned by semantic actions).
+Example:
 
 ```rust
 lexer! {
@@ -115,10 +121,10 @@ The first rule set will be defining the initial state of the lexer and needs to
 be named `Init`.
 
 In the body of a `rule` block we define the rules for that lexer state. The
-syntax for a rule is `<regex> => <user action>,`. Regex syntax is described
-below. User action is any Rust code with type `fn(LexerHandle) -> LexerAction`
-where `LexerHandle` and `LexerAction` are generated names derived from the lexer
-name (`Lexer`). More on these types below.
+syntax for a rule is `<regex> => <semantic action>,`. Regex syntax is described
+below. Semantic action is any Rust code with type `fn(LexerHandle) ->
+LexerAction` where `LexerHandle` and `LexerAction` are generated names derived
+from the lexer name (`Lexer`). More on these types below.
 
 You can omit the `rule Init { ... }` part and have all of your rules at the top
 level if you don't need rule sets.
@@ -175,6 +181,20 @@ You can use parenthesis for grouping, e.g. `('a' | 'b')*`.
 
 Example: `'a' 'b' | 'c'+` is the same as `(('a' 'b') | ('c'+))`.
 
+## Right context (lookahead)
+
+A rule in a rule set can be followed by another regex using `> <regex>` syntax,
+for right context. Right context is basically a limited form of lookahead: they
+can only appear after a top-level regex for a rule. They cannot be used nested
+in a regex.
+
+For example, the rule left-hand side `'a' > (_ # 'b')` matches `'a'` as long as
+it's not followed by `'b'`.
+
+See also [right context tests] for more examples.
+
+[right context tests]: https://github.com/osa1/lexgen/blob/main/crates/lexgen/tests/right_ctx.rs
+
 ## Built-in regular expressions
 
 lexgen comes with a set of built-in regular expressions. Regular
@@ -217,13 +237,13 @@ XID_Continue]:
 
 ## Rule syntax
 
-- `<regex> => <user action>,`: `<regex>` syntax is as described above. `<user
-  action>` is any Rust code with type `fn(&mut Lexer) ->
+- `<regex> => <semantic action>,`: `<regex>` syntax is as described above.
+  `<semantic action>` is any Rust code with type `fn(&mut Lexer) ->
   SemanticActionResult<Token>`. More on `SemanticActionResult` type in the next
   section.
 
-- `<regex> =? <user action>,`: fallible actions. This syntax is similar to the
-  syntax above, except `<user action>` has type `fn(&mut Lexer) ->
+- `<regex> =? <semantic action>,`: fallible actions. This syntax is similar to
+  the syntax above, except `<semantic action>` has type `fn(&mut Lexer) ->
   LexerAction<Result<Token, UserError>>`. When using rules of this kind, the
   error type needs to be declared at the beginning of the lexer with the `type
   Error = UserError;` syntax.
@@ -248,7 +268,12 @@ A mut reference to this type is passed to semantic action functions. In the
 implementation of a semantic action, you should use one of the methods below
 drive the lexer and return tokens:
 
-- `fn match_(&self) -> &str`: returns the current match
+- `fn match_(&self) -> &str`: returns the current match. Note that when the
+  lexer is constructed with `new_from_iter` or `new_from_iter_with_state`, this
+  method panics. It should only be called when the lexer is initialized with
+  `new` or `new_with_state`.
+- `fn match_loc(&self) -> (lexgen_util::Loc, lexgen_util::Loc)`: returns the
+  bounds of the current match
 - `fn peek(&mut self) -> Option<char>`: looks ahead one character
 - `fn state(&mut self) -> &mut <user state type>`: returns a mutable reference
   to the user state
@@ -269,6 +294,27 @@ drive the lexer and return tokens:
 
 Semantic action functions should return a `SemanticActionResult` value obtained
 from one of the methods listed above.
+
+## Initializing lexers
+
+lexgen generates 4 constructors:
+
+- `fn new(input: &str) -> Self`: Used when the lexer does not have user state,
+  or user state implements `Default`.
+
+- `fn new_with_state(input: &str, user_state: S) -> Self`: Used when the lexer
+  has user state that does not implement `Default`, or you want to initialize
+  the state with something other than the default. `S` is the user state type
+  specified in lexer definition. See stateful lexer example below.
+
+- `fn new_from_iter<I: Iterator<Item = char> + Clone>(iter: I) -> Self`: Used
+  when the input isn't a flat string, but something like a rope or zipper. Note
+  that the `match_` method panics when this constructor is used. Instead use
+  `match_loc` to get the location of the current match.
+
+- `fn new_from_iter_with_state<I: Iterator<Item = char> + Clone, S>(iter: I,
+  user_state: S) -> Self`: Same as above, but doesn't require user state to
+  implement `Default`.
 
 ## Stateful lexer example
 
@@ -334,5 +380,7 @@ initialize the user state (line 8) and switch to the `Count` state (line 9). In
 match (line 16). A `[` in the `Count` state returns the current number and
 switches to the `Init` state (line 21).
 
-[1]: https://github.com/osa1/lexgen/blob/main/tests/tests.rs
-[2]: https://github.com/osa1/lexgen/blob/main/tests/lua_5_1.rs
+[1]: https://github.com/osa1/lexgen/blob/main/crates/lexgen/tests/tests.rs
+[2]: https://github.com/osa1/lexgen/blob/main/crates/lexgen/tests/lua_5_1.rs
+[3]: https://github.com/osa1/lexgen/tree/main/crates/lexgen_lalrpop_example
+[4]: https://github.com/osa1/mincaml/blob/master/src/lexer.rs

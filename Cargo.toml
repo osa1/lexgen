@@ -2,6 +2,7 @@
 members = [
     "crates/char_range_gen",
     "crates/lexgen",
+    # "crates/lexgen_lalrpop_example",
     "crates/lexgen_util",
 ]
 

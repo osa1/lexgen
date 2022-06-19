@@ -1,10 +1,16 @@
 use super::{StateIdx, DFA};
 
 pub use crate::nfa::simulate::{ErrorLoc, Matches};
+use crate::nfa::AcceptingState;
 use crate::range_map::Range;
+use crate::right_ctx::RightCtxDFAs;
 
 impl<A: Copy> DFA<StateIdx, A> {
-    pub fn simulate<'input>(&self, input: &'input str) -> (Matches<'input, A>, Option<ErrorLoc>) {
+    pub fn simulate<'input>(
+        &self,
+        input: &'input str,
+        right_ctx_dfas: &RightCtxDFAs<StateIdx>,
+    ) -> (Matches<'input, A>, Option<ErrorLoc>) {
         let mut values: Matches<'input, A> = vec![];
 
         // Current state
@@ -52,8 +58,22 @@ impl<A: Copy> DFA<StateIdx, A> {
                         state = next_state;
 
                         // Check for accepting state
-                        if let Some(value) = self.states[state.0].accepting {
-                            last_match = Some((match_start, value, char_idx + char.len_utf8()));
+                        for AcceptingState { value, right_ctx } in &self.states[state.0].accepting {
+                            match right_ctx {
+                                None => {
+                                    last_match =
+                                        Some((match_start, *value, char_idx + char.len_utf8()));
+                                    break;
+                                }
+                                Some(right_ctx_idx) => {
+                                    let right_ctx_dfa = right_ctx_dfas.get(right_ctx_idx);
+                                    if simulate_right_ctx(right_ctx_dfa, char_indices.clone()) {
+                                        last_match =
+                                            Some((match_start, *value, char_idx + char.len_utf8()));
+                                        break;
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -63,9 +83,20 @@ impl<A: Copy> DFA<StateIdx, A> {
             if let Some(next) = next_end_of_input(self, state) {
                 // Check for accepting state
                 state = next;
-                if let Some(value) = self.states[state.0].accepting {
-                    values.push((&input[match_start..], value));
-                    break; // 'outer
+                for AcceptingState { value, right_ctx } in &self.states[state.0].accepting {
+                    match right_ctx {
+                        None => {
+                            values.push((&input[match_start..], *value));
+                            break 'outer;
+                        }
+                        Some(right_ctx_idx) => {
+                            let right_ctx_dfa = right_ctx_dfas.get(right_ctx_idx);
+                            if simulate_right_ctx(right_ctx_dfa, char_indices.clone()) {
+                                values.push((&input[match_start..], *value));
+                                break 'outer;
+                            }
+                        }
+                    }
                 }
             }
 
@@ -119,4 +150,38 @@ fn next<A>(dfa: &DFA<StateIdx, A>, state: StateIdx, char: char) -> Option<StateI
 
 fn next_end_of_input<A>(dfa: &DFA<StateIdx, A>, state: StateIdx) -> Option<StateIdx> {
     dfa.states[state.0].end_of_input_transition
+}
+
+// Similar to `simulate`, but does not keep track of the last match as we don't need "longest
+// match" semantics and backtracking
+pub fn simulate_right_ctx(
+    dfa: &DFA<StateIdx, ()>,
+    mut char_indices: std::str::CharIndices,
+) -> bool {
+    let mut state = dfa.initial_state();
+
+    if dfa.is_accepting_state(state) {
+        return true;
+    }
+
+    while let Some((_, char)) = char_indices.next() {
+        match next(dfa, state, char) {
+            None => {
+                // Stuck
+                return false;
+            }
+            Some(next_state) => {
+                if dfa.is_accepting_state(next_state) {
+                    return true;
+                }
+
+                state = next_state;
+            }
+        }
+    }
+
+    match next_end_of_input(dfa, state) {
+        None => false,
+        Some(next_state) => dfa.is_accepting_state(next_state),
+    }
 }

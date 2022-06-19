@@ -256,8 +256,8 @@ fn issue_16_backtracking_1() {
 
 #[test]
 fn issue_16_backtracking_2() {
-    fn return_match<'input>(
-        lexer: &mut Lexer<'input>,
+    fn return_match<'input, I: Iterator<Item = char> + Clone>(
+        lexer: &mut Lexer<'input, I>,
     ) -> lexgen_util::SemanticActionResult<&'input str> {
         let match_ = lexer.match_();
         lexer.return_(match_)
@@ -361,5 +361,44 @@ fn range_any_overlap_issue_31() {
     let input = "'a'";
     let mut lexer = Lexer::new(input);
     assert_eq!(lexer.next(), Some(Ok((loc(0, 0, 0), 1, loc(0, 3, 3)))));
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn failure_should_reset_state_issue_48() {
+    lexer! {
+        Lexer -> &'input str;
+
+        rule Init {
+            's' => |lexer|
+                lexer.switch_and_return(LexerRule::InString, lexer.match_()),
+        }
+
+        rule InString {
+            'a' => |lexer|
+                lexer.switch_and_return(LexerRule::Init, lexer.match_()),
+        }
+    }
+
+    let input = "sxasa";
+    let mut lexer = Lexer::new(input);
+
+    assert_eq!(lexer.next(), Some(Ok((loc(0, 0, 0), "s", loc(0, 1, 1)))));
+    assert_eq!(
+        lexer.next(),
+        Some(Err(LexerError {
+            location: loc(0, 1, 1),
+            kind: LexerErrorKind::InvalidToken
+        }))
+    );
+    assert_eq!(
+        lexer.next(),
+        Some(Err(LexerError {
+            location: loc(0, 2, 2),
+            kind: LexerErrorKind::InvalidToken
+        }))
+    );
+    assert_eq!(lexer.next(), Some(Ok((loc(0, 3, 3), "s", loc(0, 4, 4)))));
+    assert_eq!(lexer.next(), Some(Ok((loc(0, 4, 4), "a", loc(0, 5, 5)))));
     assert_eq!(lexer.next(), None);
 }

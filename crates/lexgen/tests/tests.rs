@@ -10,7 +10,7 @@ use std::convert::TryFrom;
 fn readme_1() {
     lexer! {
         // First line specifies name of the lexer and the token type returned by
-        // user actions
+        // semantic actions
         Lexer -> Token;
 
         // Regular expressions can be named with `let` syntax
@@ -18,7 +18,7 @@ fn readme_1() {
         let subseq = $init | ['A'-'Z' '0'-'9' '-' '_'];
 
         // Rule sets have names. Each rule set is compiled to a separate DFA.
-        // Switching between rule sets is done explicitly in user actions.
+        // Switching between rule sets is done explicitly in semantic actions.
         rule Init {
             // Rules without a right-hand side for skipping whitespace,
             // comments, etc.
@@ -1064,4 +1064,76 @@ fn diff_4() {
             kind: LexerErrorKind::InvalidToken,
         }))
     );
+}
+
+#[test]
+fn iter_interface_simple() {
+    // Tests `new_from_iter` with simple rules
+    lexer! {
+        Lexer -> usize;
+
+        'a' = 1,
+        'b' = 2,
+    }
+
+    let mut lexer = Lexer::new_from_iter("ab".chars());
+    assert_eq!(next(&mut lexer), Some(Ok(1)));
+    assert_eq!(next(&mut lexer), Some(Ok(2)));
+    assert_eq!(next(&mut lexer), None);
+}
+
+#[test]
+fn iter_interface_infallible() {
+    // Tests `new_from_iter` with infallible rules
+    lexer! {
+        // TODO: Is it possible to have a lifetime in lexer state?
+        Lexer(String) -> u32;
+
+        ['0'-'9']+ => |lexer| {
+            let (start, end) = lexer.match_loc();
+            let str = lexer.state();
+            let val = str::parse::<u32>(&str[start.byte_idx..end.byte_idx]).unwrap();
+            lexer.return_(val)
+        },
+    }
+
+    let input = "123";
+    let mut lexer = Lexer::new_from_iter_with_state(input.chars(), input.to_owned());
+    assert_eq!(next(&mut lexer), Some(Ok(123)));
+    assert_eq!(next(&mut lexer), None);
+}
+
+#[test]
+fn iter_interface_fallible() {
+    // Tests `new_from_iter` with fallible rules
+    lexer! {
+        // TODO: Is it possible to have a lifetime in lexer state?
+        Lexer(String) -> u32;
+
+        type Error = std::num::ParseIntError;
+
+        $$ascii_alphanumeric+ =? |lexer| {
+            let (start, end) = lexer.match_loc();
+            let str = lexer.state();
+            match str::parse::<u32>(&str[start.byte_idx..end.byte_idx]) {
+                Ok(i) => lexer.return_(Ok(i)),
+                Err(err) => lexer.return_(Err(err)),
+            }
+        },
+    }
+
+    let input = "123";
+    let mut lexer = Lexer::new_from_iter_with_state(input.chars(), input.to_owned());
+    assert_eq!(next(&mut lexer), Some(Ok(123)));
+    assert_eq!(next(&mut lexer), None);
+
+    let input = "a";
+    let mut lexer = Lexer::new_from_iter_with_state(input.chars(), input.to_owned());
+    assert!(matches!(
+        next(&mut lexer),
+        Some(Err(LexerError {
+            kind: LexerErrorKind::Custom(_),
+            ..
+        }))
+    ));
 }
