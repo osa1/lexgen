@@ -518,8 +518,9 @@ fn generate_state_char_arms(
                 let range_start = char::from_u32(range.start).unwrap();
                 let range_end = char::from_u32(range.end).unwrap();
 
+                let range_check = inclusive_range_contains(quote!(x), range_start, range_end);
                 state_char_arms.push(quote!(
-                    x if x >= #range_start && x <= #range_end => {
+                    x if #range_check => {
                         #action_code
                     }
                 ));
@@ -536,7 +537,13 @@ fn generate_state_char_arms(
         } else {
             let range_checks: Vec<TokenStream> = ranges
                 .into_iter()
-                .map(|(range_begin, range_end)| quote!((x >= #range_begin && x <= #range_end)))
+                .map(|(range_begin, range_end)| {
+                    if range_begin == range_end {
+                        quote!(x == #range_begin)
+                    } else {
+                        quote!((x >= #range_begin && x <= #range_end))
+                    }
+                })
                 .collect();
 
             quote!(#(#range_checks)||*)
@@ -822,7 +829,9 @@ fn generate_right_ctx_state_char_arms(
         } else {
             let range_checks: Vec<TokenStream> = ranges
                 .into_iter()
-                .map(|(range_begin, range_end)| quote!((x >= #range_begin && x <= #range_end)))
+                .map(|(range_begin, range_end)| {
+                    inclusive_range_contains(quote!(x), range_begin, range_end)
+                })
                 .collect();
 
             quote!(#(#range_checks)||*)
@@ -839,7 +848,9 @@ fn generate_right_ctx_state_char_arms(
         } else {
             let range_checks: Vec<TokenStream> = accept_ranges
                 .into_iter()
-                .map(|(range_begin, range_end)| quote!((x >= #range_begin && x <= #range_end)))
+                .map(|(range_begin, range_end)| {
+                    inclusive_range_contains(quote!(x), range_begin, range_end)
+                })
                 .collect();
 
             quote!(#(#range_checks)||*)
@@ -880,4 +891,12 @@ fn test_right_ctxs(
     }
 
     action_code
+}
+
+fn inclusive_range_contains(value: TokenStream, range_start: char, range_end: char) -> TokenStream {
+    if range_start == range_end {
+        quote!(#value == #range_start)
+    } else {
+        quote!((#range_start..=#range_end).contains(&#value))
+    }
 }
