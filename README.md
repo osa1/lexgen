@@ -322,26 +322,28 @@ Here's an example lexer that counts number of `=`s appear between two `[`s:
 
 ```rust
 lexer! {
+    // `usize` in parenthesis is the user state type, `usize` after the arrow
+    // is the token type
     Lexer(usize) -> usize;
 
     rule Init {
-        ' ',                                            // line 5
+        $$ascii_whitespace,                             // line 7
 
         '[' => |lexer| {
-            *lexer.state() = 0;                         // line 8
-            lexer.switch(LexerRule::Count)              // line 9
+            *lexer.state() = 0;                         // line 10
+            lexer.switch(LexerRule::Count)              // line 11
         },
     }
 
     rule Count {
         '=' => |lexer| {
-            *lexer.state() += 1;                        // line 15
-            lexer.continue_()                           // line 16
+            *lexer.state() += 1;                        // line 17
+            lexer.continue_()                           // line 18
         },
 
         '[' => |lexer| {
             let n = *lexer.state();
-            lexer.switch_and_return(LexerRule::Init, n) // line 21
+            lexer.switch_and_return(LexerRule::Init, n) // line 23
         },
     }
 }
@@ -374,11 +376,11 @@ assert_eq!(
 assert_eq!(lexer.next(), None);
 ```
 
-Initially (the `Init` rule set) we skip spaces (line 5). When we see a `[` we
-initialize the user state (line 8) and switch to the `Count` state (line 9). In
-`Count`, each `=` increments the user state by one (line 15) and skips the
-match (line 16). A `[` in the `Count` state returns the current number and
-switches to the `Init` state (line 21).
+Initially (the `Init` rule set) we skip spaces (line 7). When we see a `[` we
+initialize the user state (line 10) and switch to the `Count` state (line 11).
+In `Count`, each `=` increments the user state by one (line 17) and skips the
+match (line 18). A `[` in `Count` state returns the current number and switches
+to the `Init` state (line 23).
 
 [1]: https://github.com/osa1/lexgen/blob/main/crates/lexgen/tests/tests.rs
 [2]: https://github.com/osa1/lexgen/blob/main/crates/lexgen/tests/lua_5_1.rs
