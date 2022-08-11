@@ -17,6 +17,7 @@ use std::convert::TryFrom;
 
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
+use syn::visit::Visit;
 
 // Max. size for guards in ranges. When a case have more ranges than this we generate a binary
 // search table.
@@ -30,6 +31,18 @@ use quote::{quote, ToTokens};
 // code for binary search is more complicated than a chain of `||`s, so I think it makes sense to
 // have a slightly larger number here.
 const MAX_GUARD_SIZE: usize = 9;
+
+struct LifetimeVisitor<'a> {
+    lifetimes: &'a mut Vec<syn::Lifetime>,
+}
+
+impl<'ast, 'a> Visit<'ast> for LifetimeVisitor<'a> {
+    fn visit_lifetime(&mut self, node: &'ast syn::Lifetime) {
+        if node.ident != "static" && node.ident != "input" {
+            self.lifetimes.push(node.clone())
+        }
+    }
+}
 
 pub fn reify(
     dfa: DFA<Trans<SemanticActionIdx>, SemanticActionIdx>,
@@ -61,9 +74,19 @@ pub fn reify(
         rule_states,
     );
 
-    let user_state_type = user_state_type
-        .map(|ty| ty.into_token_stream())
-        .unwrap_or(quote!(()));
+    let (user_state_lifetimes, user_state_type) = match user_state_type {
+        None => (Vec::new(), quote!(())),
+        Some(ty) => {
+            let mut lifetimes = Vec::new();
+            {
+                let mut visitor = LifetimeVisitor {
+                    lifetimes: &mut lifetimes,
+                };
+                visitor.visit_type(&ty);
+            }
+            (lifetimes, ty.into_token_stream())
+        }
+    };
 
     let match_arms = generate_state_arms(&mut ctx, dfa);
 
@@ -85,7 +108,8 @@ pub fn reify(
         }
     };
 
-    let semantic_action_fns = generate_semantic_action_fns(&ctx, &semantic_action_fn_ret_ty);
+    let semantic_action_fns =
+        generate_semantic_action_fns(&ctx, &user_state_lifetimes, &semantic_action_fn_ret_ty);
 
     let right_ctx_fns = generate_right_ctx_fns(&mut ctx, right_ctx_dfas);
 
@@ -139,19 +163,19 @@ pub fn reify(
             #(#rule_name_idents,)*
         }
 
-        #visibility struct #lexer_name<'input, I: Iterator<Item = char> + Clone>(
+        #visibility struct #lexer_name<'input, #(#user_state_lifetimes,)* I: Iterator<Item = char> + Clone>(
             ::lexgen_util::Lexer<
                 'input,
                 I,
                 #token_type,
                 #user_state_type,
                 #error_type,
-                #lexer_name<'input, I>
+                #lexer_name<'input, #(#user_state_lifetimes,)* I>
             >
         );
 
         // Methods below for using in semantic actions
-        impl<'input, I: Iterator<Item = char> + Clone> #lexer_name<'input, I> {
+        impl<'input, #(#user_state_lifetimes,)* I: Iterator<Item = char> + Clone> #lexer_name<'input, #(#user_state_lifetimes,)* I> {
             fn switch_and_return<T>(&mut self, rule: #rule_name_enum_name, token: T) -> ::lexgen_util::SemanticActionResult<T> {
                 self.switch::<T>(rule);
                 ::lexgen_util::SemanticActionResult::Return(token)
@@ -188,8 +212,11 @@ pub fn reify(
             }
         }
 
-        impl<'input> #lexer_name<'input, ::std::str::Chars<'input>> {
-            #visibility fn new(input: &'input str) -> Self {
+        impl<'input #(, #user_state_lifetimes)*> #lexer_name<'input, #(#user_state_lifetimes,)* ::std::str::Chars<'input>> {
+            #visibility fn new(input: &'input str) -> Self
+            where
+                #user_state_type: Default,
+            {
                 #lexer_name(::lexgen_util::Lexer::new(input))
             }
 
@@ -198,8 +225,11 @@ pub fn reify(
             }
         }
 
-        impl<I: Iterator<Item = char> + Clone> #lexer_name<'static, I> {
-            #visibility fn new_from_iter(iter: I) -> Self {
+        impl<'input: 'static, #(#user_state_lifetimes, )* I: Iterator<Item = char> + Clone> #lexer_name<'static, #(#user_state_lifetimes,)* I> {
+            #visibility fn new_from_iter(iter: I) -> Self
+            where
+                #user_state_type: Default,
+            {
                 #lexer_name(::lexgen_util::Lexer::new_from_iter(iter))
             }
 
@@ -213,7 +243,7 @@ pub fn reify(
         #semantic_action_fns
         #(#right_ctx_fns)*
 
-        impl<'input, I: Iterator<Item = char> + Clone> Iterator for #lexer_name<'input, I> {
+        impl<'input, #(#user_state_lifetimes,)* I: Iterator<Item = char> + Clone> Iterator for #lexer_name<'input, #(#user_state_lifetimes,)* I> {
             type Item = Result<(::lexgen_util::Loc, #token_type, ::lexgen_util::Loc), ::lexgen_util::LexerError<#error_type>>;
 
             fn next(&mut self) -> Option<Self::Item> {
@@ -606,6 +636,7 @@ fn generate_semantic_action_call(action_fn: &TokenStream) -> TokenStream {
 
 fn generate_semantic_action_fns(
     ctx: &CgCtx,
+    user_state_lifetimes: &Vec<syn::Lifetime>,
     semantic_action_fn_ret_ty: &TokenStream,
 ) -> TokenStream {
     let lexer_name = ctx.lexer_name();
@@ -618,19 +649,19 @@ fn generate_semantic_action_fns(
 
             let rhs = match action {
                 RuleRhs::None => {
-                    quote!(|__lexer: &mut #lexer_name<'input, I>| __lexer.continue_().map_token(Ok))
+                    quote!(|__lexer: &mut #lexer_name<'input, #(#user_state_lifetimes, )* I>| __lexer.continue_().map_token(Ok))
                 }
 
                 RuleRhs::Rhs { expr, kind } => {
                     match kind {
                         RuleKind::Simple => {
-                            quote!(|__lexer: &'lexer mut #lexer_name<'input, I>| __lexer.return_(#expr).map_token(Ok))
+                            quote!(|__lexer: &'lexer mut #lexer_name<'input, #(#user_state_lifetimes, )* I>| __lexer.return_(#expr).map_token(Ok))
                         }
                         RuleKind::Fallible => quote!(#expr),
                         RuleKind::Infallible => {
-                            quote!(|__lexer: &'lexer mut #lexer_name<'input, I>| {
+                            quote!(|__lexer: &'lexer mut #lexer_name<'input, #(#user_state_lifetimes, )* I>| {
                                 let semantic_action:
-                                    fn(&'lexer mut #lexer_name<'input, I>) -> ::lexgen_util::SemanticActionResult<#token_type> =
+                                    fn(&'lexer mut #lexer_name<'input, #(#user_state_lifetimes, )* I>) -> ::lexgen_util::SemanticActionResult<#token_type> =
                                         #expr;
 
                                 semantic_action(__lexer).map_token(Ok)
@@ -642,8 +673,8 @@ fn generate_semantic_action_fns(
 
             quote!(
                 #[allow(non_snake_case)]
-                fn #ident<'lexer, 'input, I: Iterator<Item = char> + Clone>(lexer: &'lexer mut #lexer_name<'input, I>) -> #semantic_action_fn_ret_ty {
-                    let action: fn(&'lexer mut #lexer_name<'input, I>) -> #semantic_action_fn_ret_ty = #rhs;
+                fn #ident<'lexer, #(#user_state_lifetimes, )* 'input, I: Iterator<Item = char> + Clone>(lexer: &'lexer mut #lexer_name<'input, #(#user_state_lifetimes, )* I>) -> #semantic_action_fn_ret_ty {
+                    let action: fn(&'lexer mut #lexer_name<'input, #(#user_state_lifetimes, )* I>) -> #semantic_action_fn_ret_ty = #rhs;
                     action(lexer)
                 }
             )
