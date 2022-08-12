@@ -402,3 +402,37 @@ fn failure_should_reset_state_issue_48() {
     assert_eq!(lexer.next(), Some(Ok((loc(0, 4, 4), "a", loc(0, 5, 5)))));
     assert_eq!(lexer.next(), None);
 }
+
+#[test]
+fn new_methods_no_default() {
+    // #54: `new_with_state` and `new_from_iter_with_state` shouldn't require state to implement
+    // `Default`
+
+    struct UserState {}
+
+    lexer! {
+        Lexer(UserState) -> ();
+
+        $ = (),
+    }
+
+    Lexer::new_with_state("", UserState {});
+    Lexer::new_from_iter_with_state(std::iter::empty(), UserState {});
+}
+
+#[test]
+fn new_methods_default() {
+    // #54: `new` and `new_from_iter` should work with user state that implements `Default`
+
+    #[derive(Default)]
+    struct UserState {}
+
+    lexer! {
+        Lexer(UserState) -> ();
+
+        $ = (),
+    }
+
+    Lexer::new("");
+    Lexer::new_from_iter(std::iter::empty());
+}
