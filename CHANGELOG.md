@@ -1,10 +1,12 @@
-# Unreleased
+# 2022/08/12: 0.12.0
 
 - Fix `double_comparison`, `manual_range_contains` lints in generated code
   (0ecb0b1)
 
 - Lexer constructors `new_with_state` and `new_from_iter_with_state` no longer
   require user state to implement `Default`. (#54)
+
+- User state can now have lifetime parameters other than `'input`. (#53)
 
 # 2022/05/15: 0.11.0
 

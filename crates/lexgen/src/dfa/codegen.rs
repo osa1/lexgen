@@ -33,6 +33,12 @@ use syn::visit::Visit;
 // have a slightly larger number here.
 const MAX_GUARD_SIZE: usize = 9;
 
+/// A [`Visit`] implementation to collect user state lifetimes.
+///
+/// Lifetime `'input` is ignored as `'input` is added to the generated lexer struct regardless of
+/// whether the user state uses it or not.
+///
+/// Lifetime `'static` is ignored as `'static` cannot be added as a lifetime parameter.
 struct LifetimeVisitor<'a> {
     lifetimes: &'a mut Vec<syn::Lifetime>,
 }
@@ -45,6 +51,10 @@ impl<'ast, 'a> Visit<'ast> for LifetimeVisitor<'a> {
     }
 }
 
+/// A [`Fold`] implementation for replacing `'input` lifetimes in a [`syn`] type with `'static`.
+///
+/// This is used to replace `'input`s in user state lifetimes with `'static`s in `impl` blocks for
+/// initializing the lexer without an input string.
 struct SubstLifetimeFolder;
 
 impl Fold for SubstLifetimeFolder {
@@ -199,10 +209,13 @@ pub fn reify(
             >
         );
 
-        #visibility type #lexer_name<'input, #(#user_state_lifetimes,)* I> = #lexer_struct_name<'input, #(#user_state_lifetimes,)* I, #user_state_type>;
+        #visibility type #lexer_name<'input, #(#user_state_lifetimes,)* I> =
+            #lexer_struct_name<'input, #(#user_state_lifetimes,)* I, #user_state_type>;
 
         // Methods below for using in semantic actions
-        impl<'input, #(#user_state_lifetimes,)* I: Iterator<Item = char> + Clone, S> #lexer_struct_name<'input, #(#user_state_lifetimes,)* I, S> {
+        impl<'input, #(#user_state_lifetimes,)* I: Iterator<Item = char> + Clone, S>
+                #lexer_struct_name<'input, #(#user_state_lifetimes,)* I, S>
+        {
             fn switch_and_return<T>(&mut self, rule: #rule_name_enum_name, token: T) -> ::lexgen_util::SemanticActionResult<T> {
                 self.switch::<T>(rule);
                 ::lexgen_util::SemanticActionResult::Return(token)
@@ -239,27 +252,33 @@ pub fn reify(
             }
         }
 
-        impl<'input #(, #user_state_lifetimes)*, S: ::std::default::Default> #lexer_struct_name<'input, #(#user_state_lifetimes,)* ::std::str::Chars<'input>, S> {
-            #visibility fn new(input: &'input str) -> Self
-            {
+        impl<'input, #(#user_state_lifetimes,)* S: ::std::default::Default>
+                #lexer_struct_name<'input, #(#user_state_lifetimes,)* ::std::str::Chars<'input>, S>
+        {
+            #visibility fn new(input: &'input str) -> Self {
                 #lexer_struct_name(::lexgen_util::Lexer::new(input))
             }
         }
 
-        impl<'input #(, #user_state_lifetimes)*> #lexer_struct_name<'input, #(#user_state_lifetimes,)* ::std::str::Chars<'input>, #user_state_type> {
+        impl<'input #(,#user_state_lifetimes)*>
+                #lexer_struct_name<'input, #(#user_state_lifetimes,)* ::std::str::Chars<'input>, #user_state_type>
+        {
             #visibility fn new_with_state(input: &'input str, user_state: #user_state_type) -> Self {
                 #lexer_struct_name(::lexgen_util::Lexer::new_with_state(input, user_state))
             }
         }
 
-        impl<#(#user_state_lifetimes, )* I: Iterator<Item = char> + Clone, S: ::std::default::Default> #lexer_struct_name<'static, #(#user_state_lifetimes,)* I, S> {
-            #visibility fn new_from_iter(iter: I) -> Self
-            {
+        impl<#(#user_state_lifetimes,)* I: Iterator<Item = char> + Clone, S: ::std::default::Default>
+                #lexer_struct_name<'static, #(#user_state_lifetimes,)* I, S>
+        {
+            #visibility fn new_from_iter(iter: I) -> Self {
                 #lexer_struct_name(::lexgen_util::Lexer::new_from_iter(iter))
             }
         }
 
-        impl<#(#user_state_lifetimes,)* I: Iterator<Item = char> + Clone> #lexer_struct_name<'static, #(#user_state_lifetimes,)* I, #user_state_type_static> {
+        impl<#(#user_state_lifetimes,)* I: Iterator<Item = char> + Clone>
+                #lexer_struct_name<'static, #(#user_state_lifetimes,)* I, #user_state_type_static>
+        {
             #visibility fn new_from_iter_with_state(iter: I, user_state: #user_state_type_static) -> Self {
                 #lexer_struct_name(::lexgen_util::Lexer::new_from_iter_with_state(iter, user_state))
             }
@@ -270,7 +289,9 @@ pub fn reify(
         #semantic_action_fns
         #(#right_ctx_fns)*
 
-        impl<'input, #(#user_state_lifetimes,)* I: Iterator<Item = char> + Clone> Iterator for #lexer_struct_name<'input, #(#user_state_lifetimes,)* I, #user_state_type> {
+        impl<'input, #(#user_state_lifetimes,)* I: Iterator<Item = char> + Clone> Iterator for
+                #lexer_struct_name<'input, #(#user_state_lifetimes,)* I, #user_state_type>
+        {
             type Item = Result<(::lexgen_util::Loc, #token_type, ::lexgen_util::Loc), ::lexgen_util::LexerError<#error_type>>;
 
             fn next(&mut self) -> Option<Self::Item> {

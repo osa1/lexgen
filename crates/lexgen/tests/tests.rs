@@ -1253,7 +1253,7 @@ fn static_and_input() {
         word: "Hello",
         counter: &mut counter,
     };
-    let test = "\"Hello\"".to_owned() + " \"world\"";
+    let test = "\"Hello\" \"world\"".to_owned(); // try non-static input
     let mut lexer: Lexer<'_, '_, _> = Lexer::new_with_state(&test, state);
     assert_eq!(next(&mut lexer), Some(Ok(())));
     assert_eq!(next(&mut lexer), Some(Ok(())));
