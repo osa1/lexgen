@@ -1086,7 +1086,6 @@ fn iter_interface_simple() {
 fn iter_interface_infallible() {
     // Tests `new_from_iter` with infallible rules
     lexer! {
-        // TODO: Is it possible to have a lifetime in lexer state?
         Lexer(String) -> u32;
 
         ['0'-'9']+ => |lexer| {
@@ -1107,7 +1106,6 @@ fn iter_interface_infallible() {
 fn iter_interface_fallible() {
     // Tests `new_from_iter` with fallible rules
     lexer! {
-        // TODO: Is it possible to have a lifetime in lexer state?
         Lexer(String) -> u32;
 
         type Error = std::num::ParseIntError;
@@ -1136,4 +1134,130 @@ fn iter_interface_fallible() {
             ..
         }))
     ));
+}
+
+#[test]
+fn user_state_lifetimes() {
+    struct State<'a> {
+        buffer: &'a mut String,
+    }
+
+    lexer! {
+        Lexer(State<'a>) -> ();
+
+        rule Init {
+            $$ascii_whitespace,
+            '"' => |lexer| {
+                lexer.reset_match();
+                lexer.switch(LexerRule::String)
+            },
+        }
+
+        rule String {
+            '"' => |lexer| {
+                lexer.switch_and_return(LexerRule::Init, ())
+            },
+            _ => |lexer| {
+                let match_ = lexer.match_();
+                lexer.state().buffer.push_str(match_);
+                lexer.reset_match();
+                lexer.continue_()
+            },
+        }
+    }
+
+    let mut buffer = String::new();
+    let mut lexer = Lexer::new_with_state(
+        "\"ab\" \"cd\"",
+        State {
+            buffer: &mut buffer,
+        },
+    );
+    assert_eq!(next(&mut lexer), Some(Ok(())));
+    assert_eq!(next(&mut lexer), Some(Ok(())));
+    assert_eq!(next(&mut lexer), None);
+    assert_eq!(buffer, "abcd");
+}
+
+#[test]
+fn lifetime_named_input() {
+    struct State<'input> {
+        vec: Vec<&'input str>,
+    }
+
+    lexer! {
+        Lexer(State<'input>) -> ();
+
+        rule Init {
+            $$ascii_whitespace,
+            '"' => |lexer| {
+                lexer.reset_match();
+                lexer.switch(LexerRule::String)
+            },
+        }
+
+        rule String {
+            '"' => |lexer| {
+                let match_ = lexer.match_();
+                lexer.state().vec.push(&match_[..match_.len()-1]);
+                lexer.switch_and_return(LexerRule::Init, ())
+            },
+            _,
+        }
+    }
+
+    let mut lexer = Lexer::new_with_state("\"a\" \"b\"", State { vec: Vec::new() });
+    assert_eq!(next(&mut lexer), Some(Ok(())));
+    assert_eq!(next(&mut lexer), Some(Ok(())));
+    assert_eq!(next(&mut lexer), None);
+    assert_eq!(lexer.state().vec, vec!["a", "b"]);
+}
+
+#[test]
+fn static_and_input() {
+    struct State<'a, 'b, 'c> {
+        words: Vec<&'a str>,
+        word: &'b str,
+        counter: &'c mut i32,
+    }
+
+    lexer! {
+        Lexer(State<'input, 'static, 'c>) -> ();
+
+        rule Init {
+            $$ascii_whitespace,
+            '"' => |lexer| {
+                lexer.reset_match();
+                lexer.switch(LexerRule::String)
+            },
+        }
+
+        rule String {
+            '"' => |lexer| {
+                let match_ = lexer.match_();
+                let s = &match_[..match_.len()-1];
+                if s != lexer.state().word {
+                    lexer.state().words.push(s)
+                } else {
+                    *lexer.state().counter += 1
+                }
+                lexer.switch_and_return(LexerRule::Init, ())
+            },
+            _,
+        }
+    }
+
+    let mut counter = 0;
+    let state = State {
+        words: Vec::new(),
+        word: "Hello",
+        counter: &mut counter,
+    };
+    let test = "\"Hello\"".to_owned() + " \"world\"";
+    let mut lexer: Lexer<'_, '_, _> = Lexer::new_with_state(&test, state);
+    assert_eq!(next(&mut lexer), Some(Ok(())));
+    assert_eq!(next(&mut lexer), Some(Ok(())));
+    assert_eq!(next(&mut lexer), None);
+    assert_eq!(lexer.state().words, vec!["world"]);
+    assert_eq!(*lexer.state().counter, 1);
 }
