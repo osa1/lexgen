@@ -130,7 +130,18 @@ pub fn reify(
         .collect();
 
     let token_type = ctx.token_type();
+
+    // Name of the type synonym:
+    // type #lexer_name<'input, I> = #lexer_name_<'input, I, #user_state_type>
     let lexer_name = ctx.lexer_name();
+
+    // Name of the lexer struct:
+    // struct #lexer_struct_name<'input, I: Iterator<Item = char> + Clone, S> { ... }
+    //
+    // This struct with a state parameter is needed to be able to have `impl` blocks that require
+    // `S: Default` in the methods without requiring the user state to implement `Default` when
+    // those methods are not used.
+    let lexer_struct_name = syn::Ident::new(&(lexer_name.to_string() + "_"), lexer_name.span());
 
     quote!(
         // An enum for the rule sets in the DFA. `Init` is the initial, unnamed rule set.
@@ -139,19 +150,21 @@ pub fn reify(
             #(#rule_name_idents,)*
         }
 
-        #visibility struct #lexer_name<'input, I: Iterator<Item = char> + Clone>(
+        #visibility struct #lexer_struct_name<'input, I: Iterator<Item = char> + Clone, S>(
             ::lexgen_util::Lexer<
                 'input,
                 I,
                 #token_type,
-                #user_state_type,
+                S,
                 #error_type,
                 #lexer_name<'input, I>
             >
         );
 
+        #visibility type #lexer_name<'input, I> = #lexer_struct_name<'input, I, #user_state_type>;
+
         // Methods below for using in semantic actions
-        impl<'input, I: Iterator<Item = char> + Clone> #lexer_name<'input, I> {
+        impl<'input, I: Iterator<Item = char> + Clone, S> #lexer_struct_name<'input, I, S> {
             fn switch_and_return<T>(&mut self, rule: #rule_name_enum_name, token: T) -> ::lexgen_util::SemanticActionResult<T> {
                 self.switch::<T>(rule);
                 ::lexgen_util::SemanticActionResult::Return(token)
@@ -167,7 +180,7 @@ pub fn reify(
                 ::lexgen_util::SemanticActionResult::Continue
             }
 
-            fn state(&mut self) -> &mut #user_state_type {
+            fn state(&mut self) -> &mut S {
                 self.0.state()
             }
 
@@ -188,23 +201,27 @@ pub fn reify(
             }
         }
 
-        impl<'input> #lexer_name<'input, ::std::str::Chars<'input>> {
+        impl<'input, S: ::std::default::Default> #lexer_struct_name<'input, ::std::str::Chars<'input>, S> {
             #visibility fn new(input: &'input str) -> Self {
-                #lexer_name(::lexgen_util::Lexer::new(input))
-            }
-
-            #visibility fn new_with_state(input: &'input str, user_state: #user_state_type) -> Self {
-                #lexer_name(::lexgen_util::Lexer::new_with_state(input, user_state))
+                #lexer_struct_name(::lexgen_util::Lexer::new(input))
             }
         }
 
-        impl<I: Iterator<Item = char> + Clone> #lexer_name<'static, I> {
-            #visibility fn new_from_iter(iter: I) -> Self {
-                #lexer_name(::lexgen_util::Lexer::new_from_iter(iter))
+        impl<'input> #lexer_struct_name<'input, ::std::str::Chars<'input>, #user_state_type> {
+            #visibility fn new_with_state(input: &'input str, user_state: #user_state_type) -> Self {
+                #lexer_struct_name(::lexgen_util::Lexer::new_with_state(input, user_state))
             }
+        }
 
+        impl<I: Iterator<Item = char> + Clone, S: ::std::default::Default> #lexer_struct_name<'static, I, S> {
+            #visibility fn new_from_iter(iter: I) -> Self {
+                #lexer_struct_name(::lexgen_util::Lexer::new_from_iter(iter))
+            }
+        }
+
+        impl<I: Iterator<Item = char> + Clone> #lexer_struct_name<'static, I, #user_state_type> {
             #visibility fn new_from_iter_with_state(iter: I, user_state: #user_state_type) -> Self {
-                #lexer_name(::lexgen_util::Lexer::new_from_iter_with_state(iter, user_state))
+                #lexer_struct_name(::lexgen_util::Lexer::new_from_iter_with_state(iter, user_state))
             }
         }
 
@@ -213,7 +230,7 @@ pub fn reify(
         #semantic_action_fns
         #(#right_ctx_fns)*
 
-        impl<'input, I: Iterator<Item = char> + Clone> Iterator for #lexer_name<'input, I> {
+        impl<'input, I: Iterator<Item = char> + Clone> Iterator for #lexer_struct_name<'input, I, #user_state_type> {
             type Item = Result<(::lexgen_util::Loc, #token_type, ::lexgen_util::Loc), ::lexgen_util::LexerError<#error_type>>;
 
             fn next(&mut self) -> Option<Self::Item> {

@@ -3,6 +3,9 @@
 - Fix `double_comparison`, `manual_range_contains` lints in generated code
   (0ecb0b1)
 
+- Lexer constructors `new_with_state` and `new_from_iter_with_state` no longer
+  require user state to implement `Default`. (#54)
+
 # 2022/05/15: 0.11.0
 
 - Reset lexer state on failure (#48)
