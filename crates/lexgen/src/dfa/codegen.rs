@@ -17,6 +17,7 @@ use std::convert::TryFrom;
 
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
+use syn::fold::Fold;
 use syn::visit::Visit;
 
 // Max. size for guards in ranges. When a case have more ranges than this we generate a binary
@@ -40,6 +41,18 @@ impl<'ast, 'a> Visit<'ast> for LifetimeVisitor<'a> {
     fn visit_lifetime(&mut self, node: &'ast syn::Lifetime) {
         if node.ident != "static" && node.ident != "input" {
             self.lifetimes.push(node.clone())
+        }
+    }
+}
+
+struct SubstLifetimeFolder;
+
+impl Fold for SubstLifetimeFolder {
+    fn fold_lifetime(&mut self, node: syn::Lifetime) -> syn::Lifetime {
+        if node.ident == "input" {
+            syn::Lifetime::new("'static", node.span())
+        } else {
+            node
         }
     }
 }
@@ -74,8 +87,8 @@ pub fn reify(
         rule_states,
     );
 
-    let (user_state_lifetimes, user_state_type) = match user_state_type {
-        None => (Vec::new(), quote!(())),
+    let (user_state_lifetimes, user_state_type, user_state_type_static) = match user_state_type {
+        None => (Vec::new(), quote!(()), syn::Type::Verbatim(quote!(()))),
         Some(ty) => {
             let mut lifetimes = Vec::new();
             {
@@ -84,7 +97,8 @@ pub fn reify(
                 };
                 visitor.visit_type(&ty);
             }
-            (lifetimes, ty.into_token_stream())
+            let subst = SubstLifetimeFolder.fold_type(ty.clone());
+            (lifetimes, ty.into_token_stream(), subst)
         }
     };
 
@@ -238,15 +252,15 @@ pub fn reify(
             }
         }
 
-        impl<'input: 'static, #(#user_state_lifetimes, )* I: Iterator<Item = char> + Clone, S: ::std::default::Default> #lexer_struct_name<'input, #(#user_state_lifetimes,)* I, S> {
+        impl<#(#user_state_lifetimes, )* I: Iterator<Item = char> + Clone, S: ::std::default::Default> #lexer_struct_name<'static, #(#user_state_lifetimes,)* I, S> {
             #visibility fn new_from_iter(iter: I) -> Self
             {
                 #lexer_struct_name(::lexgen_util::Lexer::new_from_iter(iter))
             }
         }
 
-        impl<'input: 'static, #(#user_state_lifetimes,)* I: Iterator<Item = char> + Clone> #lexer_struct_name<'input, #(#user_state_lifetimes,)* I, #user_state_type> {
-            #visibility fn new_from_iter_with_state(iter: I, user_state: #user_state_type) -> Self {
+        impl<#(#user_state_lifetimes,)* I: Iterator<Item = char> + Clone> #lexer_struct_name<'static, #(#user_state_lifetimes,)* I, #user_state_type_static> {
+            #visibility fn new_from_iter_with_state(iter: I, user_state: #user_state_type_static) -> Self {
                 #lexer_struct_name(::lexgen_util::Lexer::new_from_iter_with_state(iter, user_state))
             }
         }
