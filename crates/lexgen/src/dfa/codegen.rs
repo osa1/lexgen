@@ -619,7 +619,7 @@ fn generate_state_char_arms(
                     if range_begin == range_end {
                         quote!(x == #range_begin)
                     } else {
-                        quote!((x >= #range_begin && x <= #range_end))
+                        inclusive_range_contains(quote!(x), range_begin, range_end)
                     }
                 })
                 .collect();

@@ -1,3 +1,7 @@
+# Unreleased
+
+- More `manual_range_contains` lint fixes in generated code
+
 # 2022/08/12: 0.12.0
 
 - Fix `double_comparison`, `manual_range_contains` lints in generated code
