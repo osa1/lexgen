@@ -145,7 +145,7 @@ fn next<A>(dfa: &DFA<StateIdx, A>, state: StateIdx, char: char) -> Option<StateI
         return Some(next);
     }
 
-    return None;
+    None
 }
 
 fn next_end_of_input<A>(dfa: &DFA<StateIdx, A>, state: StateIdx) -> Option<StateIdx> {
@@ -154,17 +154,14 @@ fn next_end_of_input<A>(dfa: &DFA<StateIdx, A>, state: StateIdx) -> Option<State
 
 // Similar to `simulate`, but does not keep track of the last match as we don't need "longest
 // match" semantics and backtracking
-pub fn simulate_right_ctx(
-    dfa: &DFA<StateIdx, ()>,
-    mut char_indices: std::str::CharIndices,
-) -> bool {
+pub fn simulate_right_ctx(dfa: &DFA<StateIdx, ()>, char_indices: std::str::CharIndices) -> bool {
     let mut state = dfa.initial_state();
 
     if dfa.is_accepting_state(state) {
         return true;
     }
 
-    while let Some((_, char)) = char_indices.next() {
+    for (_, char) in char_indices {
         match next(dfa, state, char) {
             None => {
                 // Stuck

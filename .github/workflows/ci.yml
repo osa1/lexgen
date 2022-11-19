@@ -36,3 +36,18 @@ jobs:
 
       - name: Check formatting
         run: cargo fmt --all -- --check
+
+  clippy:
+    name: 'Check lints'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Get Rust stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+            toolchain: stable
+            override: true
+
+      - name: Check lints
+        run: cargo clippy --all-targets --all

@@ -6,7 +6,8 @@
     clippy::collapsible_else_if,
     clippy::enum_variant_names,
     clippy::too_many_arguments,
-    clippy::upper_case_acronyms
+    clippy::upper_case_acronyms,
+    clippy::large_enum_variant
 )]
 
 mod ast;

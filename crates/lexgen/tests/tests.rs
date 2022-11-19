@@ -232,7 +232,7 @@ fn switch_user_state() {
         rule Comment {
             "/*" => |lexer| {
                 let state = lexer.state();
-                *state = *state + 1;
+                *state += 1;
                 lexer.continue_()
             },
 
@@ -241,7 +241,7 @@ fn switch_user_state() {
                 if *state == 1 {
                     lexer.switch_and_return(LexerRule::Init, Token::Comment)
                 } else {
-                    *state = *state - 1;
+                    *state -= 1;
                     lexer.continue_()
                 }
             },
