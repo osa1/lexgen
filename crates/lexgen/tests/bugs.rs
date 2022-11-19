@@ -22,7 +22,7 @@ fn failure_confusion_1() {
 
         '"' => |lexer| {
             println!("matched a double quote");
-            let str = std::mem::replace(&mut lexer.state().buf, String::new());
+            let str = std::mem::take(&mut lexer.state().buf);
             lexer.return_(str)
         },
 
@@ -75,7 +75,7 @@ fn failure_confusion_2() {
         rule Comment {
             "(*" => |lexer| {
                 let depth = &mut lexer.state().comment_depth;
-                *depth =  *depth + 1;
+                *depth += 1;
                 lexer.continue_()
             },
 
@@ -84,7 +84,7 @@ fn failure_confusion_2() {
                 if *depth == 1 {
                     lexer.switch(LexerRule::Init)
                 } else {
-                    *depth = *depth - 1;
+                    *depth -= 1;
                     lexer.continue_()
                 }
             },

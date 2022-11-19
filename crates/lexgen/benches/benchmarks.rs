@@ -5,10 +5,8 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 #[inline(never)]
 fn lex_lua(s: &str) {
-    let mut lexer = Lexer::new(s);
-    while let Some(next) = lexer.next() {
-        next;
-    }
+    let lexer = Lexer::new(s);
+    for _ in lexer {}
 }
 
 fn lexer_bench(c: &mut Criterion) {

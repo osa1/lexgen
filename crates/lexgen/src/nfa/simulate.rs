@@ -157,7 +157,7 @@ fn next<A>(nfa: &NFA<A>, states: &Set<StateIdx>, char: char) -> Set<StateIdx> {
     for state in states {
         // Char transitions
         if let Some(char_nexts) = nfa.states[state.0].char_transitions.get(&char) {
-            next_states.extend(char_nexts.into_iter());
+            next_states.extend(char_nexts.iter());
         }
 
         // Range transitions

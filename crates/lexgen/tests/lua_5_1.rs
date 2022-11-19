@@ -368,6 +368,7 @@ lexer! {
     }
 }
 
+#[allow(dead_code)]
 fn ignore_pos<A, E, L>(ret: Option<Result<(L, A, L), E>>) -> Option<Result<A, E>> {
     ret.map(|res| res.map(|(_, a, _)| a))
 }
@@ -543,9 +544,9 @@ fn lex_lua_windows_line_ending() {
 #[test]
 fn lex_lua_files() {
     let str = std::fs::read_to_string("tests/test_data").unwrap();
-    let mut lexer = Lexer::new(&str);
+    let lexer = Lexer::new(&str);
     let mut i = 0;
-    while let Some(tok) = lexer.next() {
+    for tok in lexer {
         assert!(tok.is_ok());
         i += 1;
     }
