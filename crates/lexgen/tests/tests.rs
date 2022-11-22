@@ -1261,3 +1261,30 @@ fn static_and_input() {
     assert_eq!(lexer.state().words, vec!["world"]);
     assert_eq!(*lexer.state().counter, 1);
 }
+
+#[test]
+fn not_charset() {
+    lexer! {
+        Lexer -> usize;
+
+        $ = 1,
+        'a' = 2,
+        [^'b'-'z'] = 3,
+        _ = 4,
+    }
+
+    let mut lexer = Lexer::new("a");
+    assert_eq!(next(&mut lexer), Some(Ok(2)));
+    assert_eq!(next(&mut lexer), Some(Ok(1)));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("A");
+    assert_eq!(next(&mut lexer), Some(Ok(3)));
+    assert_eq!(next(&mut lexer), Some(Ok(1)));
+    assert_eq!(next(&mut lexer), None);
+
+    let mut lexer = Lexer::new("b");
+    assert_eq!(next(&mut lexer), Some(Ok(4)));
+    assert_eq!(next(&mut lexer), Some(Ok(1)));
+    assert_eq!(next(&mut lexer), None);
+}

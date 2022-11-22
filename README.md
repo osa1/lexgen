@@ -157,6 +157,8 @@ of rules. The syntax is:
 
   Here's an example character set for ASCII alphanumerics: `['a'-'z' 'A'-'Z'
   '0'-'9']`
+  `[^...]` syntax is permitted for listing non-matching characters and character
+  ranges, for example: `[^'0'-'9']`
 - `_` for matching any character
 - `$` for matching end-of-input
 - `<regex>*` for zero or more repetitions of `<regex>`

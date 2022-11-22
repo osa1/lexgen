@@ -70,6 +70,28 @@ pub fn add_re<A>(
             }
         }
 
+        Regex::NotCharSet(set) => {
+            let mut ranges = RangeMap::new();
+
+            for char in &set.0 {
+                match char {
+                    CharOrRange::Char(char) => {
+                        ranges.insert(*char as u32, *char as u32, (), merge_values);
+                    }
+                    CharOrRange::Range(range_start, range_end) => {
+                        ranges.insert(*range_start as u32, *range_end as u32, (), merge_values);
+                    }
+                }
+            }
+
+            let mut map = RangeMap::new();
+
+            map.insert(0, char::MAX as u32, (), merge_values);
+            map.remove_ranges(&ranges);
+
+            nfa.add_range_transitions(current, map, cont);
+        }
+
         Regex::ZeroOrMore(re) => {
             let re_init = nfa.new_state();
             let re_cont = nfa.new_state();
@@ -169,6 +191,8 @@ fn regex_to_range_map(bindings: &Map<Var, Regex>, re: &Regex) -> RangeMap<()> {
             map.insert(*char as u32, *char as u32, (), merge_values);
             map
         }
+
+        Regex::NotCharSet(_) => panic!("`^` cannot be used in char sets (`#`)"),
 
         Regex::String(_) => panic!("strings cannot be used in char sets (`#`)"),
 

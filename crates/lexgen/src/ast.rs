@@ -120,6 +120,7 @@ pub enum Regex {
     Char(char),
     String(String),
     CharSet(CharSet),
+    NotCharSet(CharSet),
     ZeroOrMore(Box<Regex>),
     OneOrMore(Box<Regex>),
     ZeroOrOne(Box<Regex>),
@@ -258,8 +259,13 @@ fn parse_regex_4(input: ParseStream) -> syn::Result<Regex> {
     } else if input.peek(syn::token::Bracket) {
         let bracketed;
         syn::bracketed!(bracketed in input);
-        let char_set = parse_charset(&bracketed)?;
-        Ok(Regex::CharSet(char_set))
+        if bracketed.parse::<syn::token::Caret>().is_ok() {
+            let char_set = parse_charset(&bracketed)?;
+            Ok(Regex::NotCharSet(char_set))
+        } else {
+            let char_set = parse_charset(&bracketed)?;
+            Ok(Regex::CharSet(char_set))
+        }
     } else if input.parse::<syn::token::Underscore>().is_ok() {
         Ok(Regex::Any)
     } else {
