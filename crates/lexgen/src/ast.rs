@@ -2,6 +2,7 @@
 
 use crate::semantic_action_table::{SemanticActionIdx, SemanticActionTable};
 
+use quote::ToTokens;
 use syn::parse::ParseStream;
 
 use std::fmt;
@@ -13,6 +14,11 @@ pub struct Var(pub String);
 pub struct Builtin(pub String);
 
 pub struct Lexer {
+    /// `#[derive ...]` attribute tokens. When available the tokens are added as a `derive`
+    /// attribute to the generated lexer struct.
+    ///
+    /// Note: This includes parenthesis, e.g. `(Debug, Clone)` instead of `Debug, Clone`.
+    pub derives: Option<proc_macro2::TokenStream>,
     pub public: bool,
     pub type_name: syn::Ident,
     pub user_state_type: Option<syn::Type>,
@@ -74,6 +80,7 @@ pub enum RuleKind {
 impl fmt::Debug for Lexer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Lexer")
+            .field("derives", &self.public)
             .field("public", &self.public)
             .field("type_name", &self.type_name.to_string())
             .field("token_type", &"...")
@@ -384,6 +391,23 @@ pub fn make_lexer_parser(
     semantic_action_table: &mut SemanticActionTable,
 ) -> impl FnOnce(ParseStream) -> Result<Lexer, syn::Error> + '_ {
     |input: ParseStream| {
+        let mut attrs = input.call(syn::Attribute::parse_outer)?;
+        if attrs.len() > 1 {
+            // Keep it simple for now
+            panic!("Lexer structs can have at most one `#[derive(...)]` attribute");
+        }
+
+        let derives = attrs.pop().map(|attr| {
+            let attr_path_str = attr.path.to_token_stream().to_string();
+            if attr_path_str != "derive" {
+                panic!(
+                    "Unsupported lexer attribute {:?}, only \"derive\" is supported.",
+                    attr
+                );
+            }
+            attr.tokens
+        });
+
         let public = input.parse::<syn::token::Pub>().is_ok();
         let type_name = input.parse::<syn::Ident>()?;
 
@@ -405,6 +429,7 @@ pub fn make_lexer_parser(
         }
 
         Ok(Lexer {
+            derives,
             public,
             type_name,
             user_state_type,

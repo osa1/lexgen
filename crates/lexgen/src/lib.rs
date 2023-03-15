@@ -44,6 +44,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
     let mut semantic_action_table = SemanticActionTable::new();
 
     let Lexer {
+        derives,
         public,
         type_name,
         user_state_type,
@@ -146,6 +147,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
         type_name,
         token_type,
         public,
+        derives,
     )
     .into()
 }
