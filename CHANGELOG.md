@@ -1,10 +1,13 @@
 # Unreleased
 
-- More `manual_range_contains` lint fixes in generated code
+- Fix more `manual_range_contains` lints in generated code.
+
+- `let` bindings can now appear inside `rule`s. Previously `let`s were only
+  allowed at the top-level. (#28)
 
 # 2022/08/12: 0.12.0
 
-- Fix `double_comparison`, `manual_range_contains` lints in generated code
+- Fix `double_comparison`, `manual_range_contains` lints in generated code.
   (0ecb0b1)
 
 - Lexer constructors `new_with_state` and `new_from_iter_with_state` no longer
@@ -14,7 +17,7 @@
 
 # 2022/05/15: 0.11.0
 
-- Reset lexer state on failure (#48)
+- Lexer state is now reset on failure. (#48)
 
 # 2022/02/20: 0.10.0
 

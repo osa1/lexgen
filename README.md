@@ -82,7 +82,7 @@ lexgen doesn't require a build step. Add same versions of `lexgen` and
 
 ## Lexer syntax
 
-lexgen lexers start with type of the generated lexer struct, optional user
+lexgen lexers start with the name of the generated lexer struct, optional user
 state part, and the token type (type of values returned by semantic actions).
 Example:
 
@@ -93,19 +93,11 @@ lexer! {
 }
 ```
 
-Here the lexer struct is named `Lexer`. User state type is `LexerState` (this
-type should be defined by the user). The token type is `Token`.
+Here the generated lexer type will be named `Lexer`. User state type is
+`LexerState` (this type should be defined by the user). The token type is
+`Token`.
 
-Next is let bindings for regular expressions. These are optional. The syntax is
-`let <id> = <regex>;` where `<id>` is a Rust identifier and regex is as
-described below.
-
-```rust
-let init = ['a'-'z'];
-let subseq = $init | ['A'-'Z' '0'-'9' '-' '_'];
-```
-
-Finally we define the lexer rules:
+After the lexer name and user state and token types we define the rules:
 
 ```rust
 rule Init {
@@ -122,9 +114,19 @@ be named `Init`.
 
 In the body of a `rule` block we define the rules for that lexer state. The
 syntax for a rule is `<regex> => <semantic action>,`. Regex syntax is described
-below. Semantic action is any Rust code with type `fn(LexerHandle) ->
+below. A semantic action is any Rust code with the type `fn(LexerHandle) ->
 LexerAction` where `LexerHandle` and `LexerAction` are generated names derived
-from the lexer name (`Lexer`). More on these types below.
+from the lexer name (`Lexer` in our example). More on these types below.
+
+Regular expressions can be named with `let <name> = <regex>;` syntax. Example:
+
+```rust
+let init = ['a'-'z'];
+let subseq = $init | ['A'-'Z' '0'-'9' '-' '_'];
+
+// Named regexes can be used with the `$` prefix
+$init $subseq* => |lexer| { ... }
+```
 
 You can omit the `rule Init { ... }` part and have all of your rules at the top
 level if you don't need rule sets.
@@ -134,10 +136,10 @@ In summary:
 - First line is in form `<lexer name>(<user state type>) -> <token type name>`.
   The `(<user state type>)` part can be omitted for stateless lexers.
 
-- Next we have let bindings for regexes. This part is optional.
-
 - Next is the rule sets. There should be at least one rule set with the name
   `Init`, which is the name of the initial state.
+
+- `let` bindings can be added at the top-level or in `rule`s.
 
 ## Regex syntax
 

@@ -114,16 +114,6 @@ lexer! {
 
     let whitespace = [' ' '\t' '\n'] | "\r\n";
 
-    // > Names (also called identifiers) in Lua can be any string of letters, digits, and
-    // > underscores, not beginning with a digit. This coincides with the definition of names in
-    // > most languages. (The definition of letter depends on the current locale: any character
-    // > considered alphabetic by the current locale can be used in an identifier.)
-    let var_init = ['a'-'z' 'A'-'Z' '_'];
-    let var_subseq = $var_init | ['0'-'9'];
-
-    let digit = ['0'-'9'];
-    let hex_digit = ['a'-'f' 'A'-'F' '0'-'9'];
-
     rule Init {
         $whitespace,
 
@@ -201,10 +191,20 @@ lexer! {
             lexer.switch(LexerRule::EnterComment)
         },
 
+        // > Names (also called identifiers) in Lua can be any string of letters, digits, and
+        // > underscores, not beginning with a digit. This coincides with the definition of names
+        // > in most languages. (The definition of letter depends on the current locale: any
+        // > character considered alphabetic by the current locale can be used in an identifier.)
+        let var_init = ['a'-'z' 'A'-'Z' '_'];
+        let var_subseq = $var_init | ['0'-'9'];
+
         $var_init $var_subseq* => |lexer| {
             let match_ = lexer.match_();
             lexer.return_(Token::Var(match_))
         },
+
+        let digit = ['0'-'9'];
+        let hex_digit = ['a'-'f' 'A'-'F' '0'-'9'];
 
         $digit+ ('.'? $digit+ (('e' | 'E') ('+'|'-')? $digit+)?)? => |lexer| {
             let match_ = lexer.match_();

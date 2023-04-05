@@ -26,7 +26,7 @@ mod semantic_action_table;
 #[cfg(test)]
 mod tests;
 
-use ast::{Lexer, Regex, RegexCtx, Rule, SingleRule, Var};
+use ast::{Binding, Lexer, Regex, RegexCtx, Rule, RuleOrBinding, SingleRule, Var};
 use collections::Map;
 use dfa::{StateIdx as DfaStateIdx, DFA};
 use nfa::NFA;
@@ -63,79 +63,89 @@ pub fn lexer(input: TokenStream) -> TokenStream {
 
     let mut bindings: Map<Var, Regex> = Default::default();
 
-    let mut dfa: Option<DFA<DfaStateIdx, SemanticActionIdx>> = None;
+    let mut init_dfa: Option<DFA<DfaStateIdx, SemanticActionIdx>> = None;
 
     let mut user_error_type: Option<syn::Type> = None;
 
-    let have_named_rules = top_level_rules
-        .iter()
-        .any(|rule| matches!(rule, Rule::RuleSet { .. }));
+    let mut unnamed_nfa: NFA<SemanticActionIdx> = NFA::new();
+
+    // Mixing named and unnamed rules is not allowed
+    {
+        let mut named = false;
+        let mut unnamed = false;
+        for rule in &top_level_rules {
+            match rule {
+                Rule::RuleOrBinding(RuleOrBinding::Rule { .. }) => unnamed = true,
+                Rule::RuleSet { .. } => named = true,
+                _ => {}
+            }
+        }
+        if named && unnamed {
+            panic!(
+                "Unnamed rules cannot be mixed with named rules. Make sure to either \
+                have all your rules in `rule ... {} ... {}` syntax, or remove `rule`s \
+                entirely and have your rules at the top-level.",
+                '{', '}',
+            );
+        }
+    }
 
     for rule in top_level_rules {
         match rule {
-            Rule::Binding { var, re } => match bindings.entry(var) {
-                Entry::Occupied(entry) => {
-                    panic!("Variable {:?} is defined multiple times", entry.key().0);
-                }
-                Entry::Vacant(entry) => {
-                    // TODO: Check that regex doesn't have right context
-                    entry.insert(re.re);
-                }
-            },
-            Rule::RuleSet { name, rules } => {
-                if name == "Init" {
-                    let dfa = dfa.insert(compile_rules(rules, &bindings, &mut right_ctx_dfas));
-                    let initial_state = dfa.initial_state();
-
-                    if dfas.insert(name.to_string(), initial_state).is_some() {
-                        panic!("Rule set {:?} is defined multiple times", name.to_string());
-                    }
-                } else {
-                    let dfa = dfa
-                        .as_mut()
-                        .expect("First rule set should be named \"Init\"");
-
-                    let dfa_ = compile_rules(rules, &bindings, &mut right_ctx_dfas);
-
-                    let dfa_idx = dfa.add_dfa(dfa_);
-
-                    if dfas.insert(name.to_string(), dfa_idx).is_some() {
-                        panic!("Rule set {:?} is defined multiple times", name.to_string());
-                    }
-                }
-            }
-            Rule::UnnamedRules { rules } => {
-                if dfa.is_some() || have_named_rules {
-                    panic!(
-                        "Unnamed rules cannot be mixed with named rules. Make sure to either \
-                        have all your rules in `rule ... {} ... {}` syntax, or remove `rule`s \
-                        entirely and have your rules at the top-level.",
-                        '{', '}',
-                    );
-                }
-
-                let dfa = dfa.insert(compile_rules(rules, &bindings, &mut right_ctx_dfas));
-                let initial_state = dfa.initial_state();
-                dfas.insert("Init".to_owned(), initial_state);
-            }
             Rule::ErrorType { ty } => match user_error_type {
                 None => {
                     user_error_type = Some(ty);
                 }
                 Some(_) => panic!("Error type defined multiple times"),
             },
+
+            Rule::RuleOrBinding(RuleOrBinding::Binding(Binding { var, re })) => {
+                match bindings.entry(var) {
+                    Entry::Occupied(entry) => {
+                        panic!("Variable {:?} is defined multiple times", entry.key().0);
+                    }
+                    Entry::Vacant(entry) => {
+                        entry.insert(re);
+                    }
+                }
+            }
+
+            Rule::RuleOrBinding(RuleOrBinding::Rule(SingleRule { lhs, rhs })) => {
+                compile_single_rule(&mut unnamed_nfa, lhs, rhs, &bindings, &mut right_ctx_dfas);
+            }
+
+            Rule::RuleSet { name, rules } => {
+                let dfa_idx = if name == "Init" {
+                    let dfa = init_dfa.insert(compile_rule_set(
+                        rules,
+                        bindings.clone(),
+                        &mut right_ctx_dfas,
+                    ));
+
+                    dfa.initial_state()
+                } else {
+                    let dfa = init_dfa
+                        .as_mut()
+                        .expect("First rule set should be named \"Init\"");
+
+                    let dfa_ = compile_rule_set(rules, bindings.clone(), &mut right_ctx_dfas);
+
+                    dfa.add_dfa(dfa_)
+                };
+
+                if dfas.insert(name.to_string(), dfa_idx).is_some() {
+                    panic!("Rule set {:?} is defined multiple times", name.to_string());
+                }
+            }
         }
     }
 
-    // There should be a rule with name "Init"
-    if dfas.get("Init").is_none() {
-        panic!(
-            "There should be a rule set named \"Init\". Current rules: {:?}",
-            dfas.keys().collect::<Vec<&String>>()
-        );
-    }
+    let dfa = match init_dfa {
+        Some(init_dfa) => init_dfa,
+        None => nfa_to_dfa(&unnamed_nfa),
+    };
 
-    let dfa = dfa::simplify::simplify(dfa.unwrap(), &mut dfas);
+    let dfa = dfa::simplify::simplify(dfa, &mut dfas);
 
     dfa::codegen::reify(
         dfa,
@@ -152,21 +162,43 @@ pub fn lexer(input: TokenStream) -> TokenStream {
     .into()
 }
 
-fn compile_rules(
-    rules: Vec<SingleRule>,
+fn compile_single_rule(
+    nfa: &mut NFA<SemanticActionIdx>,
+    lhs: RegexCtx,
+    rhs: SemanticActionIdx,
     bindings: &Map<Var, Regex>,
+    right_ctx_dfas: &mut RightCtxDFAs<DfaStateIdx>,
+) {
+    let RegexCtx { re, right_ctx } = lhs;
+
+    let right_ctx = right_ctx
+        .as_ref()
+        .map(|right_ctx| right_ctx_dfas.new_right_ctx(bindings, right_ctx));
+
+    nfa.add_regex(bindings, &re, right_ctx, rhs);
+}
+
+fn compile_rule_set(
+    rules: Vec<RuleOrBinding>,
+    mut bindings: Map<Var, Regex>,
     right_ctx_dfas: &mut RightCtxDFAs<DfaStateIdx>,
 ) -> DFA<DfaStateIdx, SemanticActionIdx> {
     let mut nfa: NFA<SemanticActionIdx> = NFA::new();
 
-    for SingleRule { lhs, rhs } in rules {
-        let RegexCtx { re, right_ctx } = lhs;
-
-        let right_ctx = right_ctx
-            .as_ref()
-            .map(|right_ctx| right_ctx_dfas.new_right_ctx(bindings, right_ctx));
-
-        nfa.add_regex(bindings, &re, right_ctx, rhs);
+    for rule in rules {
+        match rule {
+            RuleOrBinding::Rule(SingleRule { lhs, rhs }) => {
+                compile_single_rule(&mut nfa, lhs, rhs, &bindings, right_ctx_dfas);
+            }
+            RuleOrBinding::Binding(Binding { var, re }) => match bindings.entry(var) {
+                Entry::Occupied(entry) => {
+                    panic!("Variable {:?} is defined multiple times", entry.key().0);
+                }
+                Entry::Vacant(entry) => {
+                    entry.insert(re);
+                }
+            },
+        }
     }
 
     nfa_to_dfa(&nfa)

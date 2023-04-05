@@ -223,11 +223,6 @@ pub fn reify(
         impl<'input, #(#user_state_lifetimes,)* I: Iterator<Item = char> + Clone, S>
                 #lexer_struct_name<'input, #(#user_state_lifetimes,)* I, S>
         {
-            fn switch_and_return<T>(&mut self, rule: #rule_name_enum_name, token: T) -> ::lexgen_util::SemanticActionResult<T> {
-                self.switch::<T>(rule);
-                ::lexgen_util::SemanticActionResult::Return(token)
-            }
-
             fn return_<T>(&self, token: T) -> ::lexgen_util::SemanticActionResult<T> {
                 ::lexgen_util::SemanticActionResult::Return(token)
             }
@@ -318,6 +313,10 @@ pub fn reify(
 }
 
 fn generate_switch(ctx: &CgCtx, enum_name: &syn::Ident) -> TokenStream {
+    if ctx.rule_states().is_empty() {
+        return quote!();
+    }
+
     let mut arms: Vec<TokenStream> = vec![];
 
     for (rule_name, state_idx) in ctx.rule_states().iter() {
@@ -337,6 +336,12 @@ fn generate_switch(ctx: &CgCtx, enum_name: &syn::Ident) -> TokenStream {
             self.0.__initial_state = self.0.__state;
             ::lexgen_util::SemanticActionResult::Continue
         }
+
+        fn switch_and_return<T>(&mut self, rule: #enum_name, token: T) -> ::lexgen_util::SemanticActionResult<T> {
+            self.switch::<T>(rule);
+            ::lexgen_util::SemanticActionResult::Return(token)
+        }
+
     )
 }
 
