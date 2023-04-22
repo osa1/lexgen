@@ -260,6 +260,18 @@ XID_Continue]:
   lexer.return_(<token>),`. Useful for matching keywords, punctuation
   (operators) and delimiters (parens, brackets).
 
+## End-of-input handling in rule sets
+
+The `Init` rule set terminates lexing successfully on end-of-input (i.e.
+`lexer.next()` returns `None`). Other rule sets fail on end-of-input (i.e.
+return `Some(Err(...))`). This is because generally the states other than the
+initial one are for complicated tokens (strings, raw strings, multi-line
+comments) that need to be terminated and handled, and end-of-input in those
+state usually means the token did not terminate properly.
+
+(To handle end-of-input in a rule set you can use `$` as described in section
+"Regex syntax" above.)
+
 ## Handle, rule, error, and action types
 
 The `lexer` macro generates a struct with the name specified by the user in the
