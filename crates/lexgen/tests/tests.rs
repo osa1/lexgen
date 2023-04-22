@@ -945,7 +945,7 @@ fn loc_tracking() {
                 lexer.return_(match_)
             },
 
-            _,
+            _ => |lexer| lexer.continue_(),
 
             $ => |lexer| {
                 let match_ = lexer.match_();
@@ -1202,7 +1202,7 @@ fn lifetime_named_input() {
                 lexer.state().vec.push(&match_[..match_.len()-1]);
                 lexer.switch_and_return(LexerRule::Init, ())
             },
-            _,
+            _ => |lexer| lexer.continue_(),
         }
     }
 
@@ -1243,7 +1243,7 @@ fn static_and_input() {
                 }
                 lexer.switch_and_return(LexerRule::Init, ())
             },
-            _,
+            _ => |lexer| lexer.continue_(),
         }
     }
 
