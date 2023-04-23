@@ -1,8 +1,8 @@
 # Unreleased
 
-- **Breaking change:** Rules without a right-hand side (e.g. `$$whitespace,`) now always reset the
-  current match. Previously such rules would only reset the current match in
-  `Init`.
+- **Breaking change:** Rules without a right-hand side (e.g. `$$whitespace,`)
+  now always reset the current match. Previously such rules would only reset
+  the current match in `Init`. (#12)
 
   To migrate, add a semantic action to your rule that just calls `continue_()`
   on the lexer. For example, if you have `$$whitespace,`, replace it with:
