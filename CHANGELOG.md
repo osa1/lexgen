@@ -1,6 +1,51 @@
+# 2023/04/23: 0.14.0
+
+- **Breaking change:** Rules without a right-hand side (e.g. `$$whitespace,`)
+  now always reset the current match. Previously such rules would only reset
+  the current match in `Init`. (#12)
+
+  To migrate, add a semantic action to your rule that just calls `continue_()`
+  on the lexer. For example, if you have `$$whitespace,`, replace it with:
+
+  ```rust
+  $$whitespace => |lexer| lexer.continue_(),
+  ```
+
+- `clippy::manual_is_ascii_check` violations are now ignored in generated code.
+
+# 2023/04/10: 0.13.0
+
+- Fix more `manual_range_contains` lints in generated code.
+
+- `let` bindings can now appear inside `rule`s. Previously `let`s were only
+  allowed at the top-level. (#28)
+
+- You can now add `#[derive(Clone)]` before the lexer type name to implement
+  `Clone` for the lexer type. This can be used to implement backtracking
+  parsers. Example:
+  ```rust
+  lexer! {
+      #[derive(Clone)]
+      pub Lexer -> Token;
+      // The struct `Lexer` will implement `Clone`
+
+      ...
+  }
+  ```
+
+# 2022/08/12: 0.12.0
+
+- Fix `double_comparison`, `manual_range_contains` lints in generated code.
+  (0ecb0b1)
+
+- Lexer constructors `new_with_state` and `new_from_iter_with_state` no longer
+  require user state to implement `Default`. (#54)
+
+- User state can now have lifetime parameters other than `'input`. (#53)
+
 # 2022/05/15: 0.11.0
 
-- Reset lexer state on failure (#48)
+- Lexer state is now reset on failure. (#48)
 
 # 2022/02/20: 0.10.0
 

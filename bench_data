@@ -1,4 +1,4 @@
-pub Lexer(LexerState) -> Token;
+pub Lexer(LexerState) -> Token<'input>;
 
 type Error = CustomError;
 
@@ -10,15 +10,10 @@ let oct_digit = ['0'-'7'];
 let dec_digit = ['0'-'9'];
 let hex_digit = ['0'-'9' 'a'-'f' 'A'-'F'];
 let bin_digit = '0' | '1';
-let digit = $oct_digit | $dec_digit | $hex_digit | $bin_digit;
 let int_suffix = ('u' | 'i') '8' | ('u' | 'i') "16" | ('u' | 'i') "32" |
         ('u' | 'i') "64" | ('u' | 'i') "128" | ('u' | 'i') "size";
 
 let id = $$XID_Start $$XID_Continue*;
-
-let dec_literal = $dec_digit ($dec_digit | '_')*;
-let float_exponent = ('e' | 'E') ('+' | '-')? ($dec_digit | '_')* $dec_digit ($dec_digit | '_')*;
-let float_suffix = "f32" | "f64";
 
 let ascii_for_string = ($$ascii # ['"' '\\' '\r']);
 let byte_escape = ("\\x" $hex_digit $hex_digit) | "\\n" | "\\r" | "\\t" | "\\\\" | "\\0" | "\\\"" | "\\'";
@@ -38,15 +33,12 @@ rule Init {
     "false" = Token::Kw(Kw::False),
     "fn" = Token::Kw(Kw::Fn),
     "for" = Token::Kw(Kw::For),
-    "if" = Token::Kw(Kw::If),
     "impl" = Token::Kw(Kw::Impl),
     "in" = Token::Kw(Kw::In),
     "let" = Token::Kw(Kw::Let),
     "loop" = Token::Kw(Kw::Loop),
     "match" = Token::Kw(Kw::Match),
     "mod" = Token::Kw(Kw::Mod),
-    "move" = Token::Kw(Kw::Move),
-    "mut" = Token::Kw(Kw::Mut),
     "pub" = Token::Kw(Kw::Pub),
     "ref" = Token::Kw(Kw::Ref),
     "return" = Token::Kw(Kw::Return),
@@ -81,11 +73,20 @@ rule Init {
     "virtual" = Token::ReservedKw(ReservedKw::Virtual),
     "yield" = Token::ReservedKw(ReservedKw::Yield),
 
-    $id = Token::Id,
+    $id => |lexer| {
+        let id = lexer.match_();
+        lexer.return_(Token::Id(id))
+    },
 
-    '_' $$XID_Continue+ = Token::Id,
+    '_' $$XID_Continue+ => |lexer| {
+        let id = lexer.match_();
+        lexer.return_(Token::Id(id))
+    },
 
-    "'_" | "'" $id = Token::LifetimeOrLabel,
+    "'_" | "'" $id => |lexer| {
+        let match_ = lexer.match_();
+        lexer.return_(Token::LifetimeOrLabel(match_))
+    },
 
     $whitespace+ = Token::Whitespace,
 
@@ -100,6 +101,8 @@ rule Init {
     "|" = Token::Punc(Punc::Or),
     "&&" = Token::Punc(Punc::AndAnd),
     "||" = Token::Punc(Punc::OrOr),
+    "<<" = Token::Punc(Punc::Shl),
+    ">>" = Token::Punc(Punc::Shr),
     "+=" = Token::Punc(Punc::PlusEq),
     "-=" = Token::Punc(Punc::MinusEq),
     "*=" = Token::Punc(Punc::StarEq),
@@ -142,39 +145,38 @@ rule Init {
     "}" = Token::Delim(Delim::RBrace),
 
     "/*" => |lexer| {
-        lexer.state().comment_or_doc = CommentOrDoc::Comment;
-        lexer.switch(LexerRule::MultilineCommentOrDoc)
+        lexer.state().block_comment_level = 1;
+        lexer.switch(LexerRule::MultilineComment)
     },
-
-    "/**" | "/*!" => |lexer| {
-        lexer.state().comment_or_doc = CommentOrDoc::Doc;
-        lexer.switch(LexerRule::MultilineCommentOrDoc)
-    },
-
-    "//" => |lexer| {
-        lexer.state().comment_or_doc = CommentOrDoc::Comment;
-        lexer.switch(LexerRule::SinglelineCommentOrDoc)
-    },
-
-    "///" | "//!" => |lexer| {
-        lexer.state().comment_or_doc = CommentOrDoc::Doc;
-        lexer.switch(LexerRule::SinglelineCommentOrDoc)
-    },
+    "//" => |lexer| lexer.switch(LexerRule::SinglelineComment),
 
     //
     // Character literals
     //
 
     // TODO: This allows newline, tab etc. in single quotes
-    "'" _ "'" = Token::Lit(Lit::Char),
+    "'" _ "'" => |lexer| {
+        let match_ = lexer.match_();
+        lexer.return_(Token::Lit(Lit::Char(match_)))
+    },
 
     // NB: Escaped double quote is valid!
-    "'\\" ('n' | 'r' | 't' | '\\' | '0' | '\'' | '"') "'" =
-        Token::Lit(Lit::Char),
+    "'\\" ('n' | 'r' | 't' | '\\' | '0' | '\'' | '"') "'" => |lexer| {
+        let match_ = lexer.match_();
+        lexer.return_(Token::Lit(Lit::Char(match_)))
+    },
 
-    "'\\x" $oct_digit $hex_digit "'" = Token::Lit(Lit::Char),
+    "'\\x" $oct_digit $hex_digit "'" => |lexer| {
+        // TODO: Check that the number is in range
+        let match_ = lexer.match_();
+        lexer.return_(Token::Lit(Lit::Char(match_)))
+    },
 
-    "'\\u{" $hex_digit+ "}'" = Token::Lit(Lit::Char),
+    "'\\u{" $hex_digit+ "}'" => |lexer| {
+        // TODO: Check that there's at most 6 digits
+        let match_ = lexer.match_();
+        lexer.return_(Token::Lit(Lit::Char(match_)))
+    },
 
     //
     // End of character literals
@@ -185,10 +187,15 @@ rule Init {
     //
 
     // TODO: Exclude newline, tab, ... without '\\'
-    "b'" ($$ascii | $byte_escape) "'" = Token::Lit(Lit::Byte),
+    "b'" ($$ascii | $byte_escape) "'" => |lexer| {
+        let match_ = lexer.match_();
+        lexer.return_(Token::Lit(Lit::Byte(match_)))
+    },
 
-    "b\"" ($ascii_for_string | $byte_escape | $string_continue | "\r\n")* '"' =
-        Token::Lit(Lit::ByteString),
+    "b\"" ($ascii_for_string | $byte_escape | $string_continue | "\r\n")* '"' => |lexer| {
+        let match_ = lexer.match_();
+        lexer.return_(Token::Lit(Lit::ByteString(match_)))
+    },
 
     //
     // End of byte literals
@@ -235,14 +242,29 @@ rule Init {
     // float rather than integer with a suffix.
     //
 
-    $dec_literal '.' > ((_ # '.') | $) = Token::Lit(Lit::Float),
+    let dec_literal = $dec_digit ($dec_digit | '_')*;
+    let float_exponent = ('e' | 'E') ('+' | '-')? ($dec_digit | '_')* $dec_digit ($dec_digit | '_')*;
+    let float_suffix = "f32" | "f64";
 
-    $dec_literal $float_exponent = Token::Lit(Lit::Float),
+    $dec_literal '.' > ((_ # '.') | $) => |lexer| {
+        let match_ = lexer.match_();
+        lexer.return_(Token::Lit(Lit::Float(match_)))
+    },
 
-    $dec_literal '.' $dec_literal $float_exponent? = Token::Lit(Lit::Float),
+    $dec_literal $float_exponent => |lexer| {
+        let match_ = lexer.match_();
+        lexer.return_(Token::Lit(Lit::Float(match_)))
+    },
 
-    $dec_literal ('.' $dec_literal)? $float_exponent? $float_suffix =
-        Token::Lit(Lit::Float),
+    $dec_literal '.' $dec_literal $float_exponent? => |lexer| {
+        let match_ = lexer.match_();
+        lexer.return_(Token::Lit(Lit::Float(match_)))
+    },
+
+    $dec_literal ('.' $dec_literal)? $float_exponent? $float_suffix => |lexer| {
+        let match_ = lexer.match_();
+        lexer.return_(Token::Lit(Lit::Float(match_)))
+    },
 
     //
     // End of float literals
@@ -252,8 +274,12 @@ rule Init {
     // Integer literals
     //
 
-    ("0b" | "0o" | "0x")? ($digit | '_')* $id? =
-        Token::Lit(Lit::Int),
+    let digit = $oct_digit | $dec_digit | $hex_digit | $bin_digit;
+
+    ("0b" | "0o" | "0x")? ($digit | '_')* $id? =? |lexer| {
+        let match_ = lexer.match_();
+        lexer.return_(check_int(match_))
+    },
 
     //
     // End of integer literals
@@ -261,38 +287,43 @@ rule Init {
 }
 
 // https://github.com/osa1/lexgen/issues/29#issuecomment-977550895
-rule SinglelineCommentOrDoc {
+rule SinglelineComment {
     (_ # '\n')* > ('\n' | $) => |lexer| {
-        let token = match lexer.state().comment_or_doc {
-            CommentOrDoc::Comment => Token::Comment,
-            CommentOrDoc::Doc => Token::Documentation,
-        };
-        lexer.switch_and_return(LexerRule::Init, token)
+        let comment = lexer.match_();
+        lexer.switch_and_return(LexerRule::Init, Token::Comment(comment))
     },
 }
 
-rule MultilineCommentOrDoc {
-    "*/" => |lexer| {
-        let token = match lexer.state().comment_or_doc {
-            CommentOrDoc::Comment => Token::Comment,
-            CommentOrDoc::Doc => Token::Documentation,
-        };
-        lexer.switch_and_return(LexerRule::Init, token)
+rule MultilineComment {
+    "/*" => |lexer| {
+        lexer.state().block_comment_level += 1;
+        lexer.continue_()
     },
 
-    _,
+    "*/" => |lexer| {
+        lexer.state().block_comment_level -= 1;
+        if lexer.state().block_comment_level == 0 {
+            let comment = lexer.match_();
+            lexer.switch_and_return(LexerRule::Init, Token::Comment(comment))
+        } else {
+            lexer.continue_()
+        }
+    },
+
+    _ => |lexer| lexer.continue_(),
 }
 
 rule String {
     '"' => |lexer| {
-        lexer.switch_and_return(LexerRule::Init, Token::Lit(Lit::String))
+        let match_ = lexer.match_();
+        lexer.switch_and_return(LexerRule::Init, Token::Lit(Lit::String(match_)))
     },
 
     '\\' => |lexer| lexer.switch(LexerRule::StringEscape),
 
     '\r' => |lexer| lexer.switch(LexerRule::StringCR),
 
-    _,
+    _ => |lexer| lexer.continue_(),
 }
 
 rule StringEscape {
@@ -332,21 +363,23 @@ rule RawLitStart {
 
     // TODO: Check that we saw only one `#`
     $$XID_Start $$XID_Continue* => |lexer| {
-        lexer.switch_and_return(LexerRule::Init, Token::Id)
+        let match_ = lexer.match_();
+        lexer.switch_and_return(LexerRule::Init, Token::Id(match_))
     },
 }
 
 rule RawString {
     '"' => |lexer| {
         if lexer.state().raw_delimiter_size == 0 {
-            lexer.switch_and_return(LexerRule::Init, Token::Lit(Lit::RawString))
+            let match_ = lexer.match_();
+            lexer.switch_and_return(LexerRule::Init, Token::Lit(Lit::RawString(match_)))
         } else {
             lexer.state().closing_delimiters_seen = 0;
             lexer.switch(LexerRule::RawStringMatchClosingHashes)
         }
     },
 
-    _,
+    _ => |lexer| lexer.continue_(),
 }
 
 rule RawStringMatchClosingHashes {
@@ -354,7 +387,8 @@ rule RawStringMatchClosingHashes {
         let mut state = lexer.state();
         state.closing_delimiters_seen += 1;
         if state.closing_delimiters_seen == state.raw_delimiter_size {
-            lexer.switch_and_return(LexerRule::Init, Token::Lit(Lit::RawString))
+            let match_ = lexer.match_();
+            lexer.switch_and_return(LexerRule::Init, Token::Lit(Lit::RawString(match_)))
         } else {
             lexer.continue_()
         }
@@ -384,14 +418,15 @@ rule RawByteStringLitStart {
 rule RawByteStringLit {
     '"' => |lexer| {
         if lexer.state().raw_delimiter_size == 0 {
-            lexer.switch_and_return(LexerRule::Init, Token::Lit(Lit::RawByteString))
+            let match_ = lexer.match_();
+            lexer.switch_and_return(LexerRule::Init, Token::Lit(Lit::RawByteString(match_)))
         } else {
             lexer.state().closing_delimiters_seen = 0;
             lexer.switch(LexerRule::RawByteStringMatchClosingHashes)
         }
     },
 
-    $$ascii,
+    $$ascii => |lexer| lexer.continue_(),
 },
 
 rule RawByteStringMatchClosingHashes {
@@ -399,7 +434,8 @@ rule RawByteStringMatchClosingHashes {
         let mut state = lexer.state();
         state.closing_delimiters_seen += 1;
         if state.closing_delimiters_seen == state.raw_delimiter_size {
-            lexer.switch_and_return(LexerRule::Init, Token::Lit(Lit::RawByteString))
+            let match_ = lexer.match_();
+            lexer.switch_and_return(LexerRule::Init, Token::Lit(Lit::RawByteString(match_)))
         } else {
             lexer.continue_()
         }

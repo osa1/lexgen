@@ -64,6 +64,7 @@ See also:
 - [A full Lua 5.1 lexer][2]
 - [An example that uses lexgen with LALRPOP][3]
 - [A lexer for a simpler version of OCaml][4]
+- [A Rust lexer][5]
 
 ## Motivation
 
@@ -82,7 +83,7 @@ lexgen doesn't require a build step. Add same versions of `lexgen` and
 
 ## Lexer syntax
 
-lexgen lexers start with type of the generated lexer struct, optional user
+lexgen lexers start with the name of the generated lexer struct, optional user
 state part, and the token type (type of values returned by semantic actions).
 Example:
 
@@ -93,19 +94,11 @@ lexer! {
 }
 ```
 
-Here the lexer struct is named `Lexer`. User state type is `LexerState` (this
-type should be defined by the user). The token type is `Token`.
+Here the generated lexer type will be named `Lexer`. User state type is
+`LexerState` (this type should be defined by the user). The token type is
+`Token`.
 
-Next is let bindings for regular expressions. These are optional. The syntax is
-`let <id> = <regex>;` where `<id>` is a Rust identifier and regex is as
-described below.
-
-```rust
-let init = ['a'-'z'];
-let subseq = $init | ['A'-'Z' '0'-'9' '-' '_'];
-```
-
-Finally we define the lexer rules:
+After the lexer name and user state and token types we define the rules:
 
 ```rust
 rule Init {
@@ -122,9 +115,19 @@ be named `Init`.
 
 In the body of a `rule` block we define the rules for that lexer state. The
 syntax for a rule is `<regex> => <semantic action>,`. Regex syntax is described
-below. Semantic action is any Rust code with type `fn(LexerHandle) ->
+below. A semantic action is any Rust code with the type `fn(LexerHandle) ->
 LexerAction` where `LexerHandle` and `LexerAction` are generated names derived
-from the lexer name (`Lexer`). More on these types below.
+from the lexer name (`Lexer` in our example). More on these types below.
+
+Regular expressions can be named with `let <name> = <regex>;` syntax. Example:
+
+```rust
+let init = ['a'-'z'];
+let subseq = $init | ['A'-'Z' '0'-'9' '-' '_'];
+
+// Named regexes can be used with the `$` prefix
+$init $subseq* => |lexer| { ... }
+```
 
 You can omit the `rule Init { ... }` part and have all of your rules at the top
 level if you don't need rule sets.
@@ -134,10 +137,10 @@ In summary:
 - First line is in form `<lexer name>(<user state type>) -> <token type name>`.
   The `(<user state type>)` part can be omitted for stateless lexers.
 
-- Next we have let bindings for regexes. This part is optional.
-
 - Next is the rule sets. There should be at least one rule set with the name
   `Init`, which is the name of the initial state.
+
+- `let` bindings can be added at the top-level or in `rule`s.
 
 ## Regex syntax
 
@@ -251,12 +254,24 @@ XID_Continue]:
   When a rule of this kind returns an error, the error is returned to the
   caller of the lexer's `next` method.
 
-- `<regex>,`: Syntactic sugar for `<regex> => |lexer| lexer.continue_(),`.
-  Useful for skipping characters (e.g. whitespace).
+- `<regex>,`: Syntactic sugar for `<regex> => |lexer| { lexer.reset_match();
+  lexer.continue_() },`. Useful for skipping characters (e.g. whitespace).
 
 - `<regex> = <token>,`: Syntactic sugar for `<regex> => |lexer|
   lexer.return_(<token>),`. Useful for matching keywords, punctuation
   (operators) and delimiters (parens, brackets).
+
+## End-of-input handling in rule sets
+
+The `Init` rule set terminates lexing successfully on end-of-input (i.e.
+`lexer.next()` returns `None`). Other rule sets fail on end-of-input (i.e.
+return `Some(Err(...))`). This is because generally the states other than the
+initial one are for complicated tokens (strings, raw strings, multi-line
+comments) that need to be terminated and handled, and end-of-input in those
+states usually means the token did not terminate properly.
+
+(To handle end-of-input in a rule set you can use `$` as described in section
+"Regex syntax" above.)
 
 ## Handle, rule, error, and action types
 
@@ -322,26 +337,28 @@ Here's an example lexer that counts number of `=`s appear between two `[`s:
 
 ```rust
 lexer! {
+    // `usize` in parenthesis is the user state type, `usize` after the arrow
+    // is the token type
     Lexer(usize) -> usize;
 
     rule Init {
-        ' ',                                            // line 5
+        $$ascii_whitespace,                             // line 7
 
         '[' => |lexer| {
-            *lexer.state() = 0;                         // line 8
-            lexer.switch(LexerRule::Count)              // line 9
+            *lexer.state() = 0;                         // line 10
+            lexer.switch(LexerRule::Count)              // line 11
         },
     }
 
     rule Count {
         '=' => |lexer| {
-            *lexer.state() += 1;                        // line 15
-            lexer.continue_()                           // line 16
+            *lexer.state() += 1;                        // line 17
+            lexer.continue_()                           // line 18
         },
 
         '[' => |lexer| {
             let n = *lexer.state();
-            lexer.switch_and_return(LexerRule::Init, n) // line 21
+            lexer.switch_and_return(LexerRule::Init, n) // line 23
         },
     }
 }
@@ -374,13 +391,14 @@ assert_eq!(
 assert_eq!(lexer.next(), None);
 ```
 
-Initially (the `Init` rule set) we skip spaces (line 5). When we see a `[` we
-initialize the user state (line 8) and switch to the `Count` state (line 9). In
-`Count`, each `=` increments the user state by one (line 15) and skips the
-match (line 16). A `[` in the `Count` state returns the current number and
-switches to the `Init` state (line 21).
+Initially (the `Init` rule set) we skip spaces (line 7). When we see a `[` we
+initialize the user state (line 10) and switch to the `Count` state (line 11).
+In `Count`, each `=` increments the user state by one (line 17) and skips the
+match (line 18). A `[` in `Count` state returns the current number and switches
+to the `Init` state (line 23).
 
 [1]: https://github.com/osa1/lexgen/blob/main/crates/lexgen/tests/tests.rs
 [2]: https://github.com/osa1/lexgen/blob/main/crates/lexgen/tests/lua_5_1.rs
 [3]: https://github.com/osa1/lexgen/tree/main/crates/lexgen_lalrpop_example
 [4]: https://github.com/osa1/mincaml/blob/master/src/lexer.rs
+[5]: https://github.com/osa1/lexgen_rust/blob/main/crates/lexgen_rust/src/lib.rs

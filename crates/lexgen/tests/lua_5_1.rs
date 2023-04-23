@@ -96,33 +96,17 @@ struct LexerState {
     in_comment: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 enum Quote {
+    #[default] // arbitrary
     Single,
     Double,
-}
-
-impl Default for Quote {
-    fn default() -> Self {
-        // arbitrary
-        Quote::Single
-    }
 }
 
 lexer! {
     Lexer(LexerState) -> Token<'input>;
 
     let whitespace = [' ' '\t' '\n'] | "\r\n";
-
-    // > Names (also called identifiers) in Lua can be any string of letters, digits, and
-    // > underscores, not beginning with a digit. This coincides with the definition of names in
-    // > most languages. (The definition of letter depends on the current locale: any character
-    // > considered alphabetic by the current locale can be used in an identifier.)
-    let var_init = ['a'-'z' 'A'-'Z' '_'];
-    let var_subseq = $var_init | ['0'-'9'];
-
-    let digit = ['0'-'9'];
-    let hex_digit = ['a'-'f' 'A'-'F' '0'-'9'];
 
     rule Init {
         $whitespace,
@@ -201,10 +185,20 @@ lexer! {
             lexer.switch(LexerRule::EnterComment)
         },
 
+        // > Names (also called identifiers) in Lua can be any string of letters, digits, and
+        // > underscores, not beginning with a digit. This coincides with the definition of names
+        // > in most languages. (The definition of letter depends on the current locale: any
+        // > character considered alphabetic by the current locale can be used in an identifier.)
+        let var_init = ['a'-'z' 'A'-'Z' '_'];
+        let var_subseq = $var_init | ['0'-'9'];
+
         $var_init $var_subseq* => |lexer| {
             let match_ = lexer.match_();
             lexer.return_(Token::Var(match_))
         },
+
+        let digit = ['0'-'9'];
+        let hex_digit = ['a'-'f' 'A'-'F' '0'-'9'];
 
         $digit+ ('.'? $digit+ (('e' | 'E') ('+'|'-')? $digit+)?)? => |lexer| {
             let match_ = lexer.match_();
@@ -368,6 +362,7 @@ lexer! {
     }
 }
 
+#[allow(dead_code)]
 fn ignore_pos<A, E, L>(ret: Option<Result<(L, A, L), E>>) -> Option<Result<A, E>> {
     ret.map(|res| res.map(|(_, a, _)| a))
 }
@@ -543,9 +538,9 @@ fn lex_lua_windows_line_ending() {
 #[test]
 fn lex_lua_files() {
     let str = std::fs::read_to_string("tests/test_data").unwrap();
-    let mut lexer = Lexer::new(&str);
+    let lexer = Lexer::new(&str);
     let mut i = 0;
-    while let Some(tok) = lexer.next() {
+    for tok in lexer {
         assert!(tok.is_ok());
         i += 1;
     }

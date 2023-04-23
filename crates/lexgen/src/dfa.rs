@@ -32,16 +32,17 @@ impl StateIdx {
 
 #[derive(Debug)]
 pub struct State<T, A> {
-    // Is this the initial state of a rule set? This is important as failure transitions in initial
-    // states consume the current character, but failure transitions in other states don't. (#12)
+    /// Whether the state is the initial state of a rule set. This is used when inlining states
+    /// with single predecessors. Initial states cannot be inlined as there may be references to
+    /// these states in semantic actions.
     initial: bool,
     char_transitions: Map<char, T>,
     range_transitions: RangeMap<T>,
     any_transition: Option<T>,
     end_of_input_transition: Option<T>,
     accepting: Vec<AcceptingState<A>>,
-    // Predecessors of the state, used to inline code for a state with one predecessor in the
-    // predecessor's code
+    /// Predecessors of the state, used to inline code for a state with one predecessor in the
+    /// predecessor's code.
     predecessors: Set<StateIdx>,
 }
 

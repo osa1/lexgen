@@ -17,6 +17,8 @@ use std::convert::TryFrom;
 
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
+use syn::fold::Fold;
+use syn::visit::Visit;
 
 // Max. size for guards in ranges. When a case have more ranges than this we generate a binary
 // search table.
@@ -31,6 +33,40 @@ use quote::{quote, ToTokens};
 // have a slightly larger number here.
 const MAX_GUARD_SIZE: usize = 9;
 
+/// A [`Visit`] implementation to collect user state lifetimes.
+///
+/// Lifetime `'input` is ignored as `'input` is added to the generated lexer struct regardless of
+/// whether the user state uses it or not.
+///
+/// Lifetime `'static` is ignored as `'static` cannot be added as a lifetime parameter.
+struct LifetimeVisitor<'a> {
+    lifetimes: &'a mut Vec<syn::Lifetime>,
+}
+
+impl<'ast, 'a> Visit<'ast> for LifetimeVisitor<'a> {
+    fn visit_lifetime(&mut self, node: &'ast syn::Lifetime) {
+        if node.ident != "static" && node.ident != "input" {
+            self.lifetimes.push(node.clone())
+        }
+    }
+}
+
+/// A [`Fold`] implementation for replacing `'input` lifetimes in a [`syn`] type with `'static`.
+///
+/// This is used to replace `'input`s in user state lifetimes with `'static`s in `impl` blocks for
+/// initializing the lexer without an input string.
+struct SubstLifetimeFolder;
+
+impl Fold for SubstLifetimeFolder {
+    fn fold_lifetime(&mut self, node: syn::Lifetime) -> syn::Lifetime {
+        if node.ident == "input" {
+            syn::Lifetime::new("'static", node.span())
+        } else {
+            node
+        }
+    }
+}
+
 pub fn reify(
     dfa: DFA<Trans<SemanticActionIdx>, SemanticActionIdx>,
     right_ctx_dfas: &RightCtxDFAs<StateIdx>,
@@ -41,6 +77,7 @@ pub fn reify(
     lexer_name: syn::Ident,
     token_type: syn::Type,
     public: bool,
+    derives: Option<TokenStream>,
 ) -> TokenStream {
     let rule_name_enum_name =
         syn::Ident::new(&(lexer_name.to_string() + "Rule"), lexer_name.span());
@@ -61,9 +98,20 @@ pub fn reify(
         rule_states,
     );
 
-    let user_state_type = user_state_type
-        .map(|ty| ty.into_token_stream())
-        .unwrap_or(quote!(()));
+    let (user_state_lifetimes, user_state_type, user_state_type_static) = match user_state_type {
+        None => (Vec::new(), quote!(()), syn::Type::Verbatim(quote!(()))),
+        Some(ty) => {
+            let mut lifetimes = Vec::new();
+            {
+                let mut visitor = LifetimeVisitor {
+                    lifetimes: &mut lifetimes,
+                };
+                visitor.visit_type(&ty);
+            }
+            let subst = SubstLifetimeFolder.fold_type(ty.clone());
+            (lifetimes, ty.into_token_stream(), subst)
+        }
+    };
 
     let match_arms = generate_state_arms(&mut ctx, dfa);
 
@@ -85,7 +133,8 @@ pub fn reify(
         }
     };
 
-    let semantic_action_fns = generate_semantic_action_fns(&ctx, &semantic_action_fn_ret_ty);
+    let semantic_action_fns =
+        generate_semantic_action_fns(&ctx, &user_state_lifetimes, &semantic_action_fn_ret_ty);
 
     let right_ctx_fns = generate_right_ctx_fns(&mut ctx, right_ctx_dfas);
 
@@ -130,7 +179,23 @@ pub fn reify(
         .collect();
 
     let token_type = ctx.token_type();
+
+    // Name of the type synonym:
+    // type #lexer_name<'input, I> = #lexer_name_<'input, I, #user_state_type>
     let lexer_name = ctx.lexer_name();
+
+    // Name of the lexer struct:
+    // struct #lexer_struct_name<'input, I: Iterator<Item = char> + Clone, S> { ... }
+    //
+    // This struct with a state parameter is needed to be able to have `impl` blocks that require
+    // `S: Default` in the methods without requiring the user state to implement `Default` when
+    // those methods are not used.
+    let lexer_struct_name = syn::Ident::new(&(lexer_name.to_string() + "_"), lexer_name.span());
+
+    let derive_attr = match derives {
+        None => quote!(),
+        Some(derives) => quote!(#[derive #derives]),
+    };
 
     quote!(
         // An enum for the rule sets in the DFA. `Init` is the initial, unnamed rule set.
@@ -139,24 +204,25 @@ pub fn reify(
             #(#rule_name_idents,)*
         }
 
-        #visibility struct #lexer_name<'input, I: Iterator<Item = char> + Clone>(
+        #derive_attr
+        #visibility struct #lexer_struct_name<'input, #(#user_state_lifetimes,)* I: Iterator<Item = char> + Clone, S>(
             ::lexgen_util::Lexer<
                 'input,
                 I,
                 #token_type,
-                #user_state_type,
+                S,
                 #error_type,
-                #lexer_name<'input, I>
+                #lexer_name<'input, #(#user_state_lifetimes,)* I>
             >
         );
 
-        // Methods below for using in semantic actions
-        impl<'input, I: Iterator<Item = char> + Clone> #lexer_name<'input, I> {
-            fn switch_and_return<T>(&mut self, rule: #rule_name_enum_name, token: T) -> ::lexgen_util::SemanticActionResult<T> {
-                self.switch::<T>(rule);
-                ::lexgen_util::SemanticActionResult::Return(token)
-            }
+        #visibility type #lexer_name<'input, #(#user_state_lifetimes,)* I> =
+            #lexer_struct_name<'input, #(#user_state_lifetimes,)* I, #user_state_type>;
 
+        // Methods below for using in semantic actions
+        impl<'input, #(#user_state_lifetimes,)* I: Iterator<Item = char> + Clone, S>
+                #lexer_struct_name<'input, #(#user_state_lifetimes,)* I, S>
+        {
             fn return_<T>(&self, token: T) -> ::lexgen_util::SemanticActionResult<T> {
                 ::lexgen_util::SemanticActionResult::Return(token)
             }
@@ -167,7 +233,7 @@ pub fn reify(
                 ::lexgen_util::SemanticActionResult::Continue
             }
 
-            fn state(&mut self) -> &mut #user_state_type {
+            fn state(&mut self) -> &mut S {
                 self.0.state()
             }
 
@@ -188,23 +254,35 @@ pub fn reify(
             }
         }
 
-        impl<'input> #lexer_name<'input, ::std::str::Chars<'input>> {
+        impl<'input, #(#user_state_lifetimes,)* S: ::std::default::Default>
+                #lexer_struct_name<'input, #(#user_state_lifetimes,)* ::std::str::Chars<'input>, S>
+        {
             #visibility fn new(input: &'input str) -> Self {
-                #lexer_name(::lexgen_util::Lexer::new(input))
-            }
-
-            #visibility fn new_with_state(input: &'input str, user_state: #user_state_type) -> Self {
-                #lexer_name(::lexgen_util::Lexer::new_with_state(input, user_state))
+                #lexer_struct_name(::lexgen_util::Lexer::new(input))
             }
         }
 
-        impl<I: Iterator<Item = char> + Clone> #lexer_name<'static, I> {
-            #visibility fn new_from_iter(iter: I) -> Self {
-                #lexer_name(::lexgen_util::Lexer::new_from_iter(iter))
+        impl<'input #(,#user_state_lifetimes)*>
+                #lexer_struct_name<'input, #(#user_state_lifetimes,)* ::std::str::Chars<'input>, #user_state_type>
+        {
+            #visibility fn new_with_state(input: &'input str, user_state: #user_state_type) -> Self {
+                #lexer_struct_name(::lexgen_util::Lexer::new_with_state(input, user_state))
             }
+        }
 
-            #visibility fn new_from_iter_with_state(iter: I, user_state: #user_state_type) -> Self {
-                #lexer_name(::lexgen_util::Lexer::new_from_iter_with_state(iter, user_state))
+        impl<#(#user_state_lifetimes,)* I: Iterator<Item = char> + Clone, S: ::std::default::Default>
+                #lexer_struct_name<'static, #(#user_state_lifetimes,)* I, S>
+        {
+            #visibility fn new_from_iter(iter: I) -> Self {
+                #lexer_struct_name(::lexgen_util::Lexer::new_from_iter(iter))
+            }
+        }
+
+        impl<#(#user_state_lifetimes,)* I: Iterator<Item = char> + Clone>
+                #lexer_struct_name<'static, #(#user_state_lifetimes,)* I, #user_state_type_static>
+        {
+            #visibility fn new_from_iter_with_state(iter: I, user_state: #user_state_type_static) -> Self {
+                #lexer_struct_name(::lexgen_util::Lexer::new_from_iter_with_state(iter, user_state))
             }
         }
 
@@ -213,9 +291,12 @@ pub fn reify(
         #semantic_action_fns
         #(#right_ctx_fns)*
 
-        impl<'input, I: Iterator<Item = char> + Clone> Iterator for #lexer_name<'input, I> {
+        impl<'input, #(#user_state_lifetimes,)* I: Iterator<Item = char> + Clone> Iterator for
+                #lexer_struct_name<'input, #(#user_state_lifetimes,)* I, #user_state_type>
+        {
             type Item = Result<(::lexgen_util::Loc, #token_type, ::lexgen_util::Loc), ::lexgen_util::LexerError<#error_type>>;
 
+            #[allow(clippy::manual_is_ascii_check)]
             fn next(&mut self) -> Option<Self::Item> {
                 loop {
                     if self.0.__done {
@@ -233,6 +314,10 @@ pub fn reify(
 }
 
 fn generate_switch(ctx: &CgCtx, enum_name: &syn::Ident) -> TokenStream {
+    if ctx.rule_states().is_empty() {
+        return quote!();
+    }
+
     let mut arms: Vec<TokenStream> = vec![];
 
     for (rule_name, state_idx) in ctx.rule_states().iter() {
@@ -252,6 +337,12 @@ fn generate_switch(ctx: &CgCtx, enum_name: &syn::Ident) -> TokenStream {
             self.0.__initial_state = self.0.__state;
             ::lexgen_util::SemanticActionResult::Continue
         }
+
+        fn switch_and_return<T>(&mut self, rule: #enum_name, token: T) -> ::lexgen_util::SemanticActionResult<T> {
+            self.switch::<T>(rule);
+            ::lexgen_util::SemanticActionResult::Return(token)
+        }
+
     )
 }
 
@@ -271,7 +362,7 @@ fn generate_state_arms(
             continue;
         }
 
-        let state_code: TokenStream = generate_state_arm(ctx, state_idx, state, &states);
+        let state_code: TokenStream = generate_state(ctx, state_idx, state, &states);
 
         let StateIdx(state_idx) = ctx.renumber_state(StateIdx(state_idx));
         let state_idx_pat = if state_idx == n_states - ctx.n_inlined_states() - 1 {
@@ -288,15 +379,17 @@ fn generate_state_arms(
     match_arms
 }
 
-// NB. Does not generate braces around the code
-fn generate_state_arm(
+/// Generate code for a state.
+///
+/// Note: Does not generate braces around the code.
+fn generate_state(
     ctx: &mut CgCtx,
     state_idx: usize,
     state: &State<Trans<SemanticActionIdx>, SemanticActionIdx>,
     states: &[State<Trans<SemanticActionIdx>, SemanticActionIdx>],
 ) -> TokenStream {
     let State {
-        initial,
+        initial: _,
         char_transitions,
         range_transitions,
         any_transition,
@@ -308,7 +401,10 @@ fn generate_state_arm(
     let fail = || -> TokenStream {
         let action = generate_semantic_action_call(&quote!(semantic_action));
         quote!(match self.0.backtrack() {
-            Err(err) => return Some(Err(err)),
+            Err(err) => {
+                self.reset_match();
+                return Some(Err(err))
+            }
             Ok(semantic_action) => #action,
         })
     };
@@ -354,25 +450,9 @@ fn generate_state_arm(
         #end_of_input_action
     );
 
-    if state_idx == 0 {
-        assert!(initial);
-
-        // See #12 for the special case in state 0 (rule Init)
-        quote!(
-            self.reset_match();
-
-            match self.0.next() {
-                None => {
-                    #end_of_input_action
-                }
-                Some(char) => {
-                    match char {
-                        #(#state_char_arms,)*
-                    }
-                }
-            }
-        )
-    } else if !accepting.is_empty() {
+    let set_accepting_state = if accepting.is_empty() {
+        quote!()
+    } else {
         // Accepting state
         let mut rhss: Vec<(TokenStream, TokenStream)> = Vec::with_capacity(accepting.len());
         let mut default = quote!();
@@ -401,23 +481,13 @@ fn generate_state_arm(
             set_accepting_state = quote!(if #cond { #rhs } else { #set_accepting_state });
         }
 
-        quote!(
-            #set_accepting_state
+        set_accepting_state
+    };
 
-            match self.0.next() {
-                None => {
-                    #end_of_input_action
-                }
-                Some(char) => {
-                    match char {
-                        #(#state_char_arms,)*
-                    }
-                }
-            }
-        )
-    } else {
-        // Non-accepting state
-        quote!(match self.0.next() {
+    quote!(
+        #set_accepting_state
+
+        match self.0.next() {
             None => {
                 #end_of_input_action
             }
@@ -426,8 +496,8 @@ fn generate_state_arm(
                     #(#state_char_arms,)*
                 }
             }
-        })
-    }
+        }
+    )
 }
 
 fn generate_any_transition(
@@ -439,7 +509,7 @@ fn generate_any_transition(
     let action = match trans {
         Trans::Trans(StateIdx(next_state)) => {
             if states[*next_state].predecessors.len() == 1 {
-                generate_state_arm(ctx, *next_state, &states[*next_state], states)
+                generate_state(ctx, *next_state, &states[*next_state], states)
             } else {
                 let StateIdx(next_state) = ctx.renumber_state(StateIdx(*next_state));
                 quote!(self.0.__state = #next_state;)
@@ -488,7 +558,7 @@ fn generate_state_char_arms(
         let pat = quote!(#(#chars)|*);
 
         let next = if states[*next_state].predecessors.len() == 1 {
-            generate_state_arm(ctx, *next_state, &states[*next_state], states)
+            generate_state(ctx, *next_state, &states[*next_state], states)
         } else {
             let StateIdx(next_state) = ctx.renumber_state(StateIdx(*next_state));
             quote!(
@@ -518,8 +588,9 @@ fn generate_state_char_arms(
                 let range_start = char::from_u32(range.start).unwrap();
                 let range_end = char::from_u32(range.end).unwrap();
 
+                let range_check = inclusive_range_contains(quote!(x), range_start, range_end);
                 state_char_arms.push(quote!(
-                    x if x >= #range_start && x <= #range_end => {
+                    x if #range_check => {
                         #action_code
                     }
                 ));
@@ -536,14 +607,20 @@ fn generate_state_char_arms(
         } else {
             let range_checks: Vec<TokenStream> = ranges
                 .into_iter()
-                .map(|(range_begin, range_end)| quote!((x >= #range_begin && x <= #range_end)))
+                .map(|(range_begin, range_end)| {
+                    if range_begin == range_end {
+                        quote!(x == #range_begin)
+                    } else {
+                        inclusive_range_contains(quote!(x), range_begin, range_end)
+                    }
+                })
                 .collect();
 
             quote!(#(#range_checks)||*)
         };
 
         let next = if states[next_state].predecessors.len() == 1 {
-            generate_state_arm(ctx, next_state, &states[next_state], states)
+            generate_state(ctx, next_state, &states[next_state], states)
         } else {
             let StateIdx(next_state) = ctx.renumber_state(StateIdx(next_state));
             quote!(
@@ -599,6 +676,7 @@ fn generate_semantic_action_call(action_fn: &TokenStream) -> TokenStream {
 
 fn generate_semantic_action_fns(
     ctx: &CgCtx,
+    user_state_lifetimes: &Vec<syn::Lifetime>,
     semantic_action_fn_ret_ty: &TokenStream,
 ) -> TokenStream {
     let lexer_name = ctx.lexer_name();
@@ -611,19 +689,22 @@ fn generate_semantic_action_fns(
 
             let rhs = match action {
                 RuleRhs::None => {
-                    quote!(|__lexer: &mut #lexer_name<'input, I>| __lexer.continue_().map_token(Ok))
+                    quote!(|__lexer: &mut #lexer_name<'input, #(#user_state_lifetimes, )* I>| {
+                        __lexer.reset_match();
+                        __lexer.continue_().map_token(Ok)
+                    })
                 }
 
                 RuleRhs::Rhs { expr, kind } => {
                     match kind {
                         RuleKind::Simple => {
-                            quote!(|__lexer: &'lexer mut #lexer_name<'input, I>| __lexer.return_(#expr).map_token(Ok))
+                            quote!(|__lexer: &'lexer mut #lexer_name<'input, #(#user_state_lifetimes, )* I>| __lexer.return_(#expr).map_token(Ok))
                         }
                         RuleKind::Fallible => quote!(#expr),
                         RuleKind::Infallible => {
-                            quote!(|__lexer: &'lexer mut #lexer_name<'input, I>| {
+                            quote!(|__lexer: &'lexer mut #lexer_name<'input, #(#user_state_lifetimes, )* I>| {
                                 let semantic_action:
-                                    fn(&'lexer mut #lexer_name<'input, I>) -> ::lexgen_util::SemanticActionResult<#token_type> =
+                                    fn(&'lexer mut #lexer_name<'input, #(#user_state_lifetimes, )* I>) -> ::lexgen_util::SemanticActionResult<#token_type> =
                                         #expr;
 
                                 semantic_action(__lexer).map_token(Ok)
@@ -635,8 +716,8 @@ fn generate_semantic_action_fns(
 
             quote!(
                 #[allow(non_snake_case)]
-                fn #ident<'lexer, 'input, I: Iterator<Item = char> + Clone>(lexer: &'lexer mut #lexer_name<'input, I>) -> #semantic_action_fn_ret_ty {
-                    let action: fn(&'lexer mut #lexer_name<'input, I>) -> #semantic_action_fn_ret_ty = #rhs;
+                fn #ident<'lexer, #(#user_state_lifetimes, )* 'input, I: Iterator<Item = char> + Clone>(lexer: &'lexer mut #lexer_name<'input, #(#user_state_lifetimes, )* I>) -> #semantic_action_fn_ret_ty {
+                    let action: fn(&'lexer mut #lexer_name<'input, #(#user_state_lifetimes, )* I>) -> #semantic_action_fn_ret_ty = #rhs;
                     action(lexer)
                 }
             )
@@ -822,7 +903,9 @@ fn generate_right_ctx_state_char_arms(
         } else {
             let range_checks: Vec<TokenStream> = ranges
                 .into_iter()
-                .map(|(range_begin, range_end)| quote!((x >= #range_begin && x <= #range_end)))
+                .map(|(range_begin, range_end)| {
+                    inclusive_range_contains(quote!(x), range_begin, range_end)
+                })
                 .collect();
 
             quote!(#(#range_checks)||*)
@@ -839,7 +922,9 @@ fn generate_right_ctx_state_char_arms(
         } else {
             let range_checks: Vec<TokenStream> = accept_ranges
                 .into_iter()
-                .map(|(range_begin, range_end)| quote!((x >= #range_begin && x <= #range_end)))
+                .map(|(range_begin, range_end)| {
+                    inclusive_range_contains(quote!(x), range_begin, range_end)
+                })
                 .collect();
 
             quote!(#(#range_checks)||*)
@@ -880,4 +965,12 @@ fn test_right_ctxs(
     }
 
     action_code
+}
+
+fn inclusive_range_contains(value: TokenStream, range_start: char, range_end: char) -> TokenStream {
+    if range_start == range_end {
+        quote!(#value == #range_start)
+    } else {
+        quote!((#range_start..=#range_end).contains(&#value))
+    }
 }
