@@ -1,4 +1,4 @@
-# Unreleased
+# 2023/04/23: 0.14.0
 
 - **Breaking change:** Rules without a right-hand side (e.g. `$$whitespace,`)
   now always reset the current match. Previously such rules would only reset
