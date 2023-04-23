@@ -267,7 +267,7 @@ The `Init` rule set terminates lexing successfully on end-of-input (i.e.
 return `Some(Err(...))`). This is because generally the states other than the
 initial one are for complicated tokens (strings, raw strings, multi-line
 comments) that need to be terminated and handled, and end-of-input in those
-state usually means the token did not terminate properly.
+states usually means the token did not terminate properly.
 
 (To handle end-of-input in a rule set you can use `$` as described in section
 "Regex syntax" above.)
