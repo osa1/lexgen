@@ -361,7 +361,7 @@ fn generate_state_arms(
             continue;
         }
 
-        let state_code: TokenStream = generate_state_arm(ctx, state_idx, state, &states);
+        let state_code: TokenStream = generate_state(ctx, state_idx, state, &states);
 
         let StateIdx(state_idx) = ctx.renumber_state(StateIdx(state_idx));
         let state_idx_pat = if state_idx == n_states - ctx.n_inlined_states() - 1 {
@@ -378,15 +378,17 @@ fn generate_state_arms(
     match_arms
 }
 
-// NB. Does not generate braces around the code
-fn generate_state_arm(
+/// Generate code for a state.
+///
+/// Note: Does not generate braces around the code.
+fn generate_state(
     ctx: &mut CgCtx,
     state_idx: usize,
     state: &State<Trans<SemanticActionIdx>, SemanticActionIdx>,
     states: &[State<Trans<SemanticActionIdx>, SemanticActionIdx>],
 ) -> TokenStream {
     let State {
-        initial,
+        initial: _,
         char_transitions,
         range_transitions,
         any_transition,
@@ -398,7 +400,10 @@ fn generate_state_arm(
     let fail = || -> TokenStream {
         let action = generate_semantic_action_call(&quote!(semantic_action));
         quote!(match self.0.backtrack() {
-            Err(err) => return Some(Err(err)),
+            Err(err) => {
+                self.reset_match();
+                return Some(Err(err))
+            }
             Ok(semantic_action) => #action,
         })
     };
@@ -444,25 +449,9 @@ fn generate_state_arm(
         #end_of_input_action
     );
 
-    if state_idx == 0 {
-        assert!(initial);
-
-        // See #12 for the special case in state 0 (rule Init)
-        quote!(
-            self.reset_match();
-
-            match self.0.next() {
-                None => {
-                    #end_of_input_action
-                }
-                Some(char) => {
-                    match char {
-                        #(#state_char_arms,)*
-                    }
-                }
-            }
-        )
-    } else if !accepting.is_empty() {
+    let set_accepting_state = if accepting.is_empty() {
+        quote!()
+    } else {
         // Accepting state
         let mut rhss: Vec<(TokenStream, TokenStream)> = Vec::with_capacity(accepting.len());
         let mut default = quote!();
@@ -491,23 +480,13 @@ fn generate_state_arm(
             set_accepting_state = quote!(if #cond { #rhs } else { #set_accepting_state });
         }
 
-        quote!(
-            #set_accepting_state
+        set_accepting_state
+    };
 
-            match self.0.next() {
-                None => {
-                    #end_of_input_action
-                }
-                Some(char) => {
-                    match char {
-                        #(#state_char_arms,)*
-                    }
-                }
-            }
-        )
-    } else {
-        // Non-accepting state
-        quote!(match self.0.next() {
+    quote!(
+        #set_accepting_state
+
+        match self.0.next() {
             None => {
                 #end_of_input_action
             }
@@ -516,8 +495,8 @@ fn generate_state_arm(
                     #(#state_char_arms,)*
                 }
             }
-        })
-    }
+        }
+    )
 }
 
 fn generate_any_transition(
@@ -529,7 +508,7 @@ fn generate_any_transition(
     let action = match trans {
         Trans::Trans(StateIdx(next_state)) => {
             if states[*next_state].predecessors.len() == 1 {
-                generate_state_arm(ctx, *next_state, &states[*next_state], states)
+                generate_state(ctx, *next_state, &states[*next_state], states)
             } else {
                 let StateIdx(next_state) = ctx.renumber_state(StateIdx(*next_state));
                 quote!(self.0.__state = #next_state;)
@@ -578,7 +557,7 @@ fn generate_state_char_arms(
         let pat = quote!(#(#chars)|*);
 
         let next = if states[*next_state].predecessors.len() == 1 {
-            generate_state_arm(ctx, *next_state, &states[*next_state], states)
+            generate_state(ctx, *next_state, &states[*next_state], states)
         } else {
             let StateIdx(next_state) = ctx.renumber_state(StateIdx(*next_state));
             quote!(
@@ -640,7 +619,7 @@ fn generate_state_char_arms(
         };
 
         let next = if states[next_state].predecessors.len() == 1 {
-            generate_state_arm(ctx, next_state, &states[next_state], states)
+            generate_state(ctx, next_state, &states[next_state], states)
         } else {
             let StateIdx(next_state) = ctx.renumber_state(StateIdx(next_state));
             quote!(
@@ -709,7 +688,10 @@ fn generate_semantic_action_fns(
 
             let rhs = match action {
                 RuleRhs::None => {
-                    quote!(|__lexer: &mut #lexer_name<'input, #(#user_state_lifetimes, )* I>| __lexer.continue_().map_token(Ok))
+                    quote!(|__lexer: &mut #lexer_name<'input, #(#user_state_lifetimes, )* I>| {
+                        __lexer.reset_match();
+                        __lexer.continue_().map_token(Ok)
+                    })
                 }
 
                 RuleRhs::Rhs { expr, kind } => {

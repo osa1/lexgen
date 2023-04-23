@@ -1,3 +1,16 @@
+# Unreleased
+
+- **Breaking change:** Rules without a right-hand side (e.g. `$$whitespace,`)
+  now always reset the current match. Previously such rules would only reset
+  the current match in `Init`. (#12)
+
+  To migrate, add a semantic action to your rule that just calls `continue_()`
+  on the lexer. For example, if you have `$$whitespace,`, replace it with:
+
+  ```rust
+  $$whitespace => |lexer| lexer.continue_(),
+  ```
+
 # 2023/04/10: 0.13.0
 
 - Fix more `manual_range_contains` lints in generated code.
