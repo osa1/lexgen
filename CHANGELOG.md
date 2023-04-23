@@ -11,6 +11,8 @@
   $$whitespace => |lexer| lexer.continue_(),
   ```
 
+- `clippy::manual_is_ascii_check` violations are now ignored in generated code.
+
 # 2023/04/10: 0.13.0
 
 - Fix more `manual_range_contains` lints in generated code.

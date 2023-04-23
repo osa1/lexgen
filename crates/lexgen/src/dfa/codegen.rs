@@ -296,6 +296,7 @@ pub fn reify(
         {
             type Item = Result<(::lexgen_util::Loc, #token_type, ::lexgen_util::Loc), ::lexgen_util::LexerError<#error_type>>;
 
+            #[allow(clippy::manual_is_ascii_check)]
             fn next(&mut self) -> Option<Self::Item> {
                 loop {
                     if self.0.__done {

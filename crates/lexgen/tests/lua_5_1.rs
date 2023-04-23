@@ -96,17 +96,11 @@ struct LexerState {
     in_comment: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 enum Quote {
+    #[default] // arbitrary
     Single,
     Double,
-}
-
-impl Default for Quote {
-    fn default() -> Self {
-        // arbitrary
-        Quote::Single
-    }
 }
 
 lexer! {
