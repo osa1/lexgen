@@ -253,8 +253,8 @@ XID_Continue]:
   When a rule of this kind returns an error, the error is returned to the
   caller of the lexer's `next` method.
 
-- `<regex>,`: Syntactic sugar for `<regex> => |lexer| lexer.continue_(),`.
-  Useful for skipping characters (e.g. whitespace).
+- `<regex>,`: Syntactic sugar for `<regex> => |lexer| { lexer.reset_match();
+  lexer.continue_() },`. Useful for skipping characters (e.g. whitespace).
 
 - `<regex> = <token>,`: Syntactic sugar for `<regex> => |lexer|
   lexer.return_(<token>),`. Useful for matching keywords, punctuation
