@@ -1,4 +1,4 @@
-# Unreleased
+# 2023/09/03: 0.15.0
 
 - Lexer type declarations can now have outer attributes other than just
   `#[derive(Clone)]`. Example:
@@ -22,6 +22,8 @@
 
 - `lexgen_util::Lexer` type now derives `Debug` (in addition to `Clone`). This
   makes it possible to derive `Debug` in generated lexers.
+
+- `syn` dependency updated to version 2.
 
 # 2023/04/23: 0.14.0
 
