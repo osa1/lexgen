@@ -2,7 +2,6 @@
 
 use crate::semantic_action_table::{SemanticActionIdx, SemanticActionTable};
 
-use quote::ToTokens;
 use syn::parse::ParseStream;
 
 use std::fmt;
@@ -14,11 +13,9 @@ pub struct Var(pub String);
 pub struct Builtin(pub String);
 
 pub struct Lexer {
-    /// `#[derive ...]` attribute tokens. When available the tokens are added as a `derive`
-    /// attribute to the generated lexer struct.
-    ///
-    /// Note: This includes parenthesis, e.g. `(Debug, Clone)` instead of `Debug, Clone`.
-    pub derives: Option<proc_macro2::TokenStream>,
+    /// Attributes like `#[derive(...)]` and `/// ...` attached to the lexer type declaration.
+    /// These attributes copied to the generated lexer struct.
+    pub attrs: Vec<syn::Attribute>,
     pub public: bool,
     pub type_name: syn::Ident,
     pub user_state_type: Option<syn::Type>,
@@ -398,22 +395,7 @@ pub fn make_lexer_parser(
     semantic_action_table: &mut SemanticActionTable,
 ) -> impl FnOnce(ParseStream) -> Result<Lexer, syn::Error> + '_ {
     |input: ParseStream| {
-        let mut attrs = input.call(syn::Attribute::parse_outer)?;
-        if attrs.len() > 1 {
-            // Keep it simple for now
-            panic!("Lexer structs can have at most one `#[derive(...)]` attribute");
-        }
-
-        let derives = attrs.pop().map(|attr| {
-            let attr_path_str = attr.path.to_token_stream().to_string();
-            if attr_path_str != "derive" {
-                panic!(
-                    "Unsupported lexer attribute {:?}, only \"derive\" is supported.",
-                    attr
-                );
-            }
-            attr.tokens
-        });
+        let attrs = input.call(syn::Attribute::parse_outer)?;
 
         let public = input.parse::<syn::token::Pub>().is_ok();
         let type_name = input.parse::<syn::Ident>()?;
@@ -436,7 +418,7 @@ pub fn make_lexer_parser(
         }
 
         Ok(Lexer {
-            derives,
+            attrs,
             public,
             type_name,
             user_state_type,

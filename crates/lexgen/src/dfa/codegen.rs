@@ -77,7 +77,7 @@ pub fn reify(
     lexer_name: syn::Ident,
     token_type: syn::Type,
     public: bool,
-    derives: Option<TokenStream>,
+    attrs: Vec<syn::Attribute>,
 ) -> TokenStream {
     let rule_name_enum_name =
         syn::Ident::new(&(lexer_name.to_string() + "Rule"), lexer_name.span());
@@ -192,11 +192,6 @@ pub fn reify(
     // those methods are not used.
     let lexer_struct_name = syn::Ident::new(&(lexer_name.to_string() + "_"), lexer_name.span());
 
-    let derive_attr = match derives {
-        None => quote!(),
-        Some(derives) => quote!(#[derive #derives]),
-    };
-
     quote!(
         // An enum for the rule sets in the DFA. `Init` is the initial, unnamed rule set.
         #[derive(Clone, Copy)]
@@ -204,7 +199,7 @@ pub fn reify(
             #(#rule_name_idents,)*
         }
 
-        #derive_attr
+        #(#attrs)*
         #visibility struct #lexer_struct_name<'input, #(#user_state_lifetimes,)* I: Iterator<Item = char> + Clone, S>(
             ::lexgen_util::Lexer<
                 'input,

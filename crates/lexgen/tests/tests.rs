@@ -1261,3 +1261,18 @@ fn static_and_input() {
     assert_eq!(lexer.state().words, vec!["world"]);
     assert_eq!(*lexer.state().counter, 1);
 }
+
+#[test]
+fn outer_attributes() {
+    lexer! {
+        /// This is an outer attribute.
+        #[derive(Debug, Clone)]
+        Lexer -> usize;
+
+        'a' = 1,
+    }
+
+    let lexer1 = Lexer::new("");
+    let lexer2 = lexer1.clone();
+    assert_eq!(format!("{:?}", lexer1), format!("{:?}", lexer2));
+}

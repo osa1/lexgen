@@ -1,3 +1,28 @@
+# Unreleased
+
+- Lexer type declarations can now have outer attributes other than just
+  `#[derive(Clone)]`. Example:
+  ```rust
+  lexer! {
+      /// A lexer for Rust.
+      #[derive(Debug, Clone)]
+      pub RustLexer(LexerState) -> RustToken;
+
+      ...
+  }
+  ```
+  The attributes are directly copied to the generated `struct`. In the example,
+  the documentation and `derive` attribute will be copied to the generated
+  `struct`:
+  ```rust
+  /// A lexer for Rust.
+  #[derive(Debug, Clone)]
+  pub struct RustLexer<...>(...);
+  ```
+
+- `lexgen_util::Lexer` type now derives `Debug` (in addition to `Clone`). This
+  makes it possible to derive `Debug` in generated lexers.
+
 # 2023/04/23: 0.14.0
 
 - **Breaking change:** Rules without a right-hand side (e.g. `$$whitespace,`)
