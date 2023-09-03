@@ -135,7 +135,7 @@ impl<A> NFA<A> {
             range_start as u32,
             range_end as u32,
             set,
-            |values_1, values_2| values_1.extend(values_2.into_iter()),
+            |values_1, values_2| values_1.extend(values_2),
         );
     }
 
@@ -148,7 +148,7 @@ impl<A> NFA<A> {
         self.states[state.0]
             .range_transitions
             .insert_ranges(ranges.into_iter(), |values_1, values_2| {
-                values_1.extend(values_2.into_iter())
+                values_1.extend(values_2)
             });
     }
 
