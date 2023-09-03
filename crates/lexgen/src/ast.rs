@@ -222,8 +222,8 @@ fn parse_regex_2(input: ParseStream) -> syn::Result<Regex> {
         } else if input.peek(syn::token::Question) {
             let _ = input.parse::<syn::token::Question>()?;
             re = Regex::ZeroOrOne(Box::new(re));
-        } else if input.peek(syn::token::Add) {
-            let _ = input.parse::<syn::token::Add>()?;
+        } else if input.peek(syn::token::Plus) {
+            let _ = input.parse::<syn::token::Plus>()?;
             re = Regex::OneOrMore(Box::new(re));
         } else {
             break;
@@ -284,6 +284,7 @@ fn parse_regex_4(input: ParseStream) -> syn::Result<Regex> {
     }
 }
 
+/// Parse a sequence of `<char>` or `<char>-<char>`.
 fn parse_charset(input: ParseStream) -> syn::Result<CharSet> {
     let mut chars = vec![];
     while !input.is_empty() {
@@ -292,10 +293,11 @@ fn parse_charset(input: ParseStream) -> syn::Result<CharSet> {
     Ok(CharSet(chars))
 }
 
+/// Parse a `<char>` or `<char>-<char>`.
 fn parse_char_or_range(input: ParseStream) -> syn::Result<CharOrRange> {
     let char = input.parse::<syn::LitChar>()?.value();
-    if input.peek(syn::token::Sub) {
-        let _ = input.parse::<syn::token::Sub>()?;
+    if input.peek(syn::token::Minus) {
+        let _ = input.parse::<syn::token::Minus>()?;
         let char2 = input.parse::<syn::LitChar>()?.value();
         Ok(CharOrRange::Range(char, char2))
     } else {
