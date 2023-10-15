@@ -1,6 +1,9 @@
 # lexgen: A fully-featured lexer generator, implemented as a proc macro
 
 ```rust
+use lexgen::lexer;
+use lexgen_util::Loc;
+
 lexer! {
     // First line specifies name of the lexer and the token type returned by
     // semantic actions
