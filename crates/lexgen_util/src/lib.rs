@@ -13,18 +13,23 @@ pub struct LexerError<E> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LexerErrorKind<E> {
-    /// Lexer error, raised by lexgen-generated code
+    /// A lexer error, returned by lexgen.
     InvalidToken,
 
-    /// Custom error, raised by a semantic action
+    /// A custom error, returned by a semantic action.
     Custom(E),
 }
 
-/// A location, used in errors
+/// A location in an input.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Loc {
+    /// Zero-based line number in the input.
     pub line: u32,
+
+    /// Zero-based character index of this location in its line.
     pub col: u32,
+
+    /// Zero-based UTF-8 byte index of this location in the input.
     pub byte_idx: usize,
 }
 
