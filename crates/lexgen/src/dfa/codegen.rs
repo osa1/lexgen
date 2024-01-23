@@ -202,7 +202,6 @@ pub fn reify(
         #(#attrs)*
         #visibility struct #lexer_struct_name<'input, #(#user_state_lifetimes,)* I: Iterator<Item = char> + Clone, S>(
             ::lexgen_util::Lexer<
-                'input,
                 I,
                 #token_type,
                 S,
@@ -236,7 +235,7 @@ pub fn reify(
                 self.0.reset_match()
             }
 
-            fn match_(&self) -> &'input str {
+            fn match_(&self) -> &str {
                 self.0.match_()
             }
 
@@ -487,6 +486,7 @@ fn generate_state(
                 #end_of_input_action
             }
             Some(char) => {
+                self.0.__match_buffer.push(char);
                 match char {
                     #(#state_char_arms,)*
                 }

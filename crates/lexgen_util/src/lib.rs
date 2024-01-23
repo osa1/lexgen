@@ -66,7 +66,7 @@ impl<T> SemanticActionResult<T> {
 ///
 /// **Fields are used by lexgen-generated code and should not be used directly.**
 #[derive(Debug, Clone)]
-pub struct Lexer<'input, Iter: Iterator<Item = char> + Clone, Token, State, Error, Wrapper> {
+pub struct Lexer<Iter: Iterator<Item = char> + Clone, Token, State, Error, Wrapper> {
     // Current lexer state
     pub __state: usize,
 
@@ -77,9 +77,6 @@ pub struct Lexer<'input, Iter: Iterator<Item = char> + Clone, Token, State, Erro
     pub __initial_state: usize,
 
     user_state: State,
-
-    // User-provided input string. Does not change after initialization.
-    input: &'input str,
 
     // Start location of `iter`. We update this as we backtrack and update `iter`.
     iter_loc: Loc,
@@ -106,55 +103,58 @@ pub struct Lexer<'input, Iter: Iterator<Item = char> + Clone, Token, State, Erro
         for<'lexer> fn(&'lexer mut Wrapper) -> SemanticActionResult<Result<Token, Error>>,
         Loc,
     )>,
+
+    // Where we collect the matched characters.
+    pub __match_buffer: String,
 }
 
-impl<I: Iterator<Item = char> + Clone, T, S: Default, E, W> Lexer<'static, I, T, S, E, W> {
+impl<I: Iterator<Item = char> + Clone, T, S: Default, E, W> Lexer<I, T, S, E, W> {
     pub fn new_from_iter(iter: I) -> Self {
         Self::new_from_iter_with_state(iter, Default::default())
     }
 }
 
-impl<I: Iterator<Item = char> + Clone, T, S, E, W> Lexer<'static, I, T, S, E, W> {
+impl<I: Iterator<Item = char> + Clone, T, S, E, W> Lexer<I, T, S, E, W> {
     pub fn new_from_iter_with_state(iter: I, state: S) -> Self {
         Self {
             __state: 0,
             __done: false,
             __initial_state: 0,
             user_state: state,
-            input: "",
             iter_loc: Loc::ZERO,
             __iter: iter.peekable(),
             current_match_start: Loc::ZERO,
             current_match_end: Loc::ZERO,
             last_match: None,
+            __match_buffer: String::with_capacity(100),
         }
     }
 }
 
-impl<'input, T, S: Default, E, W> Lexer<'input, Chars<'input>, T, S, E, W> {
+impl<'input, T, S: Default, E, W> Lexer<Chars<'input>, T, S, E, W> {
     pub fn new(input: &'input str) -> Self {
         Self::new_with_state(input, Default::default())
     }
 }
 
-impl<'input, T, S, E, W> Lexer<'input, Chars<'input>, T, S, E, W> {
+impl<'input, T, S, E, W> Lexer<Chars<'input>, T, S, E, W> {
     pub fn new_with_state(input: &'input str, state: S) -> Self {
         Self {
             __state: 0,
             __done: false,
             __initial_state: 0,
             user_state: state,
-            input,
             iter_loc: Loc::ZERO,
             __iter: input.chars().peekable(),
             current_match_start: Loc::ZERO,
             current_match_end: Loc::ZERO,
             last_match: None,
+            __match_buffer: String::with_capacity(100),
         }
     }
 }
 
-impl<'input, I: Iterator<Item = char> + Clone, T, S, E, W> Lexer<'input, I, T, S, E, W> {
+impl<'input, I: Iterator<Item = char> + Clone, T, S, E, W> Lexer<I, T, S, E, W> {
     // Read the next chracter
     pub fn next(&mut self) -> Option<char> {
         match self.__iter.next() {
@@ -192,11 +192,13 @@ impl<'input, I: Iterator<Item = char> + Clone, T, S, E, W> Lexer<'input, I, T, S
                 })
             }
             Some((match_start, iter, semantic_action, match_end)) => {
+                let match_len_bytes = match_end.byte_idx - match_start.byte_idx;
                 self.__done = false;
                 self.current_match_start = match_start;
                 self.current_match_end = match_end;
                 self.__iter = iter;
                 self.iter_loc = match_end;
+                self.__match_buffer.drain(match_len_bytes..);
                 Ok(semantic_action)
             }
         }
@@ -220,10 +222,11 @@ impl<'input, I: Iterator<Item = char> + Clone, T, S, E, W> Lexer<'input, I, T, S
 
     pub fn reset_match(&mut self) {
         self.current_match_start = self.current_match_end;
+        self.__match_buffer.clear();
     }
 
-    pub fn match_(&self) -> &'input str {
-        &self.input[self.current_match_start.byte_idx..self.current_match_end.byte_idx]
+    pub fn match_(&self) -> &str {
+        &self.__match_buffer
     }
 
     pub fn match_loc(&self) -> (Loc, Loc) {
