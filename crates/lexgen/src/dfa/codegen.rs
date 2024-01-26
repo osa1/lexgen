@@ -270,6 +270,10 @@ pub fn reify(
             #visibility fn new_from_iter(iter: I) -> Self {
                 #lexer_struct_name(::lexgen_util::Lexer::new_from_iter(iter))
             }
+
+            #visibility fn new_from_iter_with_loc(iter: I, loc: ::lexgen_util::Loc) -> Self {
+                #lexer_struct_name(::lexgen_util::Lexer::new_from_iter_with_loc(iter, loc))
+            }
         }
 
         impl<#(#user_state_lifetimes,)* I: Iterator<Item = char> + Clone>

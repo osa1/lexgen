@@ -112,19 +112,27 @@ impl<I: Iterator<Item = char> + Clone, T, S: Default, E, W> Lexer<I, T, S, E, W>
     pub fn new_from_iter(iter: I) -> Self {
         Self::new_from_iter_with_state(iter, Default::default())
     }
+
+    pub fn new_from_iter_with_loc(iter: I, loc: Loc) -> Self {
+        Self::new_from_iter_with_state_and_loc(iter, Default::default(), loc)
+    }
 }
 
 impl<I: Iterator<Item = char> + Clone, T, S, E, W> Lexer<I, T, S, E, W> {
     pub fn new_from_iter_with_state(iter: I, state: S) -> Self {
+        Self::new_from_iter_with_state_and_loc(iter, state, Loc::ZERO)
+    }
+
+    pub fn new_from_iter_with_state_and_loc(iter: I, state: S, loc: Loc) -> Self {
         Self {
             __state: 0,
             __done: false,
             __initial_state: 0,
             user_state: state,
-            iter_loc: Loc::ZERO,
+            iter_loc: loc,
             __iter: iter.peekable(),
-            current_match_start: Loc::ZERO,
-            current_match_end: Loc::ZERO,
+            current_match_start: loc,
+            current_match_end: loc,
             last_match: None,
             __match_buffer: String::with_capacity(100),
         }
