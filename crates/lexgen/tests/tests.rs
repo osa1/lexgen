@@ -1,3 +1,5 @@
+#![allow(clippy::redundant_pattern_matching)]
+
 mod test_utils;
 
 use lexgen::lexer;

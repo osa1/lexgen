@@ -380,7 +380,7 @@ fn insert<A: Clone>(map: &mut RangeMap<Vec<A>>, range_start: u32, range_end: u32
     map2.insert(range_start, range_end, vec![value], |_, _| panic!());
 
     map.insert_ranges(map2.into_iter(), |values_1, values_2| {
-        values_1.extend(values_2.into_iter())
+        values_1.extend(values_2)
     });
 }
 
