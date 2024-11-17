@@ -9,4 +9,4 @@ homepage = "https://github.com/osa1/lexgen"
 repository = "https://github.com/osa1/lexgen"
 
 [dependencies]
-unicode-width = "0.1.10"
+unicode-width = "0.2.0"
