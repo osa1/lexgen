@@ -68,6 +68,7 @@ See also:
 - [An example that uses lexgen with LALRPOP][3]
 - [A lexer for a simpler version of OCaml][4]
 - [A Rust lexer][5]
+- [A parse event generator][6]
 
 ## Motivation
 
@@ -405,3 +406,4 @@ to the `Init` state (line 23).
 [3]: https://github.com/osa1/lexgen/tree/main/crates/lexgen_lalrpop_example
 [4]: https://github.com/osa1/mincaml/blob/master/src/lexer.rs
 [5]: https://github.com/osa1/lexgen_rust/blob/main/crates/lexgen_rust/src/lib.rs
+[6]: https://github.com/osa1/how-to-parse/blob/4f40236b1f9eca5b67d2193ef0f55fffdc06bffb/src/lexgen_event_parser.rs
