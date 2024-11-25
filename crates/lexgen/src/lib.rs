@@ -147,7 +147,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
 
     let dfa = dfa::simplify::simplify(dfa, &mut dfas);
 
-    dfa::codegen::reify(
+    dfa::codegen::generate(
         dfa,
         &right_ctx_dfas,
         semantic_action_table,

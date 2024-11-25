@@ -67,7 +67,7 @@ impl Fold for SubstLifetimeFolder {
     }
 }
 
-pub fn reify(
+pub fn generate(
     dfa: DFA<Trans<SemanticActionIdx>, SemanticActionIdx>,
     right_ctx_dfas: &RightCtxDFAs<StateIdx>,
     semantic_actions: SemanticActionTable,
