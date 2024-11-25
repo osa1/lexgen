@@ -76,7 +76,7 @@ pub fn reify(
     rule_states: Map<String, StateIdx>,
     lexer_name: syn::Ident,
     token_type: syn::Type,
-    public: bool,
+    visibility: Option<syn::Visibility>,
     attrs: Vec<syn::Attribute>,
 ) -> TokenStream {
     let rule_name_enum_name =
@@ -87,7 +87,9 @@ pub fn reify(
         .map(|rule_name| syn::Ident::new(rule_name, Span::call_site()))
         .collect();
 
-    let visibility = if public { quote!(pub) } else { quote!() };
+    let visibility = visibility
+        .map(|vis| vis.into_token_stream())
+        .unwrap_or(quote!());
 
     let mut ctx = CgCtx::new(
         &dfa,

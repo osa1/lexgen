@@ -3,6 +3,9 @@
 - Update lexgen rustc-hash dependency from 1.1.0 to 2.0.0, lexgen_util
   unicode-width dependency from 0.1.10 to 0.2.0.
 
+- Lexers can now use `pub(crate)` visibility, and other visibilities supported
+  by Rust and the `syn` crate. Previously only `pub` was supported.
+
 # 2023/09/03: 0.15.0
 
 - Lexer type declarations can now have outer attributes other than just

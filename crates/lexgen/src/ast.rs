@@ -2,6 +2,7 @@
 
 use crate::semantic_action_table::{SemanticActionIdx, SemanticActionTable};
 
+use syn::parse::discouraged::Speculative;
 use syn::parse::ParseStream;
 
 use std::fmt;
@@ -12,11 +13,12 @@ pub struct Var(pub String);
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Builtin(pub String);
 
+#[derive(Debug)]
 pub struct Lexer {
     /// Attributes like `#[derive(...)]` and `/// ...` attached to the lexer type declaration.
     /// These attributes copied to the generated lexer struct.
     pub attrs: Vec<syn::Attribute>,
-    pub public: bool,
+    pub visibility: Option<syn::Visibility>,
     pub type_name: syn::Ident,
     pub user_state_type: Option<syn::Type>,
     pub token_type: syn::Type,
@@ -81,18 +83,6 @@ pub enum RuleKind {
 
     /// Defined with `=>`. RHS is passed a `LexerHandle`, returns `LexerAction<Token>`
     Infallible,
-}
-
-impl fmt::Debug for Lexer {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Lexer")
-            .field("derives", &self.public)
-            .field("public", &self.public)
-            .field("type_name", &self.type_name.to_string())
-            .field("token_type", &"...")
-            .field("rules", &self.rules)
-            .finish()
-    }
 }
 
 impl fmt::Debug for Rule {
@@ -399,7 +389,15 @@ pub fn make_lexer_parser(
     |input: ParseStream| {
         let attrs = input.call(syn::Attribute::parse_outer)?;
 
-        let public = input.parse::<syn::token::Pub>().is_ok();
+        let forked = input.fork();
+        let visibility = match forked.parse::<syn::Visibility>() {
+            Ok(visibility) => {
+                input.advance_to(&forked);
+                Some(visibility)
+            }
+            Err(_) => None,
+        };
+
         let type_name = input.parse::<syn::Ident>()?;
 
         let user_state_type = if input.peek(syn::token::Paren) {
@@ -421,7 +419,7 @@ pub fn make_lexer_parser(
 
         Ok(Lexer {
             attrs,
-            public,
+            visibility,
             type_name,
             user_state_type,
             token_type,

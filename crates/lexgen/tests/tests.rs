@@ -1278,3 +1278,14 @@ fn outer_attributes() {
     let lexer2 = lexer1.clone();
     assert_eq!(format!("{:?}", lexer1), format!("{:?}", lexer2));
 }
+
+#[test]
+fn visibility() {
+    lexer! {
+        /// This is an outer attribute.
+        #[derive(Debug, Clone)]
+        pub(crate) Lexer1 -> usize;
+
+        'a' = 1,
+    }
+}

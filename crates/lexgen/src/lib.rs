@@ -45,7 +45,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
 
     let Lexer {
         attrs,
-        public,
+        visibility,
         type_name,
         user_state_type,
         token_type,
@@ -156,7 +156,7 @@ pub fn lexer(input: TokenStream) -> TokenStream {
         dfas,
         type_name,
         token_type,
-        public,
+        visibility,
         attrs,
     )
     .into()
