@@ -393,17 +393,30 @@ fn generate_state(
         end_of_input_transition,
         accepting,
         predecessors: _,
+        backtrack,
     } = state;
 
     let fail = || -> TokenStream {
-        let action = generate_semantic_action_call(&quote!(semantic_action));
-        quote!(match self.0.backtrack() {
-            Err(err) => {
+        if *backtrack || !accepting.is_empty() {
+            let action = generate_semantic_action_call(&quote!(semantic_action));
+            quote!(match self.0.backtrack() {
+                Err(err) => {
+                    self.reset_match();
+                    return Some(Err(err))
+                }
+                Ok(semantic_action) => #action,
+            })
+        } else {
+            quote!({
+                let location = self.match_loc().0;
                 self.reset_match();
-                return Some(Err(err))
-            }
-            Ok(semantic_action) => #action,
-        })
+                self.0.__state = 0;
+                return Some(Err(::lexgen_util::LexerError {
+                    location,
+                    kind: ::lexgen_util::LexerErrorKind::InvalidToken,
+                }));
+            })
+        }
     };
 
     // When we can't take char or range transitions, take the 'any' transition if it exists, or
@@ -797,6 +810,7 @@ fn generate_right_ctx_state_arm(
         end_of_input_transition,
         accepting,
         predecessors: _,
+        backtrack: _,
     } = state;
 
     let state_char_arms =

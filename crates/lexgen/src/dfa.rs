@@ -1,3 +1,4 @@
+mod backtrack;
 pub mod codegen;
 pub mod simplify;
 
@@ -7,6 +8,7 @@ pub mod simulate;
 use crate::collections::{Map, Set};
 use crate::nfa::AcceptingState;
 use crate::range_map::{Range, RangeMap};
+pub(crate) use backtrack::update_backtracks;
 
 use std::convert::TryFrom;
 use std::iter::{FromIterator, IntoIterator};
@@ -44,6 +46,7 @@ pub struct State<T, A> {
     /// Predecessors of the state, used to inline code for a state with one predecessor in the
     /// predecessor's code.
     predecessors: Set<StateIdx>,
+    backtrack: bool,
 }
 
 impl<T, A> State<T, A> {
@@ -56,6 +59,7 @@ impl<T, A> State<T, A> {
             end_of_input_transition: None,
             accepting: vec![],
             predecessors: Default::default(),
+            backtrack: false,
         }
     }
 
@@ -93,7 +97,6 @@ impl<A> DFA<StateIdx, A> {
         new_state_idx
     }
 
-    #[cfg(test)]
     pub fn is_accepting_state(&self, state: StateIdx) -> bool {
         !self.states[state.0].accepting.is_empty()
     }
@@ -179,6 +182,7 @@ impl<A> DFA<StateIdx, A> {
             end_of_input_transition,
             accepting,
             predecessors,
+            backtrack,
         } in other.states
         {
             let mut new_char_transitions: Map<char, StateIdx> = Default::default();
@@ -213,6 +217,7 @@ impl<A> DFA<StateIdx, A> {
                 end_of_input_transition: new_end_of_input_transition,
                 accepting,
                 predecessors,
+                backtrack,
             });
         }
 
@@ -239,6 +244,7 @@ impl<A> Display for DFA<StateIdx, A> {
                 end_of_input_transition,
                 accepting,
                 predecessors: _,
+                backtrack,
             } = state;
 
             if !accepting.is_empty() {
@@ -299,6 +305,14 @@ impl<A> Display for DFA<StateIdx, A> {
                 }
 
                 writeln!(f, "$ -> {}", next)?;
+            }
+
+            if *backtrack {
+                if !first {
+                    write!(f, "      ")?;
+                }
+
+                writeln!(f, "backtrack")?;
             }
 
             if char_transitions.is_empty()
