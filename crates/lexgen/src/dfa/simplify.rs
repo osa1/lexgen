@@ -50,6 +50,7 @@ pub fn simplify<K, A: Clone>(
                 end_of_input_transition,
                 accepting,
                 predecessors,
+                backtrack,
             } = state;
 
             let char_transitions = char_transitions
@@ -83,6 +84,7 @@ pub fn simplify<K, A: Clone>(
                 end_of_input_transition,
                 accepting,
                 predecessors,
+                backtrack,
             }
         })
         .collect();

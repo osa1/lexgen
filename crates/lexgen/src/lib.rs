@@ -140,10 +140,12 @@ pub fn lexer(input: TokenStream) -> TokenStream {
         }
     }
 
-    let dfa = match init_dfa {
+    let mut dfa = match init_dfa {
         Some(init_dfa) => init_dfa,
         None => nfa_to_dfa(&unnamed_nfa),
     };
+
+    dfa::update_backtracks(&mut dfa);
 
     let dfa = dfa::simplify::simplify(dfa, &mut dfas);
 
