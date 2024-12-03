@@ -6,6 +6,10 @@
 - Lexers can now use `pub(crate)` visibility, and other visibilities supported
   by Rust and the `syn` crate. Previously only `pub` was supported.
 
+- Eliminate redundant `backtrack` calls in generated code, improving code size
+  and runtime performance. Runtime performance improved 13% in a benchmark.
+  (#69)
+
 # 2023/09/03: 0.15.0
 
 - Lexer type declarations can now have outer attributes other than just
