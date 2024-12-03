@@ -5,13 +5,13 @@ pub struct BTreeSetDisplay<'a, A: Display>(pub &'a BTreeSet<A>);
 
 pub struct HashSetDisplay<'a, A: Display, S>(pub &'a HashSet<A, S>);
 
-impl<'a, A: Display> Display for BTreeSetDisplay<'a, A> {
+impl<A: Display> Display for BTreeSetDisplay<'_, A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         display_set(f, self.0.len(), &mut self.0.iter())
     }
 }
 
-impl<'a, A: Display, S> Display for HashSetDisplay<'a, A, S> {
+impl<A: Display, S> Display for HashSetDisplay<'_, A, S> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         display_set(f, self.0.len(), &mut self.0.iter())
     }

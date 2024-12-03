@@ -43,7 +43,7 @@ struct LifetimeVisitor<'a> {
     lifetimes: &'a mut Vec<syn::Lifetime>,
 }
 
-impl<'ast, 'a> Visit<'ast> for LifetimeVisitor<'a> {
+impl<'ast> Visit<'ast> for LifetimeVisitor<'_> {
     fn visit_lifetime(&mut self, node: &'ast syn::Lifetime) {
         if node.ident != "static" && node.ident != "input" {
             self.lifetimes.push(node.clone())
@@ -89,7 +89,7 @@ pub fn generate(
 
     let visibility = visibility
         .map(|vis| vis.into_token_stream())
-        .unwrap_or(quote!());
+        .unwrap_or_default();
 
     let mut ctx = CgCtx::new(
         &dfa,
