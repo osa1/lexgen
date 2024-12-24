@@ -1,4 +1,4 @@
-# Unreleased
+# 2024/12/24: 0.16.0
 
 - Update lexgen rustc-hash dependency from 1.1.0 to 2.0.0, lexgen_util
   unicode-width dependency from 0.1.10 to 0.2.0.
