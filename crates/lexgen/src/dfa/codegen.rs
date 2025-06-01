@@ -202,6 +202,7 @@ pub fn generate(
         }
 
         #(#attrs)*
+        #[doc(hidden)]
         #visibility struct #lexer_struct_name<'input, #(#user_state_lifetimes,)* I: Iterator<Item = char> + Clone, S>(
             ::lexgen_util::Lexer<
                 'input,
@@ -725,6 +726,7 @@ fn generate_semantic_action_fns(
             };
 
             quote!(
+                #[doc(hidden)]
                 #[allow(non_snake_case)]
                 fn #ident<'lexer, #(#user_state_lifetimes, )* 'input, I: Iterator<Item = char> + Clone>(lexer: &'lexer mut #lexer_name<'input, #(#user_state_lifetimes, )* I>) -> #semantic_action_fn_ret_ty {
                     let action: fn(&'lexer mut #lexer_name<'input, #(#user_state_lifetimes, )* I>) -> #semantic_action_fn_ret_ty = #rhs;
