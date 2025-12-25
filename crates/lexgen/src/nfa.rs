@@ -20,7 +20,6 @@ pub struct StateIdx(usize);
 
 #[derive(Debug)]
 struct State<A> {
-    char_transitions: Map<char, Set<StateIdx>>,
     range_transitions: RangeMap<Set<StateIdx>>,
     empty_transitions: Set<StateIdx>,
     any_transitions: Set<StateIdx>,
@@ -37,7 +36,6 @@ pub struct AcceptingState<A> {
 impl<A> State<A> {
     fn new() -> State<A> {
         State {
-            char_transitions: Default::default(),
             range_transitions: Default::default(),
             empty_transitions: Default::default(),
             any_transitions: Default::default(),
@@ -60,13 +58,6 @@ impl<A> NFA<A> {
 
     pub fn get_accepting_state(&self, state: StateIdx) -> Option<&AcceptingState<A>> {
         self.states[state.0].accepting.as_ref()
-    }
-
-    pub fn char_transitions(
-        &self,
-        state: StateIdx,
-    ) -> impl Iterator<Item = (&char, &Set<StateIdx>)> {
-        self.states[state.0].char_transitions.iter()
     }
 
     pub fn range_transitions(
@@ -113,13 +104,10 @@ impl<A> NFA<A> {
     }
 
     pub fn add_char_transition(&mut self, state: StateIdx, char: char, next: StateIdx) {
-        let not_exists = self.states[state.0]
-            .char_transitions
-            .entry(char)
-            .or_default()
-            .insert(next);
+        self.add_range_transition(state, char, char, next)
 
-        assert!(not_exists, "add_char_transition");
+        // FIXME resolve now-absent assert
+        // assert!(not_exists, "add_char_transition");
     }
 
     pub fn add_range_transition(
@@ -211,7 +199,6 @@ impl<A> Display for NFA<A> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         for (state_idx, state) in self.states.iter().enumerate() {
             let State {
-                char_transitions,
                 range_transitions,
                 empty_transitions,
                 any_transitions,
@@ -249,16 +236,6 @@ impl<A> Display for NFA<A> {
                 writeln!(f, "e -> {}", HashSetDisplay(empty_transitions))?;
             }
 
-            for (char, next) in char_transitions.iter() {
-                if !first {
-                    write!(f, "     ")?;
-                } else {
-                    first = false;
-                }
-
-                writeln!(f, "{:?} -> {}", char, HashSetDisplay(next))?;
-            }
-
             for range in range_transitions.iter() {
                 if !first {
                     write!(f, "     ")?;
@@ -266,13 +243,17 @@ impl<A> Display for NFA<A> {
                     first = false;
                 }
 
-                writeln!(
-                    f,
-                    "{:?} - {:?} -> {}",
-                    range.start,
-                    range.end,
-                    HashSetDisplay(&range.value)
-                )?;
+                if range.start == range.end {
+                    writeln!(f, "{:?} -> {}", range.start, HashSetDisplay(&range.value))?;
+                } else {
+                    writeln!(
+                        f,
+                        "{:?} - {:?} -> {}",
+                        range.start,
+                        range.end,
+                        HashSetDisplay(&range.value)
+                    )?;
+                }
             }
 
             if !any_transitions.is_empty() {
@@ -294,7 +275,6 @@ impl<A> Display for NFA<A> {
             }
 
             if empty_transitions.is_empty()
-                && char_transitions.is_empty()
                 && range_transitions.is_empty()
                 && any_transitions.is_empty()
                 && end_of_input_transitions.is_empty()
