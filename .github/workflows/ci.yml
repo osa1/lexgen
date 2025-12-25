@@ -9,11 +9,8 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Get stable toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-            toolchain: stable
-            override: true
+      - name: Update Rust toolchain
+        run: rustup update
 
       - name: Build
         run: cargo build --verbose
@@ -27,12 +24,8 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Get Rust stable toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-            toolchain: stable
-            components: rustfmt
-            override: true
+      - name: Update Rust toolchain
+        run: rustup update
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -43,11 +36,8 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Get Rust stable toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-            toolchain: stable
-            override: true
+      - name: Update Rust toolchain
+        run: rustup update
 
       - name: Check lints
         run: cargo clippy --all-targets --all -- --deny warnings
