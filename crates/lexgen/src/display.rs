@@ -1,15 +1,7 @@
-use std::collections::{BTreeSet, HashSet};
+use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter};
 
-pub struct BTreeSetDisplay<'a, A: Display>(pub &'a BTreeSet<A>);
-
 pub struct HashSetDisplay<'a, A: Display, S>(pub &'a HashSet<A, S>);
-
-impl<A: Display> Display for BTreeSetDisplay<'_, A> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        display_set(f, self.0.len(), &mut self.0.iter())
-    }
-}
 
 impl<A: Display, S> Display for HashSetDisplay<'_, A, S> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
