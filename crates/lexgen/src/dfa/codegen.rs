@@ -9,7 +9,7 @@ use super::{State, StateIdx, DFA};
 use crate::ast::{RuleKind, RuleRhs};
 use crate::collections::{Map, Set};
 use crate::nfa::AcceptingState;
-use crate::range_map::{Range, RangeMap};
+use crate::range_map::RangeMap;
 use crate::right_ctx::{RightCtxDFAs, RightCtxIdx};
 use crate::semantic_action_table::{SemanticActionIdx, SemanticActionTable};
 
@@ -539,15 +539,30 @@ fn generate_state_char_arms(
     // Arms of the `match` for the current character
     let mut state_char_arms: Vec<TokenStream> = vec![];
 
-    // Collect ranges for next states, to be able to use or patterns in arms and reduce code
+    // Collect chars & ranges for next states, to be able to use or patterns in arms and reduce code
     // size. Use chain of "or"s for ranges with same transition.
+    let mut state_chars: Map<StateIdx, Vec<char>> = Default::default();
     let mut state_ranges: Map<StateIdx, Vec<(char, char)>> = Default::default();
     for range in range_transitions.iter() {
         match &range.value {
+            Trans::Trans(state_idx) if range.start == range.end => state_chars
+                .entry(*state_idx)
+                .or_default()
+                .push(char::from_u32(range.start).unwrap()),
             Trans::Trans(state_idx) => state_ranges.entry(*state_idx).or_default().push((
                 char::try_from(range.start).unwrap(),
                 char::try_from(range.end).unwrap(),
             )),
+            Trans::Accept(accepting) if range.start == range.end => {
+                let action_code = test_right_ctxs(ctx, accepting, default_rhs.clone());
+
+                let char = char::from_u32(range.start).unwrap();
+                state_char_arms.push(quote!(
+                    #char => {
+                        #action_code
+                    }
+                ));
+            }
             Trans::Accept(accepting) => {
                 let action_code = test_right_ctxs(ctx, accepting, default_rhs.clone());
 
@@ -562,6 +577,26 @@ fn generate_state_char_arms(
                 ));
             }
         }
+    }
+
+    // Add char transitions
+    for (StateIdx(next_state), chars) in state_chars.into_iter() {
+        let pat = quote!(#(#chars)|*);
+
+        let next = if states[next_state].predecessors.len() == 1 {
+            generate_state(ctx, next_state, &states[next_state], states)
+        } else {
+            let StateIdx(next_state) = ctx.renumber_state(StateIdx(next_state));
+            quote!(
+                self.0.__state = #next_state;
+            )
+        };
+
+        state_char_arms.push(quote!(
+            #pat => {
+                #next
+            }
+        ));
     }
 
     // Add range transitions
@@ -809,25 +844,47 @@ fn generate_right_ctx_state_char_arms(
     // Arms of the `match` for the current character
     let mut state_char_arms: Vec<TokenStream> = vec![];
 
-    // Collect ranges for next states, to be able to use or patterns in arms and reduce code
+    // Collect chars & ranges for next states, to be able to use or patterns in arms and reduce code
     // size. Use chain of "or"s for ranges with same transition.
     let mut state_ranges: Map<StateIdx, Vec<(char, char)>> = Default::default();
     let mut accept_ranges: Set<(char, char)> = Default::default();
+    let mut state_chars: Map<StateIdx, Vec<char>> = Default::default();
+    let mut accept_chars: Set<char> = Default::default();
 
-    for Range {
-        start,
-        end,
-        value: next,
-    } in range_transitions.iter()
-    {
-        let start = char::try_from(*start).unwrap();
-        let end = char::try_from(*end).unwrap();
-
-        if states[next.0].accepting.is_empty() {
-            state_ranges.entry(*next).or_default().push((start, end));
+    for range in range_transitions.iter() {
+        if range.start == range.end {
+            let char_ = char::from_u32(range.start).unwrap();
+            if states[range.value.0].accepting.is_empty() {
+                state_chars.entry(range.value).or_default().push(char_);
+            } else {
+                accept_chars.insert(char_);
+            }
         } else {
-            accept_ranges.insert((start, end));
+            let start = char::try_from(range.start).unwrap();
+            let end = char::try_from(range.end).unwrap();
+
+            if states[range.value.0].accepting.is_empty() {
+                state_ranges
+                    .entry(range.value)
+                    .or_default()
+                    .push((start, end));
+            } else {
+                accept_ranges.insert((start, end));
+            }
         }
+    }
+
+    // Add char transitions
+    for (StateIdx(next_state), chars) in state_chars.iter() {
+        let pat = quote!(#(#chars)|*);
+
+        state_char_arms.push(quote!(#pat => self.state = #next_state));
+    }
+
+    if !accept_chars.is_empty() {
+        let accept_chars: Vec<char> = accept_chars.into_iter().collect();
+
+        state_char_arms.push(quote!(#(#accept_chars)|* => return true));
     }
 
     // Add range transitions
@@ -904,9 +961,10 @@ fn test_right_ctxs(
 }
 
 fn inclusive_range_contains(value: TokenStream, range_start: char, range_end: char) -> TokenStream {
-    if range_start == range_end {
-        quote!(#value == #range_start)
-    } else {
-        quote!((#range_start..=#range_end).contains(&#value))
-    }
+    assert_ne!(
+        range_start, range_end,
+        "all 1-char long ranges should have been handled separately"
+    );
+
+    quote!((#range_start..=#range_end).contains(&#value))
 }
