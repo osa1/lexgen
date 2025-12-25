@@ -105,9 +105,6 @@ impl<A> NFA<A> {
 
     pub fn add_char_transition(&mut self, state: StateIdx, char: char, next: StateIdx) {
         self.add_range_transition(state, char, char, next)
-
-        // FIXME resolve now-absent assert
-        // assert!(not_exists, "add_char_transition");
     }
 
     pub fn add_range_transition(
