@@ -169,12 +169,12 @@ mod test {
     type Result<'input, T> =
         std::result::Result<T, lalrpop_util::ParseError<Loc, Token<'input>, LexerError>>;
 
-    fn parse(code: &str) -> Result<Expression> {
+    fn parse(code: &'_ str) -> Result<'_, Expression<'_>> {
         let lexer = Lexer::new(code);
         ExpressionParser::new().parse(lexer)
     }
 
-    fn parse_and_eval(code: &str) -> Result<String> {
+    fn parse_and_eval(code: &'_ str) -> Result<'_, String> {
         parse(code).map(|e| e.eval())
     }
 
