@@ -1,6 +1,8 @@
 use std::cmp::{max, min, Ordering};
 use std::mem::take;
 
+use smallvec::{smallvec, SmallVec};
+
 /// A map of inclusive ranges, with insertion and iteration operations. Insertion allows
 /// overlapping ranges. When two ranges overlap, value of the overlapping parts is the union of
 /// values of the overlapping ranges.
@@ -8,8 +10,10 @@ use std::mem::take;
 pub struct RangeMap<A> {
     // NB. internally we don't have any overlaps. Overlapping ranges are split into smaller
     // non-overlapping ranges.
-    ranges: Vec<Range<A>>,
+    ranges: Ranges<A>,
 }
+
+pub type Ranges<A> = SmallVec<[Range<A>; 1]>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Range<A> {
@@ -27,14 +31,16 @@ impl<A> Default for RangeMap<A> {
 
 impl<A> RangeMap<A> {
     pub fn new() -> RangeMap<A> {
-        RangeMap { ranges: vec![] }
+        RangeMap {
+            ranges: smallvec![],
+        }
     }
 
     /// Create a range map from given non-overlapping and sorted ranges. These properties
     /// (non-overlapping, sorted) are checked in debug mode but not in release mode.
     ///
     /// O(1)
-    pub fn from_non_overlapping_sorted_ranges(ranges: Vec<Range<A>>) -> RangeMap<A> {
+    pub fn from_non_overlapping_sorted_ranges(ranges: Ranges<A>) -> RangeMap<A> {
         #[cfg(debug_assertions)]
         for ranges in ranges.windows(2) {
             let range1 = &ranges[0];
@@ -76,12 +82,6 @@ impl<A> RangeMap<A> {
                 })
                 .collect(),
         }
-    }
-}
-
-impl<A> Range<A> {
-    pub fn contains(&self, char: char) -> bool {
-        char as u32 >= self.start && char as u32 <= self.end
     }
 }
 
@@ -188,7 +188,7 @@ impl<A: Clone> RangeMap<A> {
             }
         }
 
-        self.ranges = new_ranges;
+        self.ranges = new_ranges.into();
     }
 
     /// O(n) where n is the number of existing ranges in the map
@@ -212,7 +212,7 @@ impl<A: Clone> RangeMap<A> {
                 });
                 new_ranges.push(range);
                 new_ranges.extend(range_iter);
-                self.ranges = new_ranges;
+                self.ranges = new_ranges.into();
                 return;
             } else {
                 let overlap = max(new_range_start, range.start)..=min(new_range_end, range.end);
@@ -268,7 +268,7 @@ impl<A: Clone> RangeMap<A> {
                 }
 
                 new_ranges.extend(range_iter);
-                self.ranges = new_ranges;
+                self.ranges = new_ranges.into();
                 return;
             }
         }
@@ -286,7 +286,7 @@ impl<A: Clone> RangeMap<A> {
             });
         }
 
-        self.ranges = new_ranges;
+        self.ranges = new_ranges.into();
     }
 
     /// O(N+M) where N is the number of current ranges and M is the number of removed ranges
@@ -360,7 +360,7 @@ impl<A: Clone> RangeMap<A> {
             }
         }
 
-        self.ranges = new_ranges;
+        self.ranges = new_ranges.into();
     }
 }
 

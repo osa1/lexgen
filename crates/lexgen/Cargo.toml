@@ -17,6 +17,7 @@ proc-macro = true
 proc-macro2 = "1.0"
 quote = "1.0"
 rustc-hash = "2.0.0"
+smallvec = { version = "1.15.1", features = ["union"] }
 syn = { version = "2.0.30", features = ["extra-traits", "fold", "full", "visit"] }
 
 [dev-dependencies]

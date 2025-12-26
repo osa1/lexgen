@@ -39,10 +39,6 @@ pub(crate) fn update_backtracks<A>(dfa: &mut DFA<StateIdx, A>) {
         // Whether the successor states should backtrack.
         let successor_backtrack = backtrack || dfa.is_accepting_state(state);
 
-        for next in dfa.states[state.0].char_transitions.values() {
-            work_list.push((*next, successor_backtrack));
-        }
-
         for next_range in dfa.states[state.0].range_transitions.iter() {
             work_list.push((next_range.value, successor_backtrack));
         }

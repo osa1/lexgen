@@ -44,7 +44,6 @@ pub fn simplify<K, A: Clone>(
         .map(|(_state_idx, state)| {
             let State {
                 initial,
-                char_transitions,
                 range_transitions,
                 any_transition,
                 end_of_input_transition,
@@ -52,11 +51,6 @@ pub fn simplify<K, A: Clone>(
                 predecessors,
                 backtrack,
             } = state;
-
-            let char_transitions = char_transitions
-                .into_iter()
-                .map(|(char, next)| (char, map_transition(next)))
-                .collect();
 
             let range_transitions = range_transitions.map(map_transition);
 
@@ -78,7 +72,6 @@ pub fn simplify<K, A: Clone>(
 
             State {
                 initial,
-                char_transitions,
                 range_transitions,
                 any_transition,
                 end_of_input_transition,
