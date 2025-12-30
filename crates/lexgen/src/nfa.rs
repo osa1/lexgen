@@ -117,8 +117,8 @@ impl<A> NFA<A> {
         let mut set: Set<StateIdx> = Default::default();
         set.insert(next);
         self.states[state.0].range_transitions.insert(
-            range_start as u32,
-            range_end as u32,
+            range_start,
+            range_end,
             set,
             |values_1, values_2| values_1.extend(values_2),
         );

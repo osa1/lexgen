@@ -13,8 +13,6 @@ use crate::range_map::RangeMap;
 use crate::right_ctx::{RightCtxDFAs, RightCtxIdx};
 use crate::semantic_action_table::{SemanticActionIdx, SemanticActionTable};
 
-use std::convert::TryFrom;
-
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
 use syn::fold::Fold;
@@ -545,18 +543,17 @@ fn generate_state_char_arms(
     let mut state_ranges: Map<StateIdx, Vec<(char, char)>> = Default::default();
     for range in range_transitions.iter() {
         match &range.value {
-            Trans::Trans(state_idx) if range.start == range.end => state_chars
+            Trans::Trans(state_idx) if range.start == range.end => {
+                state_chars.entry(*state_idx).or_default().push(range.start)
+            }
+            Trans::Trans(state_idx) => state_ranges
                 .entry(*state_idx)
                 .or_default()
-                .push(char::from_u32(range.start).unwrap()),
-            Trans::Trans(state_idx) => state_ranges.entry(*state_idx).or_default().push((
-                char::try_from(range.start).unwrap(),
-                char::try_from(range.end).unwrap(),
-            )),
+                .push((range.start, range.end)),
             Trans::Accept(accepting) if range.start == range.end => {
+                let char = range.start;
                 let action_code = test_right_ctxs(ctx, accepting, default_rhs.clone());
 
-                let char = char::from_u32(range.start).unwrap();
                 state_char_arms.push(quote!(
                     #char => {
                         #action_code
@@ -564,12 +561,9 @@ fn generate_state_char_arms(
                 ));
             }
             Trans::Accept(accepting) => {
+                let range_check = inclusive_range_contains(quote!(x), range.start, range.end);
                 let action_code = test_right_ctxs(ctx, accepting, default_rhs.clone());
 
-                let range_start = char::from_u32(range.start).unwrap();
-                let range_end = char::from_u32(range.end).unwrap();
-
-                let range_check = inclusive_range_contains(quote!(x), range_start, range_end);
                 state_char_arms.push(quote!(
                     x if #range_check => {
                         #action_code
@@ -853,23 +847,22 @@ fn generate_right_ctx_state_char_arms(
 
     for range in range_transitions.iter() {
         if range.start == range.end {
-            let char_ = char::from_u32(range.start).unwrap();
             if states[range.value.0].accepting.is_empty() {
-                state_chars.entry(range.value).or_default().push(char_);
+                state_chars
+                    .entry(range.value)
+                    .or_default()
+                    .push(range.start);
             } else {
-                accept_chars.insert(char_);
+                accept_chars.insert(range.start);
             }
         } else {
-            let start = char::try_from(range.start).unwrap();
-            let end = char::try_from(range.end).unwrap();
-
             if states[range.value.0].accepting.is_empty() {
                 state_ranges
                     .entry(range.value)
                     .or_default()
-                    .push((start, end));
+                    .push((range.start, range.end));
             } else {
-                accept_ranges.insert((start, end));
+                accept_ranges.insert((range.start, range.end));
             }
         }
     }

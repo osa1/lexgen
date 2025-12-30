@@ -167,7 +167,7 @@ fn regex_to_range_map(bindings: &Map<Var, Regex>, re: &Regex) -> RangeMap<()> {
 
         Regex::Char(char) => {
             let mut map = RangeMap::new();
-            map.insert(*char as u32, *char as u32, (), merge_values);
+            map.insert(*char, *char, (), merge_values);
             map
         }
 
@@ -180,10 +180,10 @@ fn regex_to_range_map(bindings: &Map<Var, Regex>, re: &Regex) -> RangeMap<()> {
             for char_or_range in char_set.0.iter() {
                 match char_or_range {
                     CharOrRange::Char(char) => {
-                        map.insert(*char as u32, *char as u32, (), merge_values);
+                        map.insert(*char, *char, (), merge_values);
                     }
                     CharOrRange::Range(start, end) => {
-                        map.insert(*start as u32, *end as u32, (), merge_values);
+                        map.insert(*start, *end, (), merge_values);
                     }
                 }
             }
@@ -218,7 +218,7 @@ fn regex_to_range_map(bindings: &Map<Var, Regex>, re: &Regex) -> RangeMap<()> {
 
         Regex::Any => {
             let mut map = RangeMap::new();
-            map.insert(0, char::MAX as u32, (), merge_values);
+            map.insert(char::MIN, char::MAX, (), merge_values);
             map
         }
 

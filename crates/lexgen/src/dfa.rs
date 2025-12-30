@@ -10,7 +10,6 @@ use crate::nfa::AcceptingState;
 use crate::range_map::{Range, RangeMap};
 pub(crate) use backtrack::update_backtracks;
 
-use std::convert::TryFrom;
 use std::iter::{FromIterator, IntoIterator};
 
 /// Deterministic finite automate, parameterized on values of accepting states.
@@ -248,13 +247,7 @@ impl<A> Display for DFA<StateIdx, A> {
                 if start == end {
                     writeln!(f, "{:?} -> {}", *start, value)?;
                 } else {
-                    writeln!(
-                        f,
-                        "{:?} - {:?} -> {}",
-                        char::try_from(*start).unwrap(),
-                        char::try_from(*end).unwrap(),
-                        value,
-                    )?;
+                    writeln!(f, "{:?} - {:?} -> {}", *start, *end, value,)?;
                 }
             }
 

@@ -17,9 +17,9 @@ pub type Ranges<A> = SmallVec<[Range<A>; 1]>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Range<A> {
-    pub start: u32,
+    pub start: char,
     // Inclusive
-    pub end: u32,
+    pub end: char,
     pub value: A,
 }
 
@@ -131,7 +131,7 @@ impl<A: Clone> RangeMap<A> {
                                 // Range 1 comes first
                                 new_ranges.push(Range {
                                     start: range1_.start,
-                                    end: *overlap.start() - 1,
+                                    end: char::from_u32(*overlap.start() as u32 - 1).unwrap(),
                                     value: range1_.value.clone(),
                                 });
                                 range1_.start = *overlap.start();
@@ -140,7 +140,7 @@ impl<A: Clone> RangeMap<A> {
                                 // Range 2 comes first
                                 new_ranges.push(Range {
                                     start: range2_.start,
-                                    end: *overlap.start() - 1,
+                                    end: char::from_u32(*overlap.start() as u32 - 1).unwrap(),
                                     value: range2_.value.clone(),
                                 });
                                 range2_.start = *overlap.start();
@@ -159,11 +159,13 @@ impl<A: Clone> RangeMap<A> {
                                 match range1_.end.cmp(&range2_.end) {
                                     Ordering::Less => {
                                         range1 = ranges1_iter.next();
-                                        range2_.start = overlap.end() + 1;
+                                        range2_.start =
+                                            char::from_u32(*overlap.end() as u32 + 1).unwrap();
                                     }
                                     Ordering::Greater => {
                                         range2 = ranges2_iter.next();
-                                        range1_.start = overlap.end() + 1;
+                                        range1_.start =
+                                            char::from_u32(*overlap.end() as u32 + 1).unwrap();
                                     }
                                     Ordering::Equal => {
                                         range1 = ranges1_iter.next();
@@ -192,7 +194,7 @@ impl<A: Clone> RangeMap<A> {
     }
 
     /// O(n) where n is the number of existing ranges in the map
-    pub fn insert<F>(&mut self, mut new_range_start: u32, new_range_end: u32, value: A, merge: F)
+    pub fn insert<F>(&mut self, mut new_range_start: char, new_range_end: char, value: A, merge: F)
     where
         F: Fn(&mut A, A),
     {
@@ -231,7 +233,7 @@ impl<A: Clone> RangeMap<A> {
                 if new_range_start < *overlap.start() {
                     new_ranges.push(Range {
                         start: new_range_start,
-                        end: *overlap.start() - 1,
+                        end: char::from_u32(*overlap.start() as u32 - 1).unwrap(),
                         value: value.clone(),
                     });
                 }
@@ -239,7 +241,7 @@ impl<A: Clone> RangeMap<A> {
                 else if range.start < *overlap.start() {
                     new_ranges.push(Range {
                         start: range.start,
-                        end: overlap.start() - 1,
+                        end: char::from_u32(*overlap.start() as u32 - 1).unwrap(),
                         value: range.value.clone(),
                     });
                 }
@@ -256,14 +258,14 @@ impl<A: Clone> RangeMap<A> {
                 // (4)
                 if range.end > *overlap.end() {
                     new_ranges.push(Range {
-                        start: *overlap.end() + 1,
+                        start: char::from_u32(*overlap.end() as u32 + 1).unwrap(),
                         end: range.end,
                         value: range.value,
                     });
                 }
                 // (5)
                 else if new_range_end > *overlap.end() {
-                    new_range_start = *overlap.end() + 1;
+                    new_range_start = char::from_u32(*overlap.end() as u32 + 1).unwrap();
                     continue;
                 }
 
@@ -325,14 +327,14 @@ impl<A: Clone> RangeMap<A> {
 
                         // (1)
                         if *overlap.start() == old_range_.start {
-                            old_range_.start = *overlap.end() + 1;
+                            old_range_.start = char::from_u32(*overlap.end() as u32 + 1).unwrap();
                             removed_range = removed_ranges_iter.next();
                         }
                         // (2)
                         else if *overlap.end() == old_range_.end {
                             let new_range = Range {
                                 start: old_range_.start,
-                                end: *overlap.start() - 1,
+                                end: char::from_u32(*overlap.start() as u32 - 1).unwrap(),
                                 value: old_range_.value.clone(),
                             };
                             new_ranges.push(new_range);
@@ -342,11 +344,11 @@ impl<A: Clone> RangeMap<A> {
                         else {
                             let new_range = Range {
                                 start: old_range_.start,
-                                end: *overlap.start() - 1,
+                                end: char::from_u32(*overlap.start() as u32 - 1).unwrap(),
                                 value: old_range_.value.clone(),
                             };
                             new_ranges.push(new_range);
-                            old_range_.start = overlap.end() + 1;
+                            old_range_.start = char::from_u32(*overlap.end() as u32 + 1).unwrap();
                         }
                     }
                 }
@@ -366,7 +368,7 @@ impl<A: Clone> RangeMap<A> {
 
 #[cfg(test)]
 fn to_tuple<A: Clone>(range: &Range<Vec<A>>) -> (u32, u32, Vec<A>) {
-    (range.start, range.end, range.value.clone())
+    (range.start as u32, range.end as u32, range.value.clone())
 }
 
 #[cfg(test)]
@@ -377,7 +379,12 @@ fn to_vec<A: Clone>(map: &RangeMap<Vec<A>>) -> Vec<(u32, u32, Vec<A>)> {
 #[cfg(test)]
 fn insert<A: Clone>(map: &mut RangeMap<Vec<A>>, range_start: u32, range_end: u32, value: A) {
     let mut map2: RangeMap<Vec<A>> = RangeMap::new();
-    map2.insert(range_start, range_end, vec![value], |_, _| panic!());
+    map2.insert(
+        char::from_u32(range_start).unwrap(),
+        char::from_u32(range_end).unwrap(),
+        vec![value],
+        |_, _| panic!(),
+    );
 
     map.insert_ranges(map2.into_iter(), |values_1, values_2| {
         values_1.extend(values_2)
@@ -389,8 +396,8 @@ fn remove<A: Clone>(map: &mut RangeMap<Vec<A>>, removed_ranges: &[(u32, u32)]) {
     let mut removed_range_map: RangeMap<()> = RangeMap::new();
     for (removed_range_start, removed_range_end) in removed_ranges {
         removed_range_map.insert(
-            *removed_range_start,
-            *removed_range_end,
+            char::from_u32(*removed_range_start).unwrap(),
+            char::from_u32(*removed_range_end).unwrap(),
             (),
             |_, _| panic!(),
         );

@@ -132,7 +132,7 @@ fn next<A>(dfa: &DFA<StateIdx, A>, state: StateIdx, char: char) -> Option<StateI
 
     for range in state.range_transitions.iter() {
         let Range { start, end, value } = range;
-        if char as u32 >= *start && char as u32 <= *end {
+        if char >= *start && char <= *end {
             return Some(*value);
         }
     }

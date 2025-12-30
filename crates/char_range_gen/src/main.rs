@@ -1,34 +1,30 @@
 #![allow(clippy::type_complexity)]
 
-use std::convert::TryFrom;
-
 fn main() {
-    for (f, name) in FNS.iter() {
-        let ranges = generate_char_fn_ranges(*f);
-        println!("pub static {}: [(u32, u32); {}] = [", name, ranges.len());
+    for (f, name) in FNS {
+        let ranges = generate_char_fn_ranges(f);
+        println!("pub static {}: [(char, char); {}] = [", name, ranges.len());
         for range in ranges {
-            println!("    ({}, {}),", range.0, range.1);
+            println!(
+                "    ('\\u{{{:x}}}', '\\u{{{:x}}}'),",
+                range.0 as u32, range.1 as u32
+            );
         }
         println!("];");
     }
 }
 
-fn generate_char_fn_ranges(f: fn(char) -> bool) -> Vec<(u32, u32)> {
-    let mut ranges: Vec<(u32, u32)> = vec![];
-    let mut current_range_start: Option<u32> = None;
+fn generate_char_fn_ranges(f: fn(char) -> bool) -> Vec<(char, char)> {
+    let mut ranges: Vec<(char, char)> = vec![];
+    let mut current_range_start: Option<char> = None;
 
-    for i in 0..=u32::from(char::MAX) {
-        let c = match char::try_from(i) {
-            Err(_) => continue,
-            Ok(c) => c,
-        };
-
+    for c in char::MIN..=char::MAX {
         if f(c) {
             if current_range_start.is_none() {
-                current_range_start = Some(i);
+                current_range_start = Some(c);
             }
         } else if let Some(current_range_start) = current_range_start.take() {
-            ranges.push((current_range_start, i - 1));
+            ranges.push((current_range_start, char::from_u32(c as u32 - 1).unwrap()));
         }
     }
 
@@ -55,7 +51,7 @@ ascii_fn!(is_ascii_punctuation);
 ascii_fn!(is_ascii_uppercase);
 ascii_fn!(is_ascii_whitespace);
 
-static FNS: [(fn(char) -> bool, &str); 20] = [
+const FNS: [(fn(char) -> bool, &str); 20] = [
     (char::is_alphabetic, "ALPHABETIC"),
     (char::is_alphanumeric, "ALPHANUMERIC"),
     (is_ascii, "ASCII"),

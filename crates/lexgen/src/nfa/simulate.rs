@@ -157,7 +157,7 @@ fn next<A>(nfa: &NFA<A>, states: &Set<StateIdx>, char: char) -> Set<StateIdx> {
     for state in states {
         // Range transitions
         for range in nfa.states[state.0].range_transitions.iter() {
-            if char as u32 >= range.start && char as u32 <= range.end {
+            if char >= range.start && char <= range.end {
                 next_states.extend(range.value.clone());
             }
         }

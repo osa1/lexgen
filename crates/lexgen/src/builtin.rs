@@ -49,7 +49,7 @@ pub static BUILTIN_RANGES: [(&str, BuiltinCharRange); 20] = [
 ];
 
 impl BuiltinCharRange {
-    pub fn get_ranges(&self) -> &'static [(u32, u32)] {
+    pub fn get_ranges(&self) -> &'static [(char, char)] {
         use crate::char_ranges::*;
 
         match self {
