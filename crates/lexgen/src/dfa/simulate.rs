@@ -130,10 +130,6 @@ impl<A: Copy> DFA<StateIdx, A> {
 fn next<A>(dfa: &DFA<StateIdx, A>, state: StateIdx, char: char) -> Option<StateIdx> {
     let state = &dfa.states[state.0];
 
-    if let Some(next) = state.char_transitions.get(&char) {
-        return Some(*next);
-    }
-
     for range in state.range_transitions.iter() {
         let Range { start, end, value } = range;
         if char as u32 >= *start && char as u32 <= *end {

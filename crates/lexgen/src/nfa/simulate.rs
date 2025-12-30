@@ -155,11 +155,6 @@ fn next<A>(nfa: &NFA<A>, states: &Set<StateIdx>, char: char) -> Set<StateIdx> {
     let mut next_states: Set<StateIdx> = Default::default();
 
     for state in states {
-        // Char transitions
-        if let Some(char_nexts) = nfa.states[state.0].char_transitions.get(&char) {
-            next_states.extend(char_nexts.iter());
-        }
-
         // Range transitions
         for range in nfa.states[state.0].range_transitions.iter() {
             if char as u32 >= range.start && char as u32 <= range.end {
