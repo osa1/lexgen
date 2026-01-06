@@ -147,7 +147,8 @@ pub fn lexer(input: TokenStream) -> TokenStream {
 
     dfa::update_backtracks(&mut dfa);
 
-    let dfa = dfa::simplify::simplify(dfa, &mut dfas);
+    let mut dfa = dfa::simplify::simplify(dfa, &mut dfas);
+    dfa::normalise::normalise_ranges(&mut dfa);
 
     dfa::codegen::generate(
         dfa,
