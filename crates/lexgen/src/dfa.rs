@@ -1,5 +1,6 @@
 mod backtrack;
 pub mod codegen;
+pub mod normalise;
 pub mod simplify;
 
 #[cfg(test)]
